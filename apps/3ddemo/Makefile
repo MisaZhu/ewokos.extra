@@ -4,6 +4,11 @@ include $(ROOT_DIR)/make.inc
 TASK_OBJS = main.o src/engine.o src/camera.o src/clipping.o src/light.o src/matrix.o src/obj.o src/swap.o \
 	   src/texture.o src/triangle.o src/vector.o src/display.o
 
+EXTRA_LIBS_DIR = ../../libs
+
+CXXFLAGS += -I $(EXTRA_LIBS_DIR)/ferox/include 
+LDFLAGS += -L $(EXTRA_LIBS_DIR)/ferox
+
 TASK = 3ddemo
 TARGET_DIR = $(ROOTFS_DIR)/apps/$(TASK)
 

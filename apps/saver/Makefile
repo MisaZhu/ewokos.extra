@@ -1,6 +1,11 @@
 ROOT_DIR=../..
 include $(ROOT_DIR)/make.inc
 
+EXTRA_LIBS_DIR = ../../libs
+
+CXXFLAGS += -I $(EXTRA_LIBS_DIR)/ferox/include 
+LDFLAGS += -L $(EXTRA_LIBS_DIR)/ferox
+
 TASK_OBJS = main.o
 
 TASK = saver

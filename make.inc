@@ -3,7 +3,7 @@ export ARCH=arm
 endif
 
 SDK_DIR= /usr/local/ewokos/$(ARCH)
-ROOTFS_DIR= /usr/local/ewokos/$(ARCH)/rootfs
+ROOTFS_DIR= /usr/local/ewokos/$(ARCH)/extra
 INST_DIR= /usr/local/ewokos
 
 include $(SDK_DIR)/make.rule
