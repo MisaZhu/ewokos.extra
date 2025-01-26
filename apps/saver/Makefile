@@ -4,7 +4,7 @@ include $(ROOT_DIR)/make.inc
 TASK_OBJS = main.o
 
 TASK = saver
-TARGET_DIR = $(INST_DIR)/apps/$(TASK)
+TARGET_DIR = $(ROOTFS_DIR)/apps/$(TASK)
 
 all: $(TASK)
 
