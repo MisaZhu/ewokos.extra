@@ -1,18 +1,19 @@
 
 all: 
+	cd anim; make
+	cd xtest; make
+	cd wtest; make
+	cd clock; make
 	cd emu; make
 	cd saver; make
 	cd 3ddemo;make
 	cd macintosh; make
 
-install: 
-	cd emu; make install
-	cd saver; make install
-	cd 3ddemo;make install
-	cd macintosh; make install
-
-
-clean:	
+clean: 
+	cd anim; make clean
+	cd xtest; make clean
+	cd wtest; make clean
+	cd clock; makeclean
 	cd emu; make clean
 	cd saver; make clean
 	cd 3ddemo;make clean
