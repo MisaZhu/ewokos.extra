@@ -40,24 +40,21 @@ HEADS = \
 CFLAGS += $(HEADS)
 CXXFLAGS += $(HEADS)
 
-MARIO = build/mario
-BCASM = build/bcasm
+BUILD_DIR = $(ROOT_DIR)/build/bin
+MARIO = $(BUILD_DIR)/mario
+BCASM = $(BUILD_DIR)/bcasm
 
 all: $(MARIO) $(BCASM)
 	@echo "done"
 
 
 $(MARIO): $(MARIO_OBJS)
-	mkdir -p build
+	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) -lttf -lfont  -lgraph -lbsp $(BSP_LFLAGS) -lupng -lx++ -lx -ltinyjson -lsconf  $(EWOK_LIBC) -lcxx
 
 $(BCASM): $(BCASM_OBJS)
-	mkdir -p build
+	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(BCASM_OBJS) -o $(BCASM) $(LDFLAGS) -lbsp $(BSP_LFLAGS)  $(EWOK_LIBC)
 
-install:
-	mkdir -p $(ROOTFS_DIR)/bin
-	cp $(MARIO) $(BCASM) $(ROOTFS_DIR)/bin/
-
 clean:
-	rm -fr $(MARIO_OBJS) build
+	rm -fr $(MARIO_OBJS)

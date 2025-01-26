@@ -12,15 +12,12 @@ LIB_FEROX_OBJS = src/broadphase.o \
 	src/world.o
 
 FEROX = libferox.a
+BUILD_DIR = $(ROOT_DIR)/build/lib
 
 $(FEROX): $(LIB_FEROX_OBJS)
-	$(AR) rcs $(FEROX) $(LIB_FEROX_OBJS)
-
-install:
-	cp $(FEROX) $(SDK_DIR)/lib/
-	cp -r include/* src/external/*.h $(SDK_DIR)/include/
+	mkdir -p $(BUILD_DIR)
+	$(AR) rcs $(BUILD_DIR)/$(FEROX) $(LIB_FEROX_OBJS)
 
 clean:
 	rm -f $(LIB_FEROX_OBJS)
-	rm -f $(FEROX)
 

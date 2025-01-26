@@ -142,17 +142,14 @@ CFLAGS += -I include -I pce -D EOF=0 -D M_PI=3.1415926 -D SEEK_SET=0
 CXXFLAGS += -I include -I pce -D EOF=0 -D M_PI=3.1415926 -D SEEK_SET=0
 
 TASK = macintosh
-TARGET_DIR = $(ROOTFS_DIR)/apps/$(TASK)
+BUILD_DIR = $(ROOT_DIR)/build/apps/$(TASK)
 
 all: $(TASK)
 
 $(TASK): $(TASK_OBJS)
-	$(LD) -Ttext=100 $(TASK_OBJS) -o $(TASK) $(LDFLAGS) -lx++ -lttf -lfont -lgraph -lbsp $(BSP_LFLAGS) -lx -ltinyjson -lsconf -lopenlibm $(EWOK_LIBC)  -lcxx
-
-install:
-	mkdir -p $(TARGET_DIR)
-	cp -r $(TASK) res $(TARGET_DIR)
+	mkdir -p $(BUILD_DIR)
+	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) -lx++ -lttf -lfont -lgraph -lbsp $(BSP_LFLAGS) -lx -ltinyjson -lsconf -lopenlibm $(EWOK_LIBC)  -lcxx
+	cp -r res $(BUILD_DIR)
 
 clean:
 	rm -f $(TASK_OBJS)
-	rm -f $(TASK)
