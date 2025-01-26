@@ -2,6 +2,10 @@ ifeq ($(ARCH),)
 export ARCH=arm
 endif
 
+ifeq ($(HW),)
+export HW=raspix
+endif
+
 INST_DIR= /usr/local/ewokos
 SDK_DIR= /usr/local/ewokos/$(ARCH)/$(HW)
 
