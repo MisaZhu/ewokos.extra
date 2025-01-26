@@ -10,7 +10,7 @@ all: $(TASK)
 
 $(TASK): $(TASK_OBJS)
 	mkdir -p $(BUILD_DIR)
-	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) -lx++ -lttf -lfont -lupng -lgraph -lbsp $(BSP_LFLAGS) -lx -ltinyjson -lsconf -lopenlibm $(EWOK_LIBC)  -lcxx
+	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH)  $(EWOK_LIBC)  -lcxx
 
 clean:
 	rm -f $(TASK_OBJS)

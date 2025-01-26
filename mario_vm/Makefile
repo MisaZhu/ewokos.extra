@@ -50,7 +50,7 @@ all: $(MARIO) $(BCASM)
 
 $(MARIO): $(MARIO_OBJS)
 	mkdir -p $(BUILD_DIR)
-	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) -lttf -lfont  -lgraph -lbsp $(BSP_LFLAGS) -lupng -lx++ -lx -ltinyjson -lsconf  $(EWOK_LIBC) -lcxx
+	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 $(BCASM): $(BCASM_OBJS)
 	mkdir -p $(BUILD_DIR)
