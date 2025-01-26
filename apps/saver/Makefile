@@ -1,15 +1,15 @@
 ROOT_DIR=../..
 include $(ROOT_DIR)/make.inc
 
-EXTRA_LIBS_DIR = ../../libs
+EXTRA_LIBS_DIR = $(ROOT_DIR)/build/$(HW)
 
-CXXFLAGS += -I $(EXTRA_LIBS_DIR)/ferox/include 
-LDFLAGS += -L $(EXTRA_LIBS_DIR)/ferox
+CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include 
+LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
 
 TASK_OBJS = main.o
 
 TASK = saver
-BUILD_DIR = $(ROOT_DIR)/build/apps/$(TASK)
+BUILD_DIR = $(ROOT_DIR)/build/$(HW)/apps/$(TASK)
 
 all: $(TASK)
 

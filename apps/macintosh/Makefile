@@ -142,7 +142,7 @@ CFLAGS += -I include -I pce -D EOF=0 -D M_PI=3.1415926 -D SEEK_SET=0
 CXXFLAGS += -I include -I pce -D EOF=0 -D M_PI=3.1415926 -D SEEK_SET=0
 
 TASK = macintosh
-BUILD_DIR = $(ROOT_DIR)/build/apps/$(TASK)
+BUILD_DIR = $(ROOT_DIR)/build/$(HW)/apps/$(TASK)
 
 all: $(TASK)
 

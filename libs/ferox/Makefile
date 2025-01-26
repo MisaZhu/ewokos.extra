@@ -12,11 +12,12 @@ LIB_FEROX_OBJS = src/broadphase.o \
 	src/world.o
 
 FEROX = libferox.a
-BUILD_DIR = $(ROOT_DIR)/build/lib
+BUILD_DIR = $(ROOT_DIR)/build/$(HW)
 
 $(FEROX): $(LIB_FEROX_OBJS)
-	mkdir -p $(BUILD_DIR)
-	$(AR) rcs $(BUILD_DIR)/$(FEROX) $(LIB_FEROX_OBJS)
+	mkdir -p $(BUILD_DIR)/lib
+	$(AR) rcs $(BUILD_DIR)/lib/$(FEROX) $(LIB_FEROX_OBJS)
+	cp -r include $(BUILD_DIR)/
 
 clean:
 	rm -f $(LIB_FEROX_OBJS)

@@ -2,11 +2,10 @@ ifeq ($(ARCH),)
 export ARCH=arm
 endif
 
-SDK_DIR= /usr/local/ewokos/$(ARCH)
-ROOTFS_DIR= /usr/local/ewokos/$(ARCH)/extra
 INST_DIR= /usr/local/ewokos
+SDK_DIR= /usr/local/ewokos/$(ARCH)/$(HW)
 
-include $(SDK_DIR)/make.rule
+include $(INST_DIR)/$(ARCH)/make.rule
 
 LDFLAGS = -L$(SDK_DIR)/lib
 CFLAGS += -I include -I $(SDK_DIR)/include

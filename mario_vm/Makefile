@@ -40,7 +40,7 @@ HEADS = \
 CFLAGS += $(HEADS)
 CXXFLAGS += $(HEADS)
 
-BUILD_DIR = $(ROOT_DIR)/build/bin
+BUILD_DIR = $(ROOT_DIR)/build/$(HW)/bin
 MARIO = $(BUILD_DIR)/mario
 BCASM = $(BUILD_DIR)/bcasm
 

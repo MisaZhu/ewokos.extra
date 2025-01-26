@@ -8,7 +8,7 @@ TASK_OBJS = main.o \
 		src/K6502.o
 
 TASK = emu
-BUILD_DIR = $(ROOT_DIR)/build/apps/$(TASK)
+BUILD_DIR = $(ROOT_DIR)/build/$(HW)/apps/$(TASK)
 
 all: $(TASK)
 
