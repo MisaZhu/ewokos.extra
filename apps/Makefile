@@ -13,7 +13,7 @@ clean:
 	cd anim; make clean
 	cd xtest; make clean
 	cd wtest; make clean
-	cd clock; makeclean
+	cd clock; make clean
 	cd emu; make clean
 	cd saver; make clean
 	cd 3ddemo;make clean
