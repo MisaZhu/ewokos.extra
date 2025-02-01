@@ -102,7 +102,7 @@ protected:
 			}
 		}else if(ev->type == XEVT_MOUSE){
 			gpos_t pos =  getInsidePos(ev->value.mouse.x, ev->value.mouse.y);
-			if(ev->state == XEVT_MOUSE_DOWN || ev->state == XEVT_MOUSE_DRAG)
+			if(ev->state == MOUSE_STATE_DOWN || ev->state == MOUSE_STATE_DRAG)
 				update_mouse(pos.x - offset_x, pos.y - offset_y, 1);
 			else
 				update_mouse(pos.x - offset_x, pos.y - offset_y, 0);
