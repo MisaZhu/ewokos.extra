@@ -57,7 +57,7 @@ static int network_write(int fd, int from_pid, fsinfo_t* info,
     return ret > 0? ret : VFS_ERR_RETRY;
 }
 
-static int network_close(int fd, int from_pid, uint32_t node, bool delnode,void* p) {
+static int network_close(int fd, int from_pid, uint32_t node, fsinfo_t* fsinfo, bool delnode,void* p) {
 	(void)fd;
 	fsinfo_t* info = dev_get_file(fd, from_pid, node);
 
