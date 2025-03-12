@@ -8,6 +8,9 @@
     "fg_disable_color": "0xff000000",
     "bg_disable_color": "0xffffffff",
 
+    "select_bg_color": "0x88222222",
+    "select_color": "0xffffffff",
+
     "font": "system",
     "font_size": 12
 }
