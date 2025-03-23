@@ -2,14 +2,18 @@ ifeq ($(ARCH),)
 export ARCH=arm
 endif
 
-ifeq ($(HW),)
+export BSP_LFLAGS= -larch_bcm283x
 export HW=raspix
-endif
 
-INST_DIR= /usr/local/ewokos
-SDK_DIR= /usr/local/ewokos/$(ARCH)/$(HW)
+EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 
-include $(INST_DIR)/$(ARCH)/make.rule
+#SDK_DIR= /usr/local/ewokos/$(ARCH)
+#ROOTFS_DIR= /usr/local/ewokos/$(ARCH)/$(HW)
+
+SDK_DIR= $(SYS_ROOT_DIR)/build
+
+include $(SYS_ROOT_DIR)/platform/$(ARCH)/make.rule
 
 LDFLAGS = -L$(SDK_DIR)/lib
 CFLAGS += -I include -I $(SDK_DIR)/include

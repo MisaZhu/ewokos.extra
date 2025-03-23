@@ -1,5 +1,5 @@
-ROOT_DIR=..
-include $(ROOT_DIR)/make.inc
+SW_ROOT_DIR=..
+include $(SW_ROOT_DIR)/make.inc
 
 MARIO_VM= .
 include $(MARIO_VM)/lang/js/lang.mk
@@ -40,7 +40,7 @@ HEADS = \
 CFLAGS += $(HEADS)
 CXXFLAGS += $(HEADS)
 
-BUILD_DIR = $(ROOT_DIR)/build/$(HW)/bin
+BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
 MARIO = $(BUILD_DIR)/mario
 BCASM = $(BUILD_DIR)/bcasm
 

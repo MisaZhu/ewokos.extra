@@ -1,5 +1,9 @@
-ROOT_DIR=../..
-include $(ROOT_DIR)/make.inc
+EWOKOS_ROOT_DIR = ../../..
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
+SYS_BUILD_DIR = $(SYS_ROOT_DIR)/build
+
+SW_ROOT_DIR=../..
+include $(SW_ROOT_DIR)/make.inc
 
 CFLAGS += -Iinclude -Isrc -Isrc/external
 
@@ -12,7 +16,7 @@ LIB_FEROX_OBJS = src/broadphase.o \
 	src/world.o
 
 FEROX = libferox.a
-BUILD_DIR = $(ROOT_DIR)/build/$(HW)
+BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)
 
 $(FEROX): $(LIB_FEROX_OBJS)
 	mkdir -p $(BUILD_DIR)/lib

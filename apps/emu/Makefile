@@ -1,5 +1,5 @@
-ROOT_DIR=../..
-include $(ROOT_DIR)/make.inc
+SW_ROOT_DIR=../..
+include $(SW_ROOT_DIR)/make.inc
 
 TASK_OBJS = main.o \
 		src/InfoNES.o \
@@ -8,7 +8,7 @@ TASK_OBJS = main.o \
 		src/K6502.o
 
 TASK = emu
-BUILD_DIR = $(ROOT_DIR)/build/$(HW)/apps/$(TASK)
+BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/apps/$(TASK)
 
 all: $(TASK)
 

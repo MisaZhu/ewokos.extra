@@ -1,7 +1,7 @@
-ROOT_DIR=../..
-include $(ROOT_DIR)/make.inc
+SW_ROOT_DIR=../..
+include $(SW_ROOT_DIR)/make.inc
 
-EXTRA_LIBS_DIR = $(ROOT_DIR)/build/$(HW)
+EXTRA_LIBS_DIR = $(SW_ROOT_DIR)/build/$(HW)
 
 CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include 
 LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
@@ -9,7 +9,7 @@ LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
 TASK_OBJS = main.o
 
 TASK = saver
-BUILD_DIR = $(ROOT_DIR)/build/$(HW)/apps/$(TASK)
+BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/apps/$(TASK)
 
 all: $(TASK)
 

@@ -1,7 +1,7 @@
-ROOT_DIR=../..
-include $(ROOT_DIR)/make.inc
+SW_ROOT_DIR=../..
+include $(SW_ROOT_DIR)/make.inc
 
-BUILD_DIR = $(ROOT_DIR)/build/$(HW)
+BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)
 
 NETD_OBJS = netd.o intr.o sched.o tap.o task.o\
 				stack/loopback.o	\

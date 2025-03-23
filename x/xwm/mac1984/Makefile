@@ -1,10 +1,10 @@
 TASK_OBJS = xwm.o MacWM.o
 
-ROOT_DIR=../../..
-include $(ROOT_DIR)/make.inc
+SW_ROOT_DIR=../../..
+include $(SW_ROOT_DIR)/make.inc
 
 TASK = xwm_mac1984
-BUILD_DIR = $(ROOT_DIR)/build/$(HW)/sbin/x
+BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/sbin/x
 
 all: $(TASK)
 
