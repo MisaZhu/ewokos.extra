@@ -23,7 +23,7 @@ void MacWM::drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	uint32_t fg, bg;
 	getColor(&fg, &bg, top);
 	gsize_t sz;
-	font_text_size(info->title, font, fontSize, (uint32_t*)&sz.w, (uint32_t*)&sz.h);
+	font_text_size(info->title, font, theme.fontSize, (uint32_t*)&sz.w, (uint32_t*)&sz.h);
 	
 	/*grect_t rect;
 	getTitle(info, &rect);
@@ -36,7 +36,7 @@ void MacWM::drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 		drawTitlePattern(g, r->x, r->y, r->w, r->h, fg);
 
 	graph_fill(g, r->x+pw-2, r->y, sz.w+4, r->h, bg);//title box
-	graph_draw_text_font(g, r->x+pw, r->y+ph, info->title, font, fontSize, fg);//title
+	graph_draw_text_font(g, r->x+pw, r->y+ph, info->title, font, theme.fontSize, fg);//title
 	graph_line(g, r->x, r->y+r->h-1, r->x+r->w, r->y+r->h-1, fg);//title box
 }
 
@@ -65,16 +65,16 @@ void MacWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	graph_get_3d_color(bg, &dark, &bright);
 
 	graph_line(g, 
-			r->x + r->w - frameW + 1, r->y,
+			r->x + r->w - theme.frameW + 1, r->y,
 			r->x + r->w, r->y, dark);
 	graph_line(g,
-			r->x + r->w - frameW + 1, r->y + 1,
+			r->x + r->w - theme.frameW + 1, r->y + 1,
 			r->x + r->w, r->y + 1, bright);
 	graph_line(g,
-			r->x, r->y + r->h - frameW + 1,
+			r->x, r->y + r->h - theme.frameW + 1,
 			r->x, r->y + r->h, dark);
 	graph_line(g,
-			r->x + 1, r->y + r->h - frameW + 1,
+			r->x + 1, r->y + r->h - theme.frameW + 1,
 			r->x + 1, r->y + r->h, bright);
 }
 
@@ -82,39 +82,39 @@ void MacWM::getTitle(xinfo_t* info, grect_t* rect) {
 	rect->x = info->winr.x;
 	rect->y = info->winr.y;
 	rect->w = info->winr.w;
-	rect->h = titleH;
+	rect->h = theme.titleH;
 }
 
 void MacWM::getClose(xinfo_t* info, grect_t* rect) {
 	rect->x = info->winr.x + 8;
 	rect->y = info->winr.y;// - titleH;
-	rect->w = titleH;
-	rect->h = titleH-1;
+	rect->w = theme.titleH;
+	rect->h = theme.titleH-1;
 }
 
 void MacWM::getMin(xinfo_t* info, grect_t* rect) {
-	rect->x = info->winr.x + info->winr.w - titleH*2 - 8;
+	rect->x = info->winr.x + info->winr.w - theme.titleH*2 - 8;
 	rect->y = info->winr.y;// - titleH;
-	rect->w = titleH;
-	rect->h = titleH-1;
+	rect->w = theme.titleH;
+	rect->h = theme.titleH-1;
 }
 
 void MacWM::getMax(xinfo_t* info, grect_t* rect) {
-	rect->x = info->winr.x + info->winr.w- titleH - 8;
+	rect->x = info->winr.x + info->winr.w- theme.titleH - 8;
 	rect->y = info->winr.y;// - titleH;
-	rect->w = titleH;
-	rect->h = titleH-1;
+	rect->w = theme.titleH;
+	rect->h = theme.titleH-1;
 }
 
 MacWM::~MacWM(void) {
 }
 
 MacWM::MacWM(void) {
-	desktopBGColor = 0xff555588;
-	desktopFGColor = 0xff8888aa;
-	bgColor = 0xff222222;
-	fgColor = 0xff888888;
-	bgTopColor = 0xffaaaaaa;
-	fgTopColor = 0xff222222;
-	titleH = 32;
+	theme.desktopBGColor = 0xff555588;
+	theme.desktopFGColor = 0xff8888aa;
+	theme.bgColor = 0xff222222;
+	theme.fgColor = 0xff888888;
+	theme.bgTopColor = 0xffaaaaaa;
+	theme.fgTopColor = 0xff222222;
+	theme.titleH = 32;
 }
