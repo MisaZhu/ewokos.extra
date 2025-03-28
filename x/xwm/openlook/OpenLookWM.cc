@@ -32,8 +32,8 @@ void OpenLookWM::drawClose(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 }
 
 void OpenLookWM::drawDragFrame(graph_t* g, grect_t* r) {
-	graph_frame(g, r->x-theme.frameW, r->y-theme.frameW, 
-			r->w+theme.frameW*2, r->h+theme.frameW*2, theme.frameW, 0x88ffffff, false);
+	graph_frame(g, r->x-xwm.theme.frameW, r->y-xwm.theme.frameW, 
+			r->w+xwm.theme.frameW*2, r->h+xwm.theme.frameW*2, xwm.theme.frameW, 0x88ffffff, false);
 }
 
 void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
@@ -72,36 +72,36 @@ void OpenLookWM::drawFrame(graph_t* graph, xinfo_t* info, bool top) {
 	int h = info->wsr.h;
 
 	if((info->style & XWIN_STYLE_NO_TITLE) == 0) {
-		h += theme.titleH;
-		y -= theme.titleH;
+		h += xwm.theme.titleH;
+		y -= xwm.theme.titleH;
 	}
 
-	graph_fill(graph, x-theme.frameW, y-theme.frameW, w+theme.frameW*2, theme.frameW, bg);
-	graph_fill(graph, x-theme.frameW, y-theme.frameW, theme.frameW, h+theme.frameW*2, bg);
-	graph_fill(graph, x-theme.frameW, y+h, w+theme.frameW*2, theme.frameW, bg);
-	graph_fill(graph, x+w, y-theme.frameW, theme.frameW, h+theme.frameW*2, bg);
+	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, w+xwm.theme.frameW*2, xwm.theme.frameW, bg);
+	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, xwm.theme.frameW, h+xwm.theme.frameW*2, bg);
+	graph_fill(graph, x-xwm.theme.frameW, y+h, w+xwm.theme.frameW*2, xwm.theme.frameW, bg);
+	graph_fill(graph, x+w, y-xwm.theme.frameW, xwm.theme.frameW, h+xwm.theme.frameW*2, bg);
 
-	graph_fill(graph, x-theme.frameW, y-theme.frameW, w+theme.frameW*2, 2, 0xff000000);
-	graph_fill(graph, x-theme.frameW, y-theme.frameW, 2, h+theme.frameW*2, 0xff000000);
-	graph_fill(graph, x-theme.frameW, y+h+theme.frameW-2, w+theme.frameW*2, 2, 0xff000000);
-	graph_fill(graph, x+w+theme.frameW-2, y-theme.frameW, 2, h+theme.frameW*2, 0xff000000);
+	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, w+xwm.theme.frameW*2, 2, 0xff000000);
+	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, 2, h+xwm.theme.frameW*2, 0xff000000);
+	graph_fill(graph, x-xwm.theme.frameW, y+h+xwm.theme.frameW-2, w+xwm.theme.frameW*2, 2, 0xff000000);
+	graph_fill(graph, x+w+xwm.theme.frameW-2, y-xwm.theme.frameW, 2, h+xwm.theme.frameW*2, 0xff000000);
 
 	if(frameTLIcon)
 		graph_blt_alpha(frameTLIcon, 0, 0, frameTLIcon->w, frameTLIcon->h,
-				graph, x-theme.frameW, y-theme.frameW, frameTLIcon->w, frameTLIcon->h, 0xff);
+				graph, x-xwm.theme.frameW, y-xwm.theme.frameW, frameTLIcon->w, frameTLIcon->h, 0xff);
 	if(frameTRIcon)
 		graph_blt_alpha(frameTRIcon, 0, 0, frameTRIcon->w, frameTRIcon->h,
-				graph, x+w-frameTRIcon->w+theme.frameW, y-theme.frameW, frameTLIcon->w, frameTLIcon->h, 0xff);
+				graph, x+w-frameTRIcon->w+xwm.theme.frameW, y-xwm.theme.frameW, frameTLIcon->w, frameTLIcon->h, 0xff);
 	if(frameBLIcon)
 		graph_blt_alpha(frameBLIcon, 0, 0, frameBLIcon->w, frameBLIcon->h,
-				graph, x-theme.frameW, y+h-frameBLIcon->h+theme.frameW, frameBLIcon->w, frameBLIcon->h, 0xff);
+				graph, x-xwm.theme.frameW, y+h-frameBLIcon->h+xwm.theme.frameW, frameBLIcon->w, frameBLIcon->h, 0xff);
 	if(frameBRIcon)
 		graph_blt_alpha(frameBRIcon, 0, 0, frameBRIcon->w, frameBRIcon->h,
-				graph, x+w-frameBRIcon->w+theme.frameW, y+h-frameBRIcon->h+theme.frameW, frameBRIcon->w, frameBRIcon->h, 0xff);
+				graph, x+w-frameBRIcon->w+xwm.theme.frameW, y+h-frameBRIcon->h+xwm.theme.frameW, frameBRIcon->w, frameBRIcon->h, 0xff);
 	//shadow
 	/*if(top) {
-		graph_fill(graph, x+w+theme.frameW, y, theme.frameW, h+theme.frameW, 0xaa000000);
-		graph_fill(graph, x, y+h+theme.frameW, w+theme.frameW*2, theme.frameW, 0xaa000000);
+		graph_fill(graph, x+w+xwm.theme.frameW, y, xwm.theme.frameW, h+xwm.theme.frameW, 0xaa000000);
+		graph_fill(graph, x, y+h+xwm.theme.frameW, w+xwm.theme.frameW*2, xwm.theme.frameW, 0xaa000000);
 	}
 	*/
 }
@@ -114,12 +114,12 @@ void OpenLookWM::drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	graph_get_3d_color(bg, &dark, &bright);
 
 	gsize_t sz;
-	font_text_size(info->title, font, theme.fontSize, (uint32_t*)&sz.w, (uint32_t*)&sz.h);
+	font_text_size(info->title, font, xwm.theme.fontSize, (uint32_t*)&sz.w, (uint32_t*)&sz.h);
 	
 	int pw = (r->w-sz.w)/2;
 	int ph = (r->h-sz.h)/2;
 	graph_fill(g, r->x, r->y, r->w, r->h, bg);
-	graph_draw_text_font(g, r->x+pw, r->y+ph, info->title, font, theme.fontSize, fg);//title
+	graph_draw_text_font(g, r->x+pw, r->y+ph, info->title, font, xwm.theme.fontSize, fg);//title
 
 	//graph_line(g, r->x, r->y+r->h-3, r->x+r->w, r->y+r->h-3, dark);
 	//graph_line(g, r->x, r->y+r->h-2, r->x+r->w, r->y+r->h-2, bright);
