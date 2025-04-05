@@ -22,6 +22,8 @@ protected:
 	void drawClose(graph_t* g, xinfo_t* info, grect_t* r, bool top);
 	void drawFrame(graph_t* g, xinfo_t* info, bool top);
 	void drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top);
+
+	void onLoadTheme(void);
 public:
 	OpenLookWM(void);
 	~OpenLookWM(void);

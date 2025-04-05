@@ -125,14 +125,17 @@ void OpenLookWM::drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	//graph_line(g, r->x, r->y+r->h-2, r->x+r->w, r->y+r->h-2, bright);
 }
 
-OpenLookWM::~OpenLookWM(void) {
-}
-
-OpenLookWM::OpenLookWM(void) {
+void OpenLookWM::onLoadTheme(void) {
 	frameBLIcon = png_image_new(x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/bottom_left.png"));
 	frameTLIcon = png_image_new(x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/top_left.png"));
 	frameBRIcon = png_image_new(x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/bottom_right.png"));
 	frameTRIcon = png_image_new(x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/top_right.png"));
 	frameCloseIcon = png_image_new(x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/button_down.png"));
 	frameMaxIcon = png_image_new(x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/button_max.png"));
+}
+
+OpenLookWM::~OpenLookWM(void) {
+}
+
+OpenLookWM::OpenLookWM(void) {
 }
