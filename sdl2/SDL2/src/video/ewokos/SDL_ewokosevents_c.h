@@ -20,7 +20,7 @@
 */
 #include "../../SDL_internal.h"
 
-#include "SDL_rpivideo.h"
+#include "SDL_ewokosvideo.h"
 
 extern void EWOKOS_PumpEvents(_THIS);
 

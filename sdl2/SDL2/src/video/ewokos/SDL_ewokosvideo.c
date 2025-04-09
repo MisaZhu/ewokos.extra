@@ -33,10 +33,15 @@
 #include "../SDL_pixels_c.h"
 #include "../../events/SDL_events_c.h"
 
-#include "SDL_rpivideo.h"
-#include "SDL_rpievents_c.h"
-#include "SDL_rpiframebuffer_c.h"
+#include "SDL_ewokosvideo.h"
+#include "SDL_ewokosevents_c.h"
+#include "SDL_ewokosframebuffer_c.h"
 #include "ewoksys/klog.h"
+#include "x/xwin.h"
+#include "x/x.h"
+#include <pthread.h>
+
+static x_t _x_;
 
 #ifdef HAVE_USPI
 #include "uspi.h"
@@ -61,10 +66,7 @@ static unsigned int phys_height;
 static int
 EWOKOS_CreateWindow(_THIS, SDL_Window * window)
 {
-    klog("xxx\n");
     /* Adjust the window data to match the screen */
-    window->x = 0;
-    window->y = 0;
     if (window->w > 1 && window->h > 1)
     {
         SDL_DisplayMode mode;
@@ -84,6 +86,12 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     window->flags &= ~SDL_WINDOW_HIDDEN;
     window->flags |= SDL_WINDOW_SHOWN;          /* only one window */
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
+
+    x_t* x = (x_t*)_this->driverdata;
+	xwin_t* xwin = xwin_open(x, 0, window->x, window->y, window->w, window->h, window->title, XWIN_STYLE_NORMAL);
+    window->driverdata = xwin;
+    if((window->flags & SDL_WINDOW_HIDDEN) == 0)
+        xwin_set_visible(xwin, true);
 
     /* One window, it always has focus */
     SDL_SetMouseFocus(window);
@@ -211,16 +219,23 @@ EWOKOS_CreateDevice(int devindex)
 }
 
 VideoBootStrap EWOKOS_bootstrap = {
-    EWOKOSVID_DRIVER_NAME, "SDL Raspberry Pi video driver",
+    EWOKOSVID_DRIVER_NAME, "SDL EwokOS video driver",
     EWOKOS_Available, EWOKOS_CreateDevice
 };
+
+static void* x_thread(void* p) {
+    SDL_VideoDevice* dev = (SDL_VideoDevice*)p;
+    x_t* x = (x_t*)dev->driverdata;
+    x_run(x, NULL);
+    return NULL;
+}
 
 int
 EWOKOS_VideoInit(_THIS)
 {
+    SDL_DisplayMode mode;
     /*unsigned int mb_addr = 0x40007000;      // 0x7000 in L2 cache coherent mode
     volatile unsigned int *mailbuffer = (unsigned int *) mb_addr;
-    SDL_DisplayMode mode;
 
     mailbuffer[0] = 8 * 4;             // size of this message
     mailbuffer[1] = 0;                  // this is a request
@@ -239,20 +254,29 @@ EWOKOS_VideoInit(_THIS)
 
     phys_width = mailbuffer[5];
     phys_height = mailbuffer[6];
+    */
+    xscreen_t scr;
+    x_screen_info(&scr, 0);
+    phys_width = scr.size.w;
+    phys_height = scr.size.h;
+
+    x_init(&_x_, NULL);    
+    _this->driverdata = &_x_;
 
     SDL_zero(mode);
     mode.format = SDL_PIXELFORMAT_ABGR8888;
     mode.w = phys_width;
     mode.h = phys_height;
     mode.refresh_rate = 60;
-    mode.driverdata = NULL;
 
     if (SDL_AddBasicVideoDisplay(&mode) < 0) {
         return -1;
     }
 
     SDL_AddDisplayMode(&_this->displays[0], &mode);
-    */
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, x_thread, _this);
     return 0;
 }
 

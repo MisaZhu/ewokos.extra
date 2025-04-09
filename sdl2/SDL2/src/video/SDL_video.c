@@ -635,6 +635,12 @@ SDL_GetDisplayDriverData( int displayIndex )
     return _this->displays[displayIndex].driverdata;
 }
 
+void *
+SDL_GetVideoDriverData(void)
+{
+    return _this->driverdata;
+}
+
 const char *
 SDL_GetDisplayName(int displayIndex)
 {
@@ -2229,6 +2235,7 @@ SDL_DestroyWindow(SDL_Window * window)
     CHECK_WINDOW_MAGIC(window, );
 
     window->is_destroying = SDL_TRUE;
+    window->driverdata = NULL;
 
     /* Restore video mode, etc. */
     SDL_HideWindow(window);
@@ -2271,7 +2278,7 @@ SDL_DestroyWindow(SDL_Window * window)
     window->magic = NULL;
 
     /* Free memory associated with the window */
-    SDL_free(window->title);
+    //SDL_free(window->title);
     SDL_FreeSurface(window->icon);
     SDL_free(window->gamma);
     while (window->data) {

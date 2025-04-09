@@ -21,6 +21,7 @@ all: $(SDLTEST)
 
 $(SDLTEST): $(SDLTEST_OBJS) \
 		$(EWOK_LIBC_A)  \
+		$(SDL2_DIR)/libSDL2.a \
 		$(BUILD_DIR)/lib/libewokstl.a \
 		$(BUILD_DIR)/lib/libx++.a \
 		$(BUILD_DIR)/lib/libx.a \

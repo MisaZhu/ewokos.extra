@@ -1624,10 +1624,10 @@ SDL_RenderFillRects(SDL_Renderer * renderer,
         return SDL_OutOfMemory();
     }
     for (i = 0; i < count; ++i) {
-        frects[i].x = rects[i].x * renderer->scale.x;
-        frects[i].y = rects[i].y * renderer->scale.y;
-        frects[i].w = rects[i].w * renderer->scale.x;
-        frects[i].h = rects[i].h * renderer->scale.y;
+        frects[i].x = rects[i].x;// * renderer->scale.x;
+        frects[i].y = rects[i].y;// * renderer->scale.y;
+        frects[i].w = rects[i].w;// * renderer->scale.x;
+        frects[i].h = rects[i].h;// * renderer->scale.y;
     }
 
     status = renderer->RenderFillRects(renderer, frects, count);

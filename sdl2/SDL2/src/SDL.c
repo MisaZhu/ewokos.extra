@@ -442,7 +442,7 @@ SDL_GetPlatform()
 #elif __PSP__
     return "PlayStation Portable";
 #elif defined(__EWOKOS__)
-    return "RaspberryPi";
+    return "ewokos";
 #else
     return "Unknown (see SDL_platform.h)";
 #endif

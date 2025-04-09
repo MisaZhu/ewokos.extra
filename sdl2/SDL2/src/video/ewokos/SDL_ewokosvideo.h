@@ -20,22 +20,11 @@
 */
 #include "../../SDL_internal.h"
 
-#if SDL_VIDEO_DRIVER_EWOKOS
+#ifndef _SDL_ewokosvideo_h
+#define _SDL_ewokosvideo_h
 
-/* Being a null driver, there's no event stream. We just define stubs for
-   most of the API. */
+#include "../SDL_sysvideo.h"
 
-#include "../../events/SDL_events_c.h"
-
-#include "SDL_rpivideo.h"
-#include "SDL_rpievents_c.h"
-
-void
-EWOKOS_PumpEvents(_THIS)
-{
-
-}
-
-#endif /* SDL_VIDEO_DRIVER_EWOKOS */
+#endif
 
 /* vi: set ts=4 sw=4 expandtab: */

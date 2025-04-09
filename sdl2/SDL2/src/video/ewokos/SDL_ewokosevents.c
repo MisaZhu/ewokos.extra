@@ -20,21 +20,22 @@
 */
 #include "../../SDL_internal.h"
 
-#ifndef _SDL_ewokosaudio_h
-#define _SDL_ewokosaudio_h
+#if SDL_VIDEO_DRIVER_EWOKOS
 
-#include "../SDL_sysaudio.h"
+/* Being a null driver, there's no event stream. We just define stubs for
+   most of the API. */
 
-/* Hidden "this" pointer for the audio functions */
-#define _THIS   SDL_AudioDevice *this
+#include "../../events/SDL_events_c.h"
 
-struct SDL_PrivateAudioData {
-    /* The file descriptor for the audio device */
-    Uint8 *mixbuf;
-    Uint32 mixlen;
-    Uint32 write_delay;
-    Uint32 initial_calls;
-};
+#include "SDL_ewokosvideo.h"
+#include "SDL_ewokosevents_c.h"
 
-#endif /* _SDL_ewokosaudio_h */
+void
+EWOKOS_PumpEvents(_THIS)
+{
+
+}
+
+#endif /* SDL_VIDEO_DRIVER_EWOKOS */
+
 /* vi: set ts=4 sw=4 expandtab: */
