@@ -1,4 +1,5 @@
 #include <SDL.h>
+#include <SDL_image.h>
 #include <ewoksys/klog.h>
 #include <x/x.h>
 

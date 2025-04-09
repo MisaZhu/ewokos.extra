@@ -1,5 +1,6 @@
 ARCH=arm
 SDL2_DIR=../SDL2
+SDL2_IMG_DIR=../SDL2_image
 
 SW_ROOT_DIR=../..
 SYS_DIR=../../../system
@@ -8,9 +9,9 @@ include $(SYS_DIR)/platform/$(ARCH)/make.rule
 BUILD_DIR = $(SYS_DIR)/build
 TARGET_DIR = $(BUILD_DIR)/rootfs
 
-LDFLAGS = -L$(BUILD_DIR)/lib -L$(SDL2_DIR) -lSDL2 -lopenlibm
+LDFLAGS = -L$(BUILD_DIR)/lib -L$(SDL2_DIR) -L$(SDL2_IMG_DIR) -lSDL2 -lSDL2_image -lopenlibm
 
-CFLAGS += -I $(BUILD_DIR)/include -I$(SDL2_DIR)/include
+CFLAGS += -I $(BUILD_DIR)/include -I$(SDL2_DIR)/include -I$(SDL2_IMG_DIR)
 CXXFLAGS += -I $(BUILD_DIR)/include
 
 SDLTEST_OBJS = sdltest.o
