@@ -63,6 +63,45 @@ static int EWOKOS_GetDisplayBounds (_THIS, SDL_VideoDisplay * display, SDL_Rect 
 static unsigned int phys_width;
 static unsigned int phys_height;
 
+static void on_event(xwin_t* xw, xevent_t* ev) {
+	if(xw == NULL)
+		return;
+
+    SDL_Event sdlEvent;
+    if(ev->type == XEVT_IM) {
+        if(ev->state == XIM_STATE_PRESS)
+            sdlEvent.type = SDL_KEYDOWN;
+        else if(ev->state == XIM_STATE_RELEASE)
+            sdlEvent.type = SDL_KEYUP;
+        sdlEvent.key.keysym.sym = (SDL_Keycode)ev->value.im.value;
+        SDL_PushEvent(&sdlEvent);
+    }
+    else if(ev->type == XEVT_MOUSE) {
+        int mousex =  ev->value.mouse.x - xw->xinfo->wsr.x; 
+        int mousey =  ev->value.mouse.y - xw->xinfo->wsr.y; 
+
+        if(ev->state == MOUSE_STATE_MOVE || ev->state == MOUSE_STATE_DRAG) {
+            sdlEvent.type = SDL_MOUSEMOTION;
+            sdlEvent.motion.x = mousex;
+            sdlEvent.motion.y = mousey;
+            SDL_PushEvent(&sdlEvent);
+        }
+        else if(ev->state == MOUSE_STATE_DOWN) {
+            sdlEvent.type = SDL_MOUSEBUTTONDOWN;
+            sdlEvent.button.x = mousex;
+            sdlEvent.button.y = mousey;
+            SDL_PushEvent(&sdlEvent);
+        }
+        else if(ev->state == MOUSE_STATE_UP) {
+            sdlEvent.type = SDL_MOUSEBUTTONUP;
+            sdlEvent.button.x = mousex;
+            sdlEvent.button.y = mousey;
+            SDL_PushEvent(&sdlEvent);
+        }
+    }
+}
+
+
 static int
 EWOKOS_CreateWindow(_THIS, SDL_Window * window)
 {
@@ -88,7 +127,11 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
 
     x_t* x = (x_t*)_this->driverdata;
-	xwin_t* xwin = xwin_open(x, 0, window->x, window->y, window->w, window->h, window->title, XWIN_STYLE_NORMAL);
+	xwin_t* xwin = xwin_open(x, 0, window->x, window->y,
+            window->w, window->h,
+            window->title,
+            XWIN_STYLE_NO_RESIZE);
+    xwin->on_event = on_event;
     window->driverdata = xwin;
     if((window->flags & SDL_WINDOW_HIDDEN) == 0)
         xwin_set_visible(xwin, true);
@@ -227,6 +270,9 @@ static void* x_thread(void* p) {
     SDL_VideoDevice* dev = (SDL_VideoDevice*)p;
     x_t* x = (x_t*)dev->driverdata;
     x_run(x, NULL);
+    SDL_Event event;
+    event.type = SDL_QUIT;
+    SDL_PushEvent(&event);
     return NULL;
 }
 

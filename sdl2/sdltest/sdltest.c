@@ -15,23 +15,42 @@ int main() {
         SDL_Quit();
         return 1;
     }
+    klog("img: 1\n");
+    IMG_Init(IMG_INIT_PNG);
+    klog("img: 2\n");
+    SDL_Surface* img = IMG_Load("/usr/system/images/logos/apple.png");
+    klog("img: %x\n", img);
 
-    // 定义矩形
     SDL_Rect rect = { 10, 10, 100, 100 };
 
-    // 设置渲染器的绘制颜色（这里设置为红色）
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    int quit = 0;
+    while (!quit) {
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderClear(renderer);
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        SDL_RenderFillRect(renderer, &rect);
 
-    // 绘制矩形
-    SDL_RenderFillRect(renderer, &rect);
+        SDL_RenderPresent(renderer);
 
-    // 呈现渲染器的内容到窗口
-    SDL_RenderPresent(renderer);
-
-
-    x_t* x = (x_t*)SDL_GetVideoDriverData();
-    while(!x->terminated) {
-        sleep(1);
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+                case SDL_QUIT:
+                    quit = 1;
+                    break;
+                case SDL_KEYDOWN:
+                    if (event.key.keysym.sym == SDLK_ESCAPE) {
+                        quit = 1;
+                    }
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    klog("down, x: %d, y: %d\n", event.button.x, event.button.y);
+                    rect.x = event.button.x;
+                    rect.y = event.button.y;
+                    break;
+            }
+        }
+        usleep(30000);
     }
 
     SDL_DestroyWindow(window);
