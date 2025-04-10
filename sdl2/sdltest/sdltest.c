@@ -7,8 +7,23 @@
 #include <stdio.h>
 #include <unistd.h>
 
+// 定时器回调函数
+Uint32 timer_callback(Uint32 interval, void *param) {
+    printf("Timer triggered! Interval: %u ms\n", interval);
+    return interval; // 返回下一次触发的时间间隔
+}
+
 int main() {
-    SDL_Init(SDL_INIT_VIDEO);
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+
+    // 创建定时器，每 2000 毫秒（2 秒）触发一次
+    SDL_TimerID timer_id = SDL_AddTimer(2000, timer_callback, NULL);
+    if (timer_id == 0) {
+        printf("Failed to add timer! SDL_Error: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
     SDL_Window *window = SDL_CreateWindow("SDL_Test", 10, 10, 640, 480, SDL_WINDOW_SHOWN);
 
     // 创建渲染器

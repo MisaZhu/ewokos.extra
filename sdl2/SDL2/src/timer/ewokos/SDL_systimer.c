@@ -20,18 +20,24 @@
 */
 #include "../../SDL_internal.h"
 
-#if defined(SDL_TIMER_DUMMY) || defined(SDL_TIMERS_DISABLED)
+#if defined(SDL_TIMER_EWOKOS)
 
 #include "SDL_timer.h"
+#include "ewoksys/proc.h"
+#include "ewoksys/kernel_tic.h"
 
 static SDL_bool ticks_started = SDL_FALSE;
+static uint64_t _start = 0;
 
 void
 SDL_TicksInit(void)
 {
+    klog("init\n");
     if (ticks_started) {
         return;
     }
+
+    _start = kernel_tic_ms(0);
     ticks_started = SDL_TRUE;
 }
 
@@ -44,12 +50,12 @@ SDL_TicksQuit(void)
 Uint32
 SDL_GetTicks(void)
 {
-    if (!ticks_started) {
+    if (!ticks_started || _start == 0) {
         SDL_TicksInit();
     }
 
-    SDL_Unsupported();
-    return 0;
+    uint64_t now = kernel_tic_ms(0);
+    return now - _start;
 }
 
 Uint64
@@ -67,7 +73,9 @@ SDL_GetPerformanceFrequency(void)
 void
 SDL_Delay(Uint32 ms)
 {
-    SDL_Unsupported();
+    klog("delay\n");
+
+    proc_usleep(ms*1000);
 }
 
 #endif /* SDL_TIMER_DUMMY || SDL_TIMERS_DISABLED */
