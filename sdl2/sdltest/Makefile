@@ -2,7 +2,10 @@ ARCH=arm
 SDL2_DIR=../SDL2
 SDL2_IMG_DIR=../SDL2_image
 SDL2_PNG_DIR=../libpng
+SDL2_OGG_DIR=../libogg
+SDL2_VORBIS_DIR=../libvorbis
 SDL2_ZLIB_DIR=../zlib
+SDL2_MIXER_DIR=../SDL2_mixer
 
 SW_ROOT_DIR=../..
 SYS_DIR=../../../system
@@ -11,9 +14,17 @@ include $(SYS_DIR)/platform/$(ARCH)/make.rule
 BUILD_DIR = $(SYS_DIR)/build
 TARGET_DIR = $(BUILD_DIR)/rootfs
 
-LDFLAGS += -L$(BUILD_DIR)/lib -L$(SDL2_DIR) -L$(SDL2_IMG_DIR) -L$(SDL2_PNG_DIR) -L$(SDL2_ZLIB_DIR) -lSDL2_image -lSDL2 -lpng -lz -lopenlibm
+LDFLAGS += -L$(BUILD_DIR)/lib \
+	-L$(SDL2_DIR) \
+	-L$(SDL2_IMG_DIR) \
+	-L$(SDL2_PNG_DIR) \
+	-L$(SDL2_OGG_DIR) \
+	-L$(SDL2_VORBIS_DIR) \
+	-L$(SDL2_MIXER_DIR) \
+	-L$(SDL2_ZLIB_DIR) \
+	-lSDL2_image -lSDL2_mixer -lSDL2 -lpng -lvorbis -logg -lz -lopenlibm
 
-CFLAGS += -I $(BUILD_DIR)/include -I$(SDL2_DIR)/include -I$(SDL2_IMG_DIR)
+CFLAGS += -I $(BUILD_DIR)/include -I$(SDL2_DIR)/include -I$(SDL2_IMG_DIR) -I$(SDL2_MIXER_DIR) -I$(SDL2_OGG_DIR)
 CXXFLAGS += -I $(BUILD_DIR)/include
 
 SDLTEST_OBJS = sdltest.o
@@ -26,6 +37,7 @@ $(SDLTEST): $(SDLTEST_OBJS) \
 		$(EWOK_LIBC_A)  \
 		$(SDL2_DIR)/libSDL2.a \
 		$(SDL2_IMG_DIR)/libSDL2_image.a \
+		$(SDL2_MIXER_DIR)/libSDL2_mixer.a \
 		$(SDL2_PNG_DIR)/libpng.a \
 		$(BUILD_DIR)/lib/libewokstl.a \
 		$(BUILD_DIR)/lib/libx++.a \

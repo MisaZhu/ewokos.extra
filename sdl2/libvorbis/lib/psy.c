@@ -171,7 +171,7 @@ static float ***setup_tone_curves(float curveatt_dB[P_BANDS],float binHz,int n,
 
     /* which octave curves will we be compositing? */
     bin=floor(fromOC(i*.5)/binHz);
-    lo_curve=  ceil(toOC(bin*binHz+1)*2);
+    lo_curve=  SDL_ceil(toOC(bin*binHz+1)*2);
     hi_curve=  floor(toOC((bin+1)*binHz)*2);
     if(lo_curve>i)lo_curve=i;
     if(lo_curve<0)lo_curve=0;

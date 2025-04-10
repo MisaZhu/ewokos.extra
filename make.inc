@@ -2,8 +2,8 @@ ifeq ($(ARCH),)
 export ARCH=arm
 endif
 
-export BSP_LFLAGS= -larch_bcm283x
-export HW=raspix
+#export BSP_LFLAGS= -larch_bcm283x
+#export HW=raspix
 
 EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system

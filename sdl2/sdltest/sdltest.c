@@ -1,5 +1,6 @@
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_mixer.h>
 #include <ewoksys/klog.h>
 #include <x/x.h>
 
@@ -15,14 +16,21 @@ int main() {
         SDL_Quit();
         return 1;
     }
-    klog("img: 1\n");
+
+    /*
     IMG_Init(IMG_INIT_PNG);
-    klog("img: 2\n");
     SDL_Surface* img = IMG_Load("/usr/system/images/logos/apple.png");
-    klog("img: %x\n", img);
+    if(img != NULL)
+       SDL_FreeSurface(img);
+
+    Mix_Init(MIX_INIT_MP3);
+    Mix_Music* mix = Mix_LoadMUS("/data/test/test.mp3");
+    klog("mix: %x\n", mix);
+    if(mix != NULL)
+       Mix_FreeMusic(mix);
+       */
 
     SDL_Rect rect = { 10, 10, 100, 100 };
-
     int quit = 0;
     while (!quit) {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
