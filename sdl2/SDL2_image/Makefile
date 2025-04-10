@@ -13,8 +13,10 @@ DEFS = -D_REENTRANT -D__EWOKOS_PI__ -DLOAD_BMP -DLOAD_GIF -DLOAD_PNG -DHAVE_HIDD
 
 PREFIX := /opt/ewokos
 
-ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
-CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp $(DEFS)
+#ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
+#CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp $(DEFS)
+ASFLAGS = --warn -mfloat-abi=softfp
+CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm -mfloat-abi=softfp $(DEFS)
 CPPFLAGS = $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 all: deps libSDL2_image.a

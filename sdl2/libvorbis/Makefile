@@ -12,8 +12,10 @@ DEPDIR := .deps
 
 PREFIX := /opt/ewokos
 
-ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
-CFLAGS = -DHAVE_CONFIG_H -I. -I../libogg/include -Iinclude -Ilib -O20 -Wall -Wextra -ffast-math -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp -D_REENTRANT -fsigned-char -Wdeclaration-after-statement 
+#ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
+#CFLAGS = -DHAVE_CONFIG_H -I. -I../libogg/include -Iinclude -Ilib -O20 -Wall -Wextra -ffast-math -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp -D_REENTRANT -fsigned-char -Wdeclaration-after-statement 
+ASFLAGS = --warn  -mfloat-abi=softfp
+CFLAGS = -DHAVE_CONFIG_H -I. -I../libogg/include -Iinclude -Ilib -O20 -Wall -Wextra -ffast-math -ffreestanding -marm -mfloat-abi=softfp -D_REENTRANT -fsigned-char -Wdeclaration-after-statement 
 CPPFLAGS = $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 all: libvorbis.a
