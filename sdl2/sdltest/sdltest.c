@@ -9,7 +9,7 @@
 
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window *window = SDL_CreateWindow("Test", 10, 10, 640, 480, SDL_WINDOW_SHOWN);
+    SDL_Window *window = SDL_CreateWindow("SDL_Test", 10, 10, 640, 480, SDL_WINDOW_SHOWN);
 
     // 创建渲染器
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
