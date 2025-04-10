@@ -43,12 +43,6 @@ libSDL2.a: $(OBJS) Makefile
 %.o: %.s
 	$(AS) $(ASFLAGS) -o $@ $<
 
-install:
-	-mkdir -p $(PREFIX)/include/SDL2
-	cp -f include/* $(PREFIX)/include/SDL2
-	-mkdir -p $(PREFIX)/lib
-	cp -f libSDL2.a $(PREFIX)/lib
-
 clean:
 	rm -f $(OBJS) libSDL2.a
 	rm -rf $(DEPDIR)

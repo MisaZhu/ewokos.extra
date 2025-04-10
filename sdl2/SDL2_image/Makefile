@@ -13,11 +13,16 @@ DEFS = -D_REENTRANT -D__EWOKOS_PI__ -DLOAD_BMP -DLOAD_GIF -DLOAD_PNG -DHAVE_HIDD
 
 PREFIX := /opt/ewokos
 
+SW_ROOT_DIR=../..
+EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
+include $(SW_ROOT_DIR)/make.inc
+
 #ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
 #CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp $(DEFS)
 ASFLAGS = --warn -mfloat-abi=softfp
-CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm -mfloat-abi=softfp $(DEFS)
-CPPFLAGS = $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
+CFLAGS += -O3 -I../SDL2/include -I../libpng -ffreestanding -marm -mfloat-abi=softfp $(DEFS)
+CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 all: deps libSDL2_image.a
 
@@ -43,12 +48,6 @@ libSDL2_image.a: $(OBJS) Makefile
 
 deps:
 	-@mkdir -p $(DEPDIR)
-
-install:
-	-mkdir -p $(PREFIX)/include/SDL2
-	cp -f SDL_image.h $(PREFIX)/include/SDL2
-	-mkdir -p $(PREFIX)/lib
-	cp -f libSDL2_image.a $(PREFIX)/lib
 
 clean:
 	rm -f *.o libSDL2_image.a
