@@ -63,6 +63,13 @@ static int EWOKOS_GetDisplayBounds (_THIS, SDL_VideoDisplay * display, SDL_Rect 
 static unsigned int phys_width;
 static unsigned int phys_height;
 
+static bool on_close(xwin_t* xwin) {
+    SDL_Event event;
+    event.type = SDL_QUIT;
+    SDL_PushEvent(&event);
+    return false;
+}
+
 static void on_event(xwin_t* xw, xevent_t* ev) {
 	if(xw == NULL)
 		return;
@@ -132,6 +139,7 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
             window->title,
             XWIN_STYLE_NO_RESIZE);
     xwin->on_event = on_event;
+    xwin->on_close = on_close;
     window->driverdata = xwin;
     if((window->flags & SDL_WINDOW_HIDDEN) == 0)
         xwin_set_visible(xwin, true);
@@ -270,9 +278,6 @@ static void* x_thread(void* p) {
     SDL_VideoDevice* dev = (SDL_VideoDevice*)p;
     x_t* x = (x_t*)dev->driverdata;
     x_run(x, NULL);
-    SDL_Event event;
-    event.type = SDL_QUIT;
-    SDL_PushEvent(&event);
     return NULL;
 }
 
