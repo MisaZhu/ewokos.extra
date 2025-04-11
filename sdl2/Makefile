@@ -4,6 +4,7 @@ SDL2_HEADS_DIR=$(SYS_ROOT_DIR)/build/include/SDL2
 SDL2_IMG_HEADS_DIR=$(SYS_ROOT_DIR)/build/include/SDL2
 SDL2_MIXER_HEADS_DIR=$(SYS_ROOT_DIR)/build/include/SDL2
 SDL2_GFX_HEADS_DIR=$(SYS_ROOT_DIR)/build/include/SDL2
+SDL2_TTF_HEADS_DIR=$(SYS_ROOT_DIR)/build/include/SDL2
 SDL2_LIB_DIR=$(SYS_ROOT_DIR)/build/lib
 
 all:
@@ -15,15 +16,18 @@ all:
 	mkdir -p $(SDL2_IMG_HEADS_DIR)
 	mkdir -p $(SDL2_MIXER_HEADS_DIR)
 	mkdir -p $(SDL2_GFX_HEADS_DIR)
+	mkdir -p $(SDL2_TTF_HEADS_DIR)
 	mkdir -p $(SDL2_LIB_DIR)
 	cp SDL2/include/*.h $(SDL2_HEADS_DIR)
 	cp SDL2_image/*.h $(SDL2_IMG_HEADS_DIR)
 	cp SDL2_mixer/*.h $(SDL2_MIXER_HEADS_DIR)
 	cp SDL2_gfx/*.h $(SDL2_GFX_HEADS_DIR)
+	cp SDL2_ttf/*.h $(SDL2_GFX_HEADS_DIR)
 	cp SDL2/lib*.a $(SDL2_LIB_DIR)
 	cp SDL2_image/lib*.a $(SDL2_LIB_DIR)
 	cp SDL2_mixer/lib*.a $(SDL2_LIB_DIR)
 	cp SDL2_gfx/lib*.a $(SDL2_LIB_DIR)
+	cp SDL2_ttf/lib*.a $(SDL2_LIB_DIR)
 
 clean:
 	make -C SDL2 -k clean

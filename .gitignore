@@ -6,6 +6,5 @@
 .vscode/dryrun.log
 .vscode/targets.log
 .deps
-*.a
 build
 .xmake

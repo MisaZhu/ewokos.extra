@@ -64,8 +64,6 @@
 #ifndef _SDL_H
 #define _SDL_H
 
-#define uint uint32_t
-
 #include "SDL_main.h"
 #include "SDL_stdinc.h"
 #include "SDL_assert.h"

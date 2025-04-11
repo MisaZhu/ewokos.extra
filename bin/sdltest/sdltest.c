@@ -2,6 +2,7 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_mixer.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
+#include <SDL2/SDL_ttf.h>
 #include <ewoksys/klog.h>
 #include <ewoksys/keydef.h>
 #include <x/x.h>
@@ -17,6 +18,19 @@ Uint32 timer_callback(Uint32 interval, void *param) {
 
 int main() {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+
+    if (TTF_Init() == -1) {
+        printf("TTF 无法初始化! TTF_Error: %s\n", TTF_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
+    // 加载字体
+    TTF_Font* font = TTF_OpenFont("/usr/system/fonts/system-cn.ttf", 32);
+    if (font == NULL) {
+        printf("Failed to load font! SDL_ttf Error: %s\n", TTF_GetError());
+        return 1;
+    }
 
     // 创建定时器，每 2000 毫秒（2 秒）触发一次
     SDL_TimerID timer_id = SDL_AddTimer(2000, timer_callback, NULL);
@@ -37,6 +51,36 @@ int main() {
         return 1;
     }
 
+    // 文本内容和颜色
+    const char* text = "Hello, SDL2_ttf!触发一次";
+    SDL_Color textColor = {255, 0, 0, 255};
+
+    // 创建文本表面
+    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, textColor);
+    if (textSurface == NULL) {
+        printf("Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError());
+        return 1;
+    }
+
+    // 创建纹理
+    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+    if (textTexture == NULL) {
+        printf("Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError());
+        return 1;
+    }
+    // 释放表面
+    SDL_FreeSurface(textSurface);
+
+    // 文本矩形
+    SDL_Rect textRect;
+    textRect.x = 100;
+    textRect.y = 40;
+    textRect.w = textSurface->w;
+    textRect.h = textSurface->h;
+
+    // 渲染文本
+    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+
     IMG_Init(IMG_INIT_PNG);
     SDL_Surface* img = IMG_Load("/usr/system/images/logos/ewok.png");
     SDL_Texture* texture = NULL;
@@ -55,7 +99,6 @@ int main() {
     
     Mix_Init(MIX_INIT_OGG);
     Mix_Music* mix = Mix_LoadMUS("/data/test/test.ogg");
-    klog("mix: %x\n", mix);
     if(mix != NULL)
        Mix_FreeMusic(mix);
 
@@ -98,6 +141,7 @@ int main() {
                 SDL_RenderClear(renderer);
                 SDL_RenderCopy(renderer, texture, NULL, &imgRect);
                 roundedBoxColor(renderer, 100, 100, 200, 200, 10, 0x8800FF00);
+                SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
                 SDL_RenderPresent(renderer);
                 update = false;
             }
@@ -107,6 +151,12 @@ int main() {
 
     if(texture != NULL)
        SDL_DestroyTexture(texture);
+
+    if(textTexture != NULL)
+        SDL_DestroyTexture(textTexture);
+
+    if(font != NULL)
+        TTF_CloseFont(font);
 
     SDL_DestroyWindow(window);
     SDL_Quit();
