@@ -8,6 +8,7 @@ all:
 	cd saver; make
 	cd 3ddemo;make
 	cd macintosh; make
+	cd th; make
 
 clean: 
 	cd anim; make clean
@@ -18,3 +19,4 @@ clean:
 	cd saver; make clean
 	cd 3ddemo;make clean
 	cd macintosh; make clean
+	cd th; make clean
