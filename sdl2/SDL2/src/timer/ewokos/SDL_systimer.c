@@ -32,7 +32,6 @@ static uint64_t _start = 0;
 void
 SDL_TicksInit(void)
 {
-    klog("init\n");
     if (ticks_started) {
         return;
     }
@@ -73,8 +72,6 @@ SDL_GetPerformanceFrequency(void)
 void
 SDL_Delay(Uint32 ms)
 {
-    klog("delay\n");
-
     proc_usleep(ms*1000);
 }
 
