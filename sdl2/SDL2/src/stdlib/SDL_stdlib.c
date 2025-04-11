@@ -86,7 +86,7 @@ double
 SDL_ceil(double x)
 {
 #ifdef HAVE_CEIL
-    return ceil(x);
+    return SDL_ceil(x);
 #else
     double integer = SDL_floor(x);
     double fraction = x - integer;

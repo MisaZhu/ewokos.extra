@@ -1,6 +1,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_mixer.h>
+#include <SDL2/SDL2_gfxPrimitives.h>
 #include <ewoksys/klog.h>
 #include <ewoksys/keydef.h>
 #include <x/x.h>
@@ -51,13 +52,12 @@ int main() {
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, &imgRect);
     SDL_RenderPresent(renderer);
-    /*
-    Mix_Init(MIX_INIT_MP3);
-    Mix_Music* mix = Mix_LoadMUS("/data/test/test.mp3");
+    
+    Mix_Init(MIX_INIT_OGG);
+    Mix_Music* mix = Mix_LoadMUS("/data/test/test.ogg");
     klog("mix: %x\n", mix);
     if(mix != NULL)
        Mix_FreeMusic(mix);
-       */
 
     int quit = 0;
     while (!quit) {
@@ -97,6 +97,7 @@ int main() {
                 SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                 SDL_RenderClear(renderer);
                 SDL_RenderCopy(renderer, texture, NULL, &imgRect);
+                roundedBoxColor(renderer, 100, 100, 200, 200, 10, 0x8800FF00);
                 SDL_RenderPresent(renderer);
                 update = false;
             }

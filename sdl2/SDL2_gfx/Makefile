@@ -9,7 +9,6 @@ AR := $(TOOLCHAIN)ar
 OBJCOPY := $(TOOLCHAIN)objcopy
 
 DEPDIR := .deps
-DEFS = -D_REENTRANT -D__EWOKOS__ -DLOAD_BMP -DLOAD_GIF -DLOAD_PNG -DHAVE_HIDDEN -DSDL_BYTEORDER=SDL_LIL_ENDIAN
 
 PREFIX := /opt/ewokos
 
@@ -19,21 +18,21 @@ SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
 #ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
-#CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp $(DEFS)
+#CFLAGS = -O3 -I. -I../SDL2/include -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp -D_REENTRANT -D__EWOKOS__
 ASFLAGS = --warn -mfloat-abi=softfp
-CFLAGS += -O3 -I../SDL2/include -I../libpng -ffreestanding -marm -mfloat-abi=softfp $(DEFS)
+CFLAGS += -O3 -I. -I../SDL2/include -ffreestanding -marm -mfloat-abi=softfp -D_REENTRANT -D__EWOKOS__
 CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
-all: deps libSDL2_image.a
+all: deps libSDL2_gfx.a
 
 .PHONY: deps
 
-OBJS = IMG.o IMG_bmp.o IMG_gif.o IMG_jpg.o IMG_png.o IMG_tif.o IMG_webp.o
+OBJS = SDL2_framerate.o SDL2_gfxPrimitives.o SDL2_imageFilter.c  SDL2_rotozoom.o
 
 -include $(DEPDIR)/*.Po
 
-libSDL2_image.a: $(OBJS) Makefile
-	$(AR) rcs $@ $(OBJS)
+libSDL2_gfx.a: $(OBJS) Makefile
+	$(AR) rcs -o libSDL2_gfx.a $(OBJS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -std=c99 -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -50,5 +49,5 @@ deps:
 	-@mkdir -p $(DEPDIR)
 
 clean:
-	rm -f *.o libSDL2_image.a
+	rm -f *.o libSDL2_gfx.a
 	rm -rf $(DEPDIR)
