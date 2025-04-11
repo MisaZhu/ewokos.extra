@@ -8,3 +8,6 @@
 .deps
 build
 .xmake
+sdl2/SDL2/libSDL2.a
+sdl2/SDL2_gfx/libSDL2_gfx.a
+sdl2/SDL2_image/libSDL2_image.a

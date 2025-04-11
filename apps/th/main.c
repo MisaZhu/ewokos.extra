@@ -80,9 +80,10 @@ int main(int argc, char* argv[]) {
 		SDL_Quit();
 		return 1;
 	}
+
 	//initilization - do not delete
 	//-----------------------------
-	
+
 	SDL_Rect images[240];
 	initializeImageRect(images);
 	
@@ -91,7 +92,7 @@ int main(int argc, char* argv[]) {
 	
 	PLAYER player;
 	initializePlayer(&player);
-	
+
 	BOX boxes[6];
 	boxes[0] = newBox(2,3);
 	boxes[1] = newBox(9,15);
@@ -208,8 +209,8 @@ int main(int argc, char* argv[]) {
 			case 0:
 
                 //open the path when the box is in the right place
-                if (boxes[currentMap].x > (420/2) && boxes[currentMap].x < (460/2) &&
-                    boxes[currentMap].y > (210/2) && boxes[currentMap].y < (240/2) &&
+                if (boxes[currentMap].x > (420/ZOOM) && boxes[currentMap].x < (460/ZOOM) &&
+                    boxes[currentMap].y > (210/ZOOM) && boxes[currentMap].y < (240/ZOOM) &&
                     maps[currentMap].walls[1][6] == 1) {
                     maps[currentMap].walls[1][6] = 2;
                     maps[currentMap].walls[1][7] = 22;
@@ -261,8 +262,8 @@ int main(int argc, char* argv[]) {
 				}
                 
                 //open the path when the box is in the right place
-                if (boxes[currentMap].x > 235/2 && boxes[currentMap].x < 260 &&
-                    boxes[currentMap].y > 930/2 && boxes[currentMap].y < 940 &&
+                if (boxes[currentMap].x > 235/ZOOM && boxes[currentMap].x < 260 &&
+                    boxes[currentMap].y > 930/ZOOM && boxes[currentMap].y < 940 &&
                     maps[currentMap].walls[7][2] == 10) {
                     maps[currentMap].walls[7][2] = EMPTY;
                     maps[currentMap].walls[8][2] = EMPTY;
@@ -307,8 +308,8 @@ int main(int argc, char* argv[]) {
                 }
                 
                 //open and close the bloked part with the box
-                if (boxes[currentMap].x > 1235/2 && boxes[currentMap].x < 1260/2 &&
-                    boxes[currentMap].y > 530/2 && boxes[currentMap].y < 540/2 &&
+                if (boxes[currentMap].x > 1235/ZOOM && boxes[currentMap].x < 1260/ZOOM &&
+                    boxes[currentMap].y > 530/ZOOM && boxes[currentMap].y < 540/ZOOM &&
                     maps[currentMap].walls[3][12] == 10) {
                     maps[currentMap].walls[3][12] = EMPTY;
                     maps[currentMap].walls[4][12] = EMPTY;
@@ -319,8 +320,8 @@ int main(int argc, char* argv[]) {
                     maps[currentMap].walls[3][14] = 1;
                     maps[currentMap].walls[4][14] = 2;
                     boxes[currentMap].movable = 0;
-                }else if (!(boxes[currentMap].x > 1235/2 && boxes[currentMap].x < 1260/2 &&
-                          boxes[currentMap].y > 530/2 && boxes[currentMap].y < 540/2) &&
+                }else if (!(boxes[currentMap].x > 1235/ZOOM && boxes[currentMap].x < 1260/ZOOM &&
+                          boxes[currentMap].y > 530/ZOOM && boxes[currentMap].y < 540/ZOOM) &&
                           maps[currentMap].walls[3][12] != 10){
                     maps[currentMap].walls[3][12] = 10;
                     maps[currentMap].walls[4][12] = 12;
@@ -344,8 +345,8 @@ int main(int argc, char* argv[]) {
                 }
                 
                 //open the path when the box is in the right place
-                if (boxes[currentMap].x > 735/2 && boxes[currentMap].x < 760/2 &&
-                    boxes[currentMap].y > 530/2 && boxes[currentMap].y < 540/2 &&
+                if (boxes[currentMap].x > 735/ZOOM && boxes[currentMap].x < 760/ZOOM &&
+                    boxes[currentMap].y > 530/ZOOM && boxes[currentMap].y < 540/ZOOM &&
                     maps[currentMap].walls[3][7] == 10) {
                     maps[currentMap].walls[3][7] = EMPTY;
                     maps[currentMap].walls[4][7] = EMPTY;
@@ -390,8 +391,8 @@ int main(int argc, char* argv[]) {
                 }
                 
                 //open path if the box is in the right place
-                if (boxes[currentMap].x > 135/2 && boxes[currentMap].x < 160/2 &&
-                    boxes[currentMap].y > 630/2 && boxes[currentMap].y < 640/2 &&
+                if (boxes[currentMap].x > 135/ZOOM && boxes[currentMap].x < 160/ZOOM &&
+                    boxes[currentMap].y > 630/ZOOM && boxes[currentMap].y < 640/ZOOM &&
                     maps[currentMap].walls[10][1] == 10) {
                     maps[currentMap].walls[10][0] = 21;
                     maps[currentMap].walls[11][0] = 21;

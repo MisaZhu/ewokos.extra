@@ -725,12 +725,14 @@ void initializePlayer(PLAYER * player) {
     player -> w = 3 * SCALE / 4;
     player -> x_dir = 0;
     player -> y_dir = 0;
-    player -> speed = 5;
+    player -> speed = 8/ZOOM;
     player -> image = 197;
 	for (int i = 0; i < 5; i++) {
 		player -> rocks[i] =0;
 	}
-	
+
+	if(player->speed <= 0)
+		player->speed = 2;
 }
 
 BOX newBox(int x, int y){

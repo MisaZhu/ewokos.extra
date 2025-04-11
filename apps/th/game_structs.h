@@ -8,9 +8,10 @@
 #ifndef game_structs_h
 #define game_structs_h
 
-#define SCALE (100/2)
-#define WINDOW_WIDTH (1000/2)
-#define WINDOW_HEIGHT (800/2)
+#define ZOOM 2 
+#define SCALE (100/ZOOM)
+#define WINDOW_WIDTH (1000/ZOOM)
+#define WINDOW_HEIGHT (800/ZOOM)
 
 #define LIGHT 62
 #define DARK 11
