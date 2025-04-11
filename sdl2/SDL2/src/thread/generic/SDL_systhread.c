@@ -24,6 +24,7 @@
 
 #include "SDL_thread.h"
 #include "../SDL_systhread.h"
+#include <pthread.h>
 
 #ifdef SDL_PASSED_BEGINTHREAD_ENDTHREAD
 int
@@ -31,11 +32,20 @@ SDL_SYS_CreateThread(SDL_Thread * thread, void *args,
                      pfnSDL_CurrentBeginThread pfnBeginThread,
                      pfnSDL_CurrentEndThread pfnEndThread)
 #else
+
+static void* sys_thread(void* data) {
+    SDL_RunThread(data);
+    return NULL;
+}
+
 int
 SDL_SYS_CreateThread(SDL_Thread * thread, void *args)
 #endif /* SDL_PASSED_BEGINTHREAD_ENDTHREAD */
 {
-    return SDL_SetError("Threads are not supported on this platform");
+    //return SDL_SetError("Threads are not supported on this platform");
+    pthread_t tid;
+    pthread_create(&tid, NULL, sys_thread, args);
+    return tid;
 }
 
 void
@@ -47,7 +57,7 @@ SDL_SYS_SetupThread(const char *name)
 SDL_threadID
 SDL_ThreadID(void)
 {
-    return (0);
+    return pthread_self();
 }
 
 int

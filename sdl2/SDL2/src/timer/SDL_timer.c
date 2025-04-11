@@ -197,7 +197,8 @@ SDL_TimerThread(void *_data)
            That's okay, it just means we run through the loop a few
            extra times.
          */
-        SDL_SemWaitTimeout(data->sem, delay);
+        usleep(10000);
+        //SDL_SemWaitTimeout(data->sem, delay);
     }
     return 0;
 }
