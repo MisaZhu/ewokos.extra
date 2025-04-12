@@ -52,7 +52,7 @@ void init_graphics() {
     SDL_SetRenderTarget(render, display);
 
     // Load font
-    gFont = TTF_OpenFont(x_get_res_name("font/Inconsolata-Regular.ttf"), 30);
+    gFont = TTF_OpenFont(x_get_res_name("font/Inconsolata-Regular.ttf"), 16);
 
     if (gFont == NULL) {
         fprintf(stderr,

@@ -193,7 +193,7 @@ void render_score() {
     int mHeight = textSurface->h;
 
     // render text
-    SDL_Rect renderQuad = { WINDOW_WIDTH - mWidth - 10, 10, mWidth, mHeight };
+    SDL_Rect renderQuad = { WINDOW_WIDTH - mWidth - 10, 6, mWidth, mHeight };
 
     SDL_RenderCopy(render, mTexture, NULL, &renderQuad);
 

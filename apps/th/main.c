@@ -131,22 +131,18 @@ int main(int argc, char* argv[]) {
 					
 				case SDL_KEYDOWN:
 					switch (event.key.keysym.sym) {
-						case SDLK_w:
 						case SDLK_UP:
 							//player changes go up
 							player.y_dir = -1;
 							break;
-						case SDLK_s:
 						case SDLK_DOWN:
 							//player changes go down
 							player.y_dir = 1;
 							break;
-						case SDLK_a:
 						case SDLK_LEFT:
 							//player changes go left
 							player.x_dir = -1;
 							break;
-						case SDLK_d:
 						case SDLK_RIGHT:
 							//player changes go right
 							player.x_dir = 1;
@@ -166,25 +162,21 @@ int main(int argc, char* argv[]) {
 					
 				case SDL_KEYUP:
 					switch (event.key.keysym.sym) {
-						case SDLK_w:
 						case SDLK_UP:
 							//if the direction hasn't been changed to down (1), then stop moving upwards
 							if (player.y_dir!=1)
 								player.y_dir = 0;
 							break;
-						case SDLK_s:
 						case SDLK_DOWN:
 							//if the direction hasn't been changed to up (-1), then stop moving downwards
 							if (player.y_dir!=-1)
 								player.y_dir = 0;
 							break;
-						case SDLK_a:
 						case SDLK_LEFT:
 							//if the direction hasn't been changed to right (1), then stop moving left
 							if (player.x_dir!=1)
 								player.x_dir = 0;
 							break;
-						case SDLK_d:
 						case SDLK_RIGHT:
 							//if the direction hasn't been changed to left (-1), then stop moving right
 							if (player.x_dir!=-1)
