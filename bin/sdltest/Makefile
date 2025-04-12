@@ -2,6 +2,7 @@ ARCH=arm
 
 SW_ROOT_DIR=../..
 SYS_DIR=../../../system
+include $(SW_ROOT_DIR)/make.inc
 include $(SYS_DIR)/platform/$(ARCH)/make.rule
 
 BUILD_DIR = $(SYS_DIR)/build
@@ -15,7 +16,8 @@ CXXFLAGS += -I $(BUILD_DIR)/include
 
 TASK_OBJS = sdltest.o
 
-TASK = $(SW_ROOT_DIR)/build/$(HW)/bin/sdltest
+TASK = sdltest
+TASK_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
 
 all: $(TASK)
 
@@ -35,9 +37,9 @@ $(TASK): $(TASK_OBJS) \
 		$(BUILD_DIR)/lib/libfont.a \
 		$(BUILD_DIR)/lib/libwidget++.a \
 		$(BUILD_DIR)/lib/libcxx.a 
-	$(LD) -Ttext=100 $(TASK_OBJS) -o $(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
+	$(LD) -Ttext=100 $(TASK_OBJS) -o $(TASK_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 clean:
 	rm -f $(TASK_OBJS)
-	rm -fr $(TASK_DIR)
+	rm -fr $(TASK)
 

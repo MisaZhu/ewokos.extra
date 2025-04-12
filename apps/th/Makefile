@@ -2,7 +2,7 @@ ARCH=arm
 
 SW_ROOT_DIR=../..
 SYS_DIR=../../../system
-include $(SYS_DIR)/platform/$(ARCH)/make.rule
+include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_DIR)/build
 TARGET_DIR = $(BUILD_DIR)/rootfs
