@@ -114,19 +114,19 @@ int main() {
                     quit = 1;
                     break;
                 case SDL_KEYDOWN:
-                    if (event.key.keysym.sym == KEY_UP) {
+                    if (event.key.keysym.sym == SDLK_UP) {
                         imgRect.y -= 10;
                         update = true;
                     }
-                    else if (event.key.keysym.sym == KEY_DOWN) {
+                    else if (event.key.keysym.sym == SDLK_DOWN) {
                         imgRect.y += 10;
                         update = true;
                     }
-                    else if (event.key.keysym.sym == KEY_LEFT) {
+                    else if (event.key.keysym.sym == SDLK_LEFT) {
                         imgRect.x -= 10;
                         update = true;
                     }
-                    else if (event.key.keysym.sym == KEY_RIGHT) {
+                    else if (event.key.keysym.sym == SDLK_RIGHT) {
                         imgRect.x += 10;
                         update = true;
                     }
