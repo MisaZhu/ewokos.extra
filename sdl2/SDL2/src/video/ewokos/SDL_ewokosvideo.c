@@ -126,24 +126,11 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
 static int
 EWOKOS_CreateWindow(_THIS, SDL_Window * window)
 {
-    /* Adjust the window data to match the screen */
-    if (window->w > 1 && window->h > 1)
-    {
-        SDL_DisplayMode mode;
-        SDL_zero(mode);
-        mode.format = SDL_PIXELFORMAT_ABGR8888;
-        mode.w = phys_width = window->w;
-        mode.h = phys_height = window->h;
-        mode.refresh_rate = 60;
-        mode.driverdata = NULL;
-        SDL_AddDisplayMode(&_this->displays[0], &mode);
-    }
-    window->w = phys_width;
-    window->h = phys_height;
+    if(window->w <= 0 || window->h <= 0)
+        window->flags |= SDL_WINDOW_FULLSCREEN;
 
     window->flags &= ~SDL_WINDOW_RESIZABLE;     /* window is NEVER resizeable */
-    window->flags |= SDL_WINDOW_FULLSCREEN;     /* window is always fullscreen */
-    window->flags &= ~SDL_WINDOW_HIDDEN;
+    window->flags &= (~SDL_WINDOW_HIDDEN);
     window->flags |= SDL_WINDOW_SHOWN;          /* only one window */
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
 
@@ -152,11 +139,36 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
             window->w, window->h,
             window->title,
             XWIN_STYLE_NO_RESIZE);
+
     xwin->on_event = on_event;
     xwin->on_close = on_close;
     window->driverdata = xwin;
-    if((window->flags & SDL_WINDOW_HIDDEN) == 0)
+    if((window->flags & SDL_WINDOW_HIDDEN) == 0) {
+        if((window->flags & SDL_WINDOW_FULLSCREEN) != 0) {
+            xwin_fullscreen(xwin);
+            window->w = xwin->xinfo->wsr.w;
+            window->h = xwin->xinfo->wsr.h;
+        }
+        else if((window->flags & SDL_WINDOW_MAXIMIZED) != 0) {
+            xwin_max(xwin);
+            window->w = xwin->xinfo->wsr.w;
+            window->h = xwin->xinfo->wsr.h;
+        }
         xwin_set_visible(xwin, true);
+    }
+
+    /* Adjust the window data to match the screen */
+    if (window->w > 1 && window->h > 1)
+    {
+        SDL_DisplayMode mode;
+        SDL_zero(mode);
+        mode.format = SDL_PIXELFORMAT_ABGR8888;
+        mode.w = window->w;
+        mode.h = window->h;
+        mode.refresh_rate = 60;
+        mode.driverdata = NULL;
+        SDL_AddDisplayMode(&_this->displays[0], &mode);
+    }
 
     /* One window, it always has focus */
     SDL_SetMouseFocus(window);

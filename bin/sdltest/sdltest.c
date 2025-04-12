@@ -32,6 +32,7 @@ int main() {
         return 1;
     }
 
+
     // 创建定时器，每 2000 毫秒（2 秒）触发一次
     SDL_TimerID timer_id = SDL_AddTimer(2000, timer_callback, NULL);
     if (timer_id == 0) {
@@ -40,7 +41,8 @@ int main() {
         return 1;
     }
 
-    SDL_Window *window = SDL_CreateWindow("SDL_Test", 10, 10, 640, 480, SDL_WINDOW_SHOWN);
+    SDL_Window *window = SDL_CreateWindow("SDL_Test", 10, 10, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_MAXIMIZED);
+
 
     // 创建渲染器
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
