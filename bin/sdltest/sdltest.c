@@ -54,11 +54,11 @@ int main() {
     }
 
     // 文本内容和颜色
-    const char* text = "Hello, SDL2_ttf!触发一次";
+    const char* text = "SDL2_ttf: 中文测试";
     SDL_Color textColor = {255, 0, 0, 255};
 
     // 创建文本表面
-    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, textColor);
+    SDL_Surface* textSurface = TTF_RenderUTF8_Blended(font, text, textColor);
     if (textSurface == NULL) {
         printf("Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError());
         return 1;
