@@ -421,7 +421,7 @@ bool render_current_tetromino(Tetromino_Movement tetra_request) {
 
     // change alpha to ~50%
     ghost.color = ghost.color & 0x00FFFFFF;
-    ghost.color = ghost.color | 0x66000000;
+    ghost.color = ghost.color | 0x22000000;
 
     Tetromino_Movement ghost_request = tetra_request;
     ghost_request.type = ghost;

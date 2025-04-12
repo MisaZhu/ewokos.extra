@@ -8,7 +8,7 @@ BUILD_DIR = $(SYS_DIR)/build
 TARGET_DIR = $(BUILD_DIR)/rootfs
 
 LDFLAGS += -L$(BUILD_DIR)/lib \
-	-lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lpng -lvorbis -logg -lz -lopenlibm
+	-lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lopenlibm
 
 CFLAGS += -I $(BUILD_DIR)/include
 CXXFLAGS += -I $(BUILD_DIR)/include
@@ -25,6 +25,8 @@ $(TASK): $(TASK_OBJS) \
 		$(BUILD_DIR)/lib/libSDL2.a \
 		$(BUILD_DIR)/lib/libSDL2_image.a \
 		$(BUILD_DIR)/lib/libSDL2_mixer.a \
+		$(BUILD_DIR)/lib/libSDL2_ttf.a \
+		$(BUILD_DIR)/lib/libfreetype.a \
 		$(BUILD_DIR)/lib/libpng.a \
 		$(BUILD_DIR)/lib/libewokstl.a \
 		$(BUILD_DIR)/lib/libx++.a \
