@@ -12,6 +12,7 @@ all:
 	make -C SDL2_image
 	make -C SDL2_mixer
 	make -C SDL2_gfx
+	make -C SDL2_ttf
 	mkdir -p $(SDL2_HEADS_DIR)
 	mkdir -p $(SDL2_IMG_HEADS_DIR)
 	mkdir -p $(SDL2_MIXER_HEADS_DIR)
@@ -34,3 +35,4 @@ clean:
 	make -C SDL2_image -k clean
 	make -C SDL2_mixer -k clean
 	make -C SDL2_gfx -k clean
+	make -C SDL2_ttf -k clean

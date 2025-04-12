@@ -1,0 +1,75 @@
+SW_ROOT_DIR=../..
+EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
+include $(SW_ROOT_DIR)/make.inc
+
+
+FREETYPE_PATH = external/freetype
+
+#ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
+#CFLAGS = -O3 -I. -I../SDL2/include -I../libogg/include -I../libvorbis/include -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp -D_REENTRANT -D__EWOKOS__ -DOGG_MUSIC=1 -DWAV_MUSIC=1
+ASFLAGS = --warn -mfloat-abi=softfp
+CFLAGS += -O3 -I. -I../SDL2/include -I$(FREETYPE_PATH)/include -ffreestanding -marm -mfloat-abi=softfp -D_REENTRANT -D__EWOKOS__ -DOGG_MUSIC=1 -DWAV_MUSIC=1
+CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
+CFLAGS += -D_REENTRANT -Wall -fvisibility=hidden -DPACKAGE_VERSION=\"2.24.0\" -DPACKAGE_STRING=\"SDL2_ttf\ 2.24.0\" -DPACKAGE_BUGREPORT=\"https://github.com/libsdl-org/SDL_ttf/issues\" -DPACKAGE_URL=\"\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DSDL_BUILD_MAJOR_VERSION=2 -DSDL_BUILD_MINOR_VERSION=24 -DSDL_BUILD_MICRO_VERSION=0 -DPACKAGE=\"SDL2_ttf\" -DVERSION=\"2.24.0\" -DTTF_USE_HARFBUZZ=0 -DX_DISPLAY_MISSING=1  -DFT2_BUILD_LIBRARY -DFT_PUBLIC_FUNCTION_ATTRIBUTE=  
+
+
+all: libSDL2_ttf.a
+
+OBJS = SDL_ttf.o \
+	$(FREETYPE_PATH)/src/autofit/autofit.o \
+	$(FREETYPE_PATH)/src/base/ftbase.o \
+	$(FREETYPE_PATH)/src/base/ftbbox.o \
+	$(FREETYPE_PATH)/src/base/ftbdf.o \
+	$(FREETYPE_PATH)/src/base/ftbitmap.o \
+	$(FREETYPE_PATH)/src/base/ftcid.o \
+	$(FREETYPE_PATH)/src/base/ftdebug.o \
+	$(FREETYPE_PATH)/src/base/ftfstype.o \
+	$(FREETYPE_PATH)/src/base/ftgasp.o \
+	$(FREETYPE_PATH)/src/base/ftglyph.o \
+	$(FREETYPE_PATH)/src/base/ftgxval.o \
+	$(FREETYPE_PATH)/src/base/ftinit.o \
+	$(FREETYPE_PATH)/src/base/ftmm.o \
+	$(FREETYPE_PATH)/src/base/ftotval.o \
+	$(FREETYPE_PATH)/src/base/ftpatent.o \
+	$(FREETYPE_PATH)/src/base/ftpfr.o \
+	$(FREETYPE_PATH)/src/base/ftstroke.o \
+	$(FREETYPE_PATH)/src/base/ftsynth.o \
+	$(FREETYPE_PATH)/src/base/ftsystem.o \
+	$(FREETYPE_PATH)/src/base/fttype1.o \
+	$(FREETYPE_PATH)/src/base/ftwinfnt.o \
+	$(FREETYPE_PATH)/src/bdf/bdf.o \
+	$(FREETYPE_PATH)/src/bzip2/ftbzip2.o \
+	$(FREETYPE_PATH)/src/cache/ftcache.o \
+	$(FREETYPE_PATH)/src/cff/cff.o \
+	$(FREETYPE_PATH)/src/cid/type1cid.o \
+	$(FREETYPE_PATH)/src/gzip/ftgzip.o \
+	$(FREETYPE_PATH)/src/lzw/ftlzw.o \
+	$(FREETYPE_PATH)/src/pcf/pcf.o $(FREETYPE_PATH)/src/pfr/pfr.o \
+	$(FREETYPE_PATH)/src/psaux/psaux.o \
+	$(FREETYPE_PATH)/src/pshinter/pshinter.o \
+	$(FREETYPE_PATH)/src/psnames/psmodule.o \
+	$(FREETYPE_PATH)/src/raster/raster.o \
+	$(FREETYPE_PATH)/src/sdf/sdf.o \
+	$(FREETYPE_PATH)/src/sfnt/sfnt.o \
+	$(FREETYPE_PATH)/src/smooth/smooth.o \
+	$(FREETYPE_PATH)/src/svg/svg.o \
+	$(FREETYPE_PATH)/src/truetype/truetype.o \
+	$(FREETYPE_PATH)/src/type1/type1.o \
+	$(FREETYPE_PATH)/src/type42/type42.o \
+	$(FREETYPE_PATH)/src/winfonts/winfnt.o
+
+
+libSDL2_ttf.a: $(OBJS) Makefile
+	$(AR) rcs -o libSDL2_ttf.a $(OBJS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -std=c99 -c -o $@ $<
+
+
+%.o: %.s
+	$(AS) $(ASFLAGS) -o $@ $<
+
+clean:
+	rm -f $(OBJS) libSDL2_ttf.a
+
