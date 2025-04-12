@@ -9,6 +9,7 @@ all:
 	cd 3ddemo;make
 	cd macintosh; make
 	cd th; make
+	cd tetris; make
 
 clean: 
 	cd anim; make clean
@@ -20,3 +21,4 @@ clean:
 	cd 3ddemo;make clean
 	cd macintosh; make clean
 	cd th; make clean
+	cd tetris; make clean

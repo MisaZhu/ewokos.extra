@@ -36,7 +36,7 @@
 #include "SDL_ewokosvideo.h"
 #include "SDL_ewokosevents_c.h"
 #include "SDL_ewokosframebuffer_c.h"
-#include "ewoksys/klog.h"
+#include "ewoksys/keydef.h"
 #include "x/xwin.h"
 #include "x/x.h"
 #include <pthread.h>
@@ -70,6 +70,20 @@ static bool on_close(xwin_t* xwin) {
     return false;
 }
 
+static int sdl_key(int v) {
+    switch(v) {
+        case KEY_UP:
+            return SDLK_UP;
+        case KEY_DOWN:
+            return SDLK_DOWN;
+        case KEY_LEFT:
+            return SDLK_LEFT;
+        case KEY_RIGHT:
+            return SDLK_RIGHT;
+    }
+    return v;
+}
+
 static void on_event(xwin_t* xw, xevent_t* ev) {
 	if(xw == NULL)
 		return;
@@ -80,7 +94,7 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
             sdlEvent.type = SDL_KEYDOWN;
         else if(ev->state == XIM_STATE_RELEASE)
             sdlEvent.type = SDL_KEYUP;
-        sdlEvent.key.keysym.sym = (SDL_Keycode)ev->value.im.value;
+        sdlEvent.key.keysym.sym = sdl_key(ev->value.im.value);
         SDL_PushEvent(&sdlEvent);
     }
     else if(ev->type == XEVT_MOUSE) {
