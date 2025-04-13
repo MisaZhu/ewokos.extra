@@ -1,4 +1,5 @@
 #include "graphics.h"
+#include <SDL2/SDL.h>
 
 #define WIN_TITLE "Tetris"
 
@@ -11,8 +12,8 @@
 #define SCORE_SIZE 7
 #define LEVEL_SIZE 3
 
-const int WIN_WIDTH = (GRID_WIDTH + 5) * BLOCK_SIZE;
-const int WIN_HEIGHT = (GRID_HEIGHT + 2) * BLOCK_SIZE;
+const int PANEL_WIDTH = (GRID_WIDTH + 5) * BLOCK_SIZE;
+const int PANEL_HEIGHT = (GRID_HEIGHT + 2) * BLOCK_SIZE;
 
 static SDL_Window *win;
 static SDL_Renderer *rend;
@@ -21,6 +22,8 @@ static SDL_Color White = {0xff, 0xff, 0xff};
 static SDL_Color Gray = {0xcc, 0xcc, 0xcc};
 static TTF_Font *Font_18;
 static TTF_Font *Font_32;
+static int _xoff = 0;
+static int _yoff = 0;
 
 static int init_fonts() {
   if (TTF_Init() != 0) {
@@ -56,8 +59,8 @@ int init_graphics() {
   }
 
   win = SDL_CreateWindow(WIN_TITLE, SDL_WINDOWPOS_CENTERED,
-                         SDL_WINDOWPOS_CENTERED, WIN_WIDTH, WIN_HEIGHT, 0);
-
+                         SDL_WINDOWPOS_CENTERED, PANEL_WIDTH + 20, PANEL_HEIGHT + 20, SDL_WINDOW_MAXIMIZED);
+  
   if (!win) {
     SDL_LogError(0, "error creating window: %s\n", SDL_GetError());
     SDL_Quit();
@@ -72,7 +75,12 @@ int init_graphics() {
     return -1;
   }
 
-  SDL_CreateRGBSurface(0, WIN_WIDTH, WIN_HEIGHT, 32, 0, 0, 0, 0);
+  SDL_Surface* surface = SDL_CreateRGBSurface(0, PANEL_WIDTH, PANEL_HEIGHT, 32, 0, 0, 0, 0);
+
+  int w, h;
+  SDL_GetWindowSize(win, &w, &h);
+  _xoff = (w - PANEL_WIDTH)/2;
+  _yoff = (h - PANEL_HEIGHT)/2;
 
   if (init_fonts() != 0) {
     SDL_DestroyWindow(win);
@@ -88,8 +96,8 @@ static void render_right_text(const char *text, int y, TTF_Font *Font) {
   SDL_Texture *texture = SDL_CreateTextureFromSurface(rend, surface);
 
   SDL_Rect rect;
-  rect.x = (GRID_WIDTH + 3) * BLOCK_SIZE - surface->w / 2;
-  rect.y = y;
+  rect.x = _xoff + (GRID_WIDTH + 3) * BLOCK_SIZE - surface->w / 2;
+  rect.y = _xoff + y;
   rect.w = surface->w;
   rect.h = surface->h;
 
@@ -118,8 +126,8 @@ static void render_game_over_text(const char *text, int y, TTF_Font *Font) {
   SDL_Texture *texture = SDL_CreateTextureFromSurface(rend, surface);
 
   SDL_Rect rect;
-  rect.x = (WIN_WIDTH - surface->w) / 2;
-  rect.y = y;
+  rect.x = _xoff + (PANEL_WIDTH - surface->w) / 2;
+  rect.y = _yoff + y;
   rect.w = surface->w;
   rect.h = surface->h;
 
@@ -133,12 +141,12 @@ void render_game_over_message(int score) {
   char score_str[SCORE_SIZE];
   snprintf(score_str, SCORE_SIZE, "%i", score);
 
-  render_game_over_text("GAME OVER", WIN_HEIGHT / 2 - BLOCK_SIZE * 3, Font_32);
-  render_game_over_text("YOU SCORED:", WIN_HEIGHT / 2 - BLOCK_SIZE * 2,
+  render_game_over_text("GAME OVER", PANEL_HEIGHT / 2 - BLOCK_SIZE * 3, Font_32);
+  render_game_over_text("YOU SCORED:", PANEL_HEIGHT / 2 - BLOCK_SIZE * 2,
                         Font_32);
-  render_game_over_text(score_str, WIN_HEIGHT / 2, Font_32);
+  render_game_over_text(score_str, PANEL_HEIGHT / 2, Font_32);
   render_game_over_text("Press any key to restart...",
-                        WIN_HEIGHT / 2 + BLOCK_SIZE * 2, Font_18);
+                        PANEL_HEIGHT / 2 + BLOCK_SIZE * 2, Font_18);
   SDL_RenderPresent(rend);
 }
 
@@ -146,13 +154,13 @@ void draw_block(int x, int y, int color) {
   SDL_Rect outer;
   SDL_Rect inner;
 
-  outer.x = (x + 1) * BLOCK_SIZE;
-  outer.y = (y + 1) * BLOCK_SIZE;
+  outer.x = _xoff + (x + 1) * BLOCK_SIZE;
+  outer.y = _yoff + (y + 1) * BLOCK_SIZE;
   outer.w = BLOCK_SIZE;
   outer.h = BLOCK_SIZE;
 
-  inner.x = (x + 1) * BLOCK_SIZE + 1;
-  inner.y = (y + 1) * BLOCK_SIZE + 1;
+  inner.x = _xoff + (x + 1) * BLOCK_SIZE + 1;
+  inner.y = _yoff + (y + 1) * BLOCK_SIZE + 1;
   inner.w = BLOCK_SIZE - 2;
   inner.h = BLOCK_SIZE - 2;
 
@@ -176,6 +184,14 @@ void clear_screen() {
 }
 
 void render_frame(int score, int level) {
+  SDL_SetRenderDrawColor(rend, 0xdd, 0xdd, 0xdd, 0xff);
+  SDL_Rect outer;
+  outer.x = _xoff;
+  outer.y = _yoff;
+  outer.w = PANEL_WIDTH;
+  outer.h = PANEL_HEIGHT;
+  SDL_RenderDrawRect(rend, &outer);
+
   render_score(score, level);
   SDL_RenderPresent(rend);
 }
