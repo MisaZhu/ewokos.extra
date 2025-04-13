@@ -8,7 +8,6 @@
 #include <ewoksys/klog.h>
 #include <ewoksys/proc.h>
 #include <x++/X.h>
-#include <ttf/ttf.h>
 
 using namespace Ewok;
 
