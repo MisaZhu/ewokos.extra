@@ -97,7 +97,7 @@ static void render_right_text(const char *text, int y, TTF_Font *Font) {
 
   SDL_Rect rect;
   rect.x = _xoff + (GRID_WIDTH + 3) * BLOCK_SIZE - surface->w / 2;
-  rect.y = _xoff + y;
+  rect.y = _yoff + y;
   rect.w = surface->w;
   rect.h = surface->h;
 
