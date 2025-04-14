@@ -161,7 +161,9 @@
 #define SDL_HAPTIC_DISABLED 1
 #define SDL_LOADSO_DISABLED 1
 /* #undef SDL_RENDER_DISABLED */
-#define SDL_THREAD_EWOKOS 1 
+
+#define SDL_THREADS_DISABLED 1
+//#define SDL_THREAD_EWOKOS 1 
 
 /*#define SDL_TIMERS_DISABLED 1*/
 #define SDL_TIMER_EWOKOS  1
@@ -181,6 +183,8 @@
 
 /* Enable system filesystem support */
 #define SDL_FILESYSTEM_DUMMY  1
+
+#define SDL_VIDEO_RENDER_EWOKOS 1
 
 #if defined(__cplusplus)
 extern "C" {
