@@ -1,7 +1,7 @@
 #include "native_graph.h"
 #include <ewoksys/klog.h>
 #include <graph/graph.h>
-#include <upng/upng.h>
+#include <graph/graph_png.h>
 #include <font/font.h>
 
 #define CLS_GRAPH "Graph"

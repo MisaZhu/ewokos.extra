@@ -24,19 +24,6 @@
 
 #include "SDL_stdinc.h"
 
-int __aeabi_fcmpun(float a, float b) {
-    if (isnan(a) || isnan(b)) {
-        return 1; // 如果 a 或 b 是 NaN，返回 1
-    }
-    if (a < b) {
-        return -1;
-    } else if (a > b) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
 #define SDL_isupperhex(X)   (((X) >= 'A') && ((X) <= 'F'))
 #define SDL_islowerhex(X)   (((X) >= 'a') && ((X) <= 'f'))
 

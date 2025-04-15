@@ -1,7 +1,7 @@
 #include "MacWM.h"
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/klog.h>
-#include <upng/upng.h>
+#include <graph/graph_png.h>
 #include <x++/X.h>
 #include <stdlib.h>
 #include <string.h>
