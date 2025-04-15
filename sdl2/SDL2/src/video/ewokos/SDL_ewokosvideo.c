@@ -134,8 +134,14 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     window->flags |= SDL_WINDOW_SHOWN;          /* only one window */
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
 
+    if((window->x & SDL_WINDOWPOS_CENTERED) != 0)  
+        window->x = (phys_width - window->w)/2;
+    if((window->y & SDL_WINDOWPOS_CENTERED) != 0)  
+        window->y = (phys_height - window->h)/2;
+
     x_t* x = (x_t*)_this->driverdata;
-	xwin_t* xwin = xwin_open(x, 0, window->x, window->y,
+	xwin_t* xwin = xwin_open(x, 0, 
+            window->x, window->y,
             window->w, window->h,
             window->title,
             XWIN_STYLE_NO_RESIZE);
@@ -360,8 +366,8 @@ EWOKOS_VideoInit(_THIS)
 static int
 EWOKOS_SetDisplayMode(_THIS, SDL_VideoDisplay * display, SDL_DisplayMode * mode)
 {
-    phys_width = mode->w;
-    phys_height = mode->h;
+    //phys_width = mode->w;
+    //phys_height = mode->h;
     return 0;
 }
 

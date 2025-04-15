@@ -41,7 +41,7 @@ int main() {
         return 1;
     }
 
-    SDL_Window *window = SDL_CreateWindow("SDL_Test", 10, 10, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_MAXIMIZED);
+    SDL_Window *window = SDL_CreateWindow("SDL_Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_MAXIMIZED);
 
 
     // 创建渲染器

@@ -59,7 +59,8 @@ int init_graphics() {
   }
 
   win = SDL_CreateWindow(WIN_TITLE, SDL_WINDOWPOS_CENTERED,
-                         SDL_WINDOWPOS_CENTERED, PANEL_WIDTH + 20, PANEL_HEIGHT + 20, SDL_WINDOW_MAXIMIZED);
+                         SDL_WINDOWPOS_CENTERED, 
+                         PANEL_WIDTH + 20, PANEL_HEIGHT + 20, SDL_WINDOW_SHOWN);
   
   if (!win) {
     SDL_LogError(0, "error creating window: %s\n", SDL_GetError());
@@ -184,7 +185,7 @@ void clear_screen() {
 }
 
 void render_frame(int score, int level) {
-  SDL_SetRenderDrawColor(rend, 0xdd, 0xdd, 0xdd, 0xff);
+  SDL_SetRenderDrawColor(rend, 0x44, 0x44, 0x44, 0xff);
   SDL_Rect outer;
   outer.x = _xoff;
   outer.y = _yoff;
