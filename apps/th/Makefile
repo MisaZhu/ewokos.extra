@@ -4,7 +4,7 @@ SW_ROOT_DIR=../..
 SYS_DIR=../../../system
 include $(SW_ROOT_DIR)/make.inc
 
-BUILD_DIR = $(SYS_DIR)/build
+BUILD_DIR = $(SYS_DIR)/build/$(HW)
 TARGET_DIR = $(BUILD_DIR)/rootfs
 
 LDFLAGS += -L$(BUILD_DIR)/lib \
