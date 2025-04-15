@@ -60,8 +60,8 @@ static int EWOKOS_SetDisplayMode(_THIS, SDL_VideoDisplay * display, SDL_DisplayM
 static void EWOKOS_VideoQuit(_THIS);
 static int EWOKOS_GetDisplayBounds (_THIS, SDL_VideoDisplay * display, SDL_Rect * rect);
 
-static unsigned int phys_width;
-static unsigned int phys_height;
+static int phys_width;
+static int phys_height;
 
 static bool on_close(xwin_t* xwin) {
     SDL_Event event;
@@ -134,9 +134,9 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     window->flags |= SDL_WINDOW_SHOWN;          /* only one window */
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
 
-    if((window->x & SDL_WINDOWPOS_CENTERED) != 0)  
+    if((window->x & SDL_WINDOWPOS_CENTERED) != 0 || (window->x & SDL_WINDOWPOS_UNDEFINED) != 0)
         window->x = (phys_width - window->w)/2;
-    if((window->y & SDL_WINDOWPOS_CENTERED) != 0)  
+    if((window->y & SDL_WINDOWPOS_CENTERED) != 0 || (window->y & SDL_WINDOWPOS_UNDEFINED) != 0)
         window->y = (phys_height - window->h)/2;
 
     x_t* x = (x_t*)_this->driverdata;
