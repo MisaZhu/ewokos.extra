@@ -11,6 +11,7 @@ static int handle_key_down(SDL_Keycode key_code) {
     return RIGHT;
   case SDLK_UP:
   case SDLK_a:
+  case SDLK_RETURN:
     return ROTATE;
   case SDLK_DOWN:
     return SOFT_DROP;

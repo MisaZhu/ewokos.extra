@@ -8,6 +8,6 @@
 #include "emscripten.h"
 #endif
 
-#define BLOCK_SIZE 20
+#define BLOCK_SIZE 14
 #define GRID_WIDTH 10
 #define GRID_HEIGHT 20

@@ -20,8 +20,8 @@ static SDL_Renderer *rend;
 
 static SDL_Color White = {0xff, 0xff, 0xff};
 static SDL_Color Gray = {0xcc, 0xcc, 0xcc};
-static TTF_Font *Font_18;
-static TTF_Font *Font_32;
+static TTF_Font *font_small;
+static TTF_Font *font_big;
 static int _xoff = 0;
 static int _yoff = 0;
 
@@ -32,19 +32,19 @@ static int init_fonts() {
   };
 
 
-  Font_18 = TTF_OpenFont(FONT_PATH, 12);
-  if (!Font_18) {
+  font_small = TTF_OpenFont(FONT_PATH, 10);
+  if (!font_small) {
     SDL_LogError(0, "error opening font 12 %s\n%s\\n", FONT_PATH,
                  TTF_GetError());
     TTF_Quit();
     return -1;
   }
 
-  Font_32 = TTF_OpenFont(FONT_PATH, 18);
-  if (!Font_32) {
+  font_big = TTF_OpenFont(FONT_PATH, 14);
+  if (!font_big) {
     SDL_LogError(0, "error opening font 18 %s\n%s\\n", FONT_PATH,
                  TTF_GetError());
-    TTF_CloseFont(Font_18);
+    TTF_CloseFont(font_small);
     TTF_Quit();
     return -1;
   }
@@ -112,14 +112,14 @@ static void render_score(int score, int level) {
   char score_str[SCORE_SIZE];
   snprintf(score_str, SCORE_SIZE, "%0*d", SCORE_SIZE - 1, score);
 
-  render_right_text("SCORE", BLOCK_SIZE, Font_18);
-  render_right_text(score_str, BLOCK_SIZE * 2, Font_32);
+  render_right_text("SCORE", BLOCK_SIZE, font_small);
+  render_right_text(score_str, BLOCK_SIZE * 2, font_big);
 
   char level_str[3];
   snprintf(level_str, 3, "%0*d", LEVEL_SIZE - 1, level);
 
-  render_right_text("LEVEL", BLOCK_SIZE * 6, Font_18);
-  render_right_text(level_str, BLOCK_SIZE * 7, Font_32);
+  render_right_text("LEVEL", BLOCK_SIZE * 6, font_small);
+  render_right_text(level_str, BLOCK_SIZE * 7, font_big);
 }
 
 static void render_game_over_text(const char *text, int y, TTF_Font *Font) {
@@ -142,12 +142,12 @@ void render_game_over_message(int score) {
   char score_str[SCORE_SIZE];
   snprintf(score_str, SCORE_SIZE, "%i", score);
 
-  render_game_over_text("GAME OVER", PANEL_HEIGHT / 2 - BLOCK_SIZE * 3, Font_32);
+  render_game_over_text("GAME OVER", PANEL_HEIGHT / 2 - BLOCK_SIZE * 3, font_big);
   render_game_over_text("YOU SCORED:", PANEL_HEIGHT / 2 - BLOCK_SIZE * 2,
-                        Font_32);
-  render_game_over_text(score_str, PANEL_HEIGHT / 2, Font_32);
+                        font_big);
+  render_game_over_text(score_str, PANEL_HEIGHT / 2, font_big);
   render_game_over_text("Press any key to restart...",
-                        PANEL_HEIGHT / 2 + BLOCK_SIZE * 2, Font_18);
+                        PANEL_HEIGHT / 2 + BLOCK_SIZE * 2, font_small);
   SDL_RenderPresent(rend);
 }
 
@@ -201,8 +201,8 @@ void release_resources() {
   SDL_DestroyRenderer(rend);
   SDL_DestroyWindow(win);
 
-  TTF_CloseFont(Font_18);
-  TTF_CloseFont(Font_32);
+  TTF_CloseFont(font_small);
+  TTF_CloseFont(font_big);
   TTF_Quit();
 
   SDL_Quit();
