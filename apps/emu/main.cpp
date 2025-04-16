@@ -295,15 +295,18 @@ protected:
 			if(ev->state == XIM_STATE_PRESS){
 				switch(ev->value.im.value){
 					case KEY_BUTTON_A:
+					case ']':
 						padState |= 0x1;
 						break;
 					case KEY_BUTTON_B:
+					case '[':
 						padState |= 0x2;
 						break;
 					case KEY_BUTTON_SELECT:
 						padState |= 0x4;
 						break;
 					case KEY_BUTTON_START:
+					case KEY_ENTER:
 						padState |= 0x8;
 						break;
 					case KEY_UP:
@@ -324,15 +327,18 @@ protected:
 			}else{
 				switch(ev->value.im.value){
 					case KEY_BUTTON_A:
+					case ']':
 						padState &= ~0x1;
 						break;
 					case KEY_BUTTON_B:
+					case '[':
 						padState &= ~0x2;
 						break;
 					case KEY_BUTTON_SELECT:
 						padState &= ~0x4;
 						break;
 					case KEY_BUTTON_START:
+					case KEY_ENTER:
 						padState &= ~0x8;
 						break;
 					case KEY_UP:
