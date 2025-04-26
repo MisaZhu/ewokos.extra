@@ -6,5 +6,10 @@
     {"name": "digital", "file": "/usr/system/fonts/digital.ttf"},
     {"name": "smallpixel", "file": "/usr/system/fonts/smallpixel.ttf"},
     {"name": "7px2bus", "file": "/usr/system/fonts/7px2bus.ttf"},
+    {"name": "high_pixel-7", "file": "/usr/system/fonts/high_pixel-7.ttf"},
+    {"name": "rounded_sans_serif", "file": "/usr/system/fonts/rounded_sans_serif.ttf"},
+    {"name": "post_pixel-7", "file": "/usr/system/fonts/post_pixel-7.ttf"},
+    {"name": "Arial", "file": "/usr/system/fonts/Arial.ttf"},
+    {"name": "effective_way_7", "file": "/usr/system/fonts/effective_way_7.ttf"},
     {"name": "system-cn", "file": "/usr/system/fonts/system-cn.ttf"}
 ]
