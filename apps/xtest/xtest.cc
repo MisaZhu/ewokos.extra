@@ -132,7 +132,8 @@ static void loop(void* p) {
 static XWin* _xwin = NULL;
 static void timer_handler(void) {
 	ipc_disable();
-	_xwin->repaint();
+	if(!_xwin->getX()->terminated())
+		_xwin->repaint();
 	ipc_enable();
 }
 
