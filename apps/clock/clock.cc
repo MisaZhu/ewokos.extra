@@ -1,4 +1,11 @@
 #include <Widget/WidgetWin.h>
+#include <Widget/WidgetX.h>
+#include <Widget/Label.h>
+#include <x++/X.h>
+#include <unistd.h>
+#include <font/font.h>
+#include <ewoksys/kernel_tic.h>
+
 #include <Widget/Label.h>
 #include <x++/X.h>
 #include <unistd.h>
@@ -94,6 +101,6 @@ int main(int argc, char** argv) {
 
 	win.open(&x, 0, -1, -1, 200, 68, "clock", XWIN_STYLE_NO_FRAME);
 	win.setTimer(1);
-	x.run(NULL, &win);
+	widgetXRun(&x, &win);
 	return 0;
 }

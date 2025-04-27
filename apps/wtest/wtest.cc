@@ -1,4 +1,5 @@
 #include <Widget/WidgetWin.h>
+#include <Widget/WidgetX.h>
 #include <Widget/Image.h>
 #include <Widget/Label.h>
 #include <Widget/LabelButton.h>
@@ -170,6 +171,6 @@ int main(int argc, char** argv) {
 	win.open(&x, 0, -1, -1, 400, 300, "widgetTest", XWIN_STYLE_NORMAL);
 	win.setTimer(16);
 
-	x.run(NULL, &win);
+	widgetXRun(&x, &win);	
 	return 0;
 }
