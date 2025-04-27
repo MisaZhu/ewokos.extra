@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <ewoksys/proc.h>
 #include <graph/graph_png.h>
 #include <ewoksys/basic_math.h>
 #include <ewoksys/kernel_tic.h>
@@ -129,12 +130,11 @@ static void loop(void* p) {
 }
 */
 
-static XWin* _xwin = NULL;
-static void timer_handler(void) {
-	ipc_disable();
-	if(!_xwin->getX()->terminated())
-		_xwin->repaint();
-	ipc_enable();
+static void loop(void *p) {
+	XWin* xwin = (XWin*)p;
+	if(!xwin->getX()->terminated())
+		xwin->repaint();
+	proc_usleep(5000);
 }
 
 int main(int argc, char* argv[]) {
@@ -146,11 +146,6 @@ int main(int argc, char* argv[]) {
 	TestX xwin;
 	xwin.open(&x, 0, -1, -1, 0, 0, "xtest", XWIN_STYLE_NORMAL);
 
-	_xwin = &xwin;
-	uint32_t tid = timer_set(10000, timer_handler);
-	x.run(NULL, &xwin);
-	timer_remove(tid);
-
-	//x.run(loop, &xwin);
+	x.run(loop, &xwin);
 	return 0;
 } 
