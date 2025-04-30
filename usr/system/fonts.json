@@ -11,5 +11,6 @@
     {"name": "post_pixel-7", "file": "/usr/system/fonts/post_pixel-7.ttf"},
     {"name": "Arial", "file": "/usr/system/fonts/Arial.ttf"},
     {"name": "effective_way_7", "file": "/usr/system/fonts/effective_way_7.ttf"},
+    {"name": "oppo", "file": "/usr/system/fonts/oppo.ttf"},
     {"name": "system-cn", "file": "/usr/system/fonts/system-cn.ttf"}
 ]
