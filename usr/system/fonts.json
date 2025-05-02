@@ -10,11 +10,17 @@
     {"name": "post_pixel-7", "file": "/usr/system/fonts/post_pixel-7.ttf"},
     {"name": "Arial", "file": "/usr/system/fonts/Arial.ttf"},
     {"name": "effective_way_7", "file": "/usr/system/fonts/effective_way_7.ttf"},
-    {"name": "oppo", "file": "/usr/system/fonts/oppo.ttf"},
     {"name": "Menlo", "file": "/usr/system/fonts/Menlo.ttf"},
-    {"name": "Monaco-Linux", "file": "/usr/system/fonts/Monaco-Linux.ttf"},
+    {"name": "Flexi_IBM_VGA", "file": "/usr/system/fonts/Flexi_IBM_VGA.ttf"},
     {"name": "DejaVuSansMono", "file": "/usr/system/fonts/DejaVuSansMono.ttf"},
     {"name": "FiraCode-Regular", "file": "/usr/system/fonts/FiraCode-Regular.ttf"},
     {"name": "Inconsolata-Regular", "file": "/usr/system/fonts/Inconsolata-Regular.ttf"},
-    {"name": "system-cn", "file": "/usr/system/fonts/system-cn.ttf"}
+    {"name": "decterm", "file": "/usr/system/fonts/decterm.ttf"},
+    {"name": "DMMono-Medium", "file": "/usr/system/fonts/DMMono-Medium.ttf"},
+    {"name": "Flexi_IBM_VGA_False", "file": "/usr/system/fonts/Flexi_IBM_VGA_False.ttf"},
+    {"name": "Hack-Regular", "file": "/usr/system/fonts/Hack-Regular.ttf"},
+    {"name": "UbuntuMono-Bold", "file": "/usr/system/fonts/UbuntuMono-Bold.ttf"},
+    {"name": "UbuntuMono-Regular", "file": "/usr/system/fonts/UbuntuMono-Regular.ttf"},
+    {"name": "system-cn", "file": "/usr/system/fonts/system-cn.ttf"},
+    {"name": "oppo", "file": "/usr/system/fonts/oppo.ttf"}
 ]
