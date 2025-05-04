@@ -60,13 +60,13 @@ protected:
 		if(ev->type == XEVT_IM){	
 			if(ev->state == XIM_STATE_PRESS){
 				switch(ev->value.im.value){
-					case KEY_BUTTON_A:
+					case JOYSTICK_A:
 						but = 1;
 						update_mouse(0,0, but);
 						break;
-					case KEY_BUTTON_B:
-					case KEY_BUTTON_SELECT:
-					case KEY_BUTTON_START:
+					case JOYSTICK_B:
+					case JOYSTICK_SELECT:
+					case JOYSTICK_START:
 						break;
 					case KEY_UP:
 						update_mouse(0,-5, but);
@@ -85,13 +85,13 @@ protected:
 				}
 			}else{
 				switch(ev->value.im.value){
-					case KEY_BUTTON_A:
+					case JOYSTICK_A:
 						but = 0;
 						update_mouse(0,0, but);
 						break;
-					case KEY_BUTTON_B:
-					case KEY_BUTTON_SELECT:
-					case KEY_BUTTON_START:
+					case JOYSTICK_B:
+					case JOYSTICK_SELECT:
+					case JOYSTICK_START:
 					case KEY_UP:
 					case KEY_DOWN:
 					case KEY_LEFT:
