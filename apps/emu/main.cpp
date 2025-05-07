@@ -119,7 +119,7 @@ void InfoNES_ReleaseRom(){
 
 }
 
-static int scale = 1;
+static float scale = 1.0;
 void graph_scale_fix_center(graph_t *src, graph_t *dst){
 	static int dstW,dstH;
 	static int sx;
@@ -137,40 +137,14 @@ void graph_scale_fix_center(graph_t *src, graph_t *dst){
 	int dstY = sy;
 	int srcY = 0;
 
-	if(scale == 2 || scale == 4) {
-		int shift = scale / 2;
+	if(scale == 1.0) {
 		for(; dstY < ey; dstY++){
 			int dstX = sx;
 			int srcX = 0;
 			uint32_t *d = dst->buffer + dstY * dst->w;
-			uint32_t *s = src->buffer + (srcY/scale)*src->w;
+			uint32_t *s = src->buffer + srcY*src->w;
 			for(; dstX < ex; dstX++){
-				d[dstX] = s[srcX/shift];
-				srcX++;
-				if(srcX == 4)
-					break;
-			}
-			for(; dstX < ex; dstX++){
-				d[dstX] = s[srcX>>shift];
-				srcX++;
-			}
-			srcY++;
-			if(srcY >= 4)
-				break;
-		}
-		for(; dstY < ey; dstY++){
-			int dstX = sx;
-			int srcX = 0;
-			uint32_t *d = dst->buffer + dstY * dst->w;
-			uint32_t *s = src->buffer + (srcY>>shift)*src->w;
-			for(; dstX < ex; dstX++){
-				d[dstX] = s[srcX/shift];
-				srcX++;
-				if(srcX == 4)
-					break;
-			}
-			for(; dstX < ex; dstX++){
-				d[dstX] = s[srcX>>shift];
+				d[dstX] = s[srcX];
 				srcX++;
 			}
 			srcY++;
@@ -181,9 +155,9 @@ void graph_scale_fix_center(graph_t *src, graph_t *dst){
 			int dstX = sx;
 			int srcX = 0;
 			uint32_t *d = dst->buffer + dstY * dst->w;
-			uint32_t *s = src->buffer + srcY/scale*src->w;
+			uint32_t *s = src->buffer + (uint32_t)(srcY/scale)*src->w;
 			for(; dstX < ex; dstX++){
-				d[dstX] = s[srcX/scale];
+				d[dstX] = s[(uint32_t)(srcX/scale)];
 				srcX++;
 			}
 			srcY++;
@@ -406,19 +380,14 @@ int main(int argc, char *argv[])
 	X x;
 	x.getScreenInfo(scr, 0);
 
-	int zoom;
+	scale = 1.0;
+#ifdef NEON_BOOST
 	if(scr.size.h > 240)
-		zoom = scr.size.h / 240;
-	if(zoom >= 4)
-		zoom = 4;
-	else if(zoom >= 2)
-		zoom = 2;
-	else 
-		zoom = 1;
-	scale = zoom;
+		scale = scr.size.h / 240.0;
+#endif
 
-	emu.open(&x, 0, -1, -1, 256*zoom, 240*zoom, "NesEmu", XWIN_STYLE_NORMAL);
-	//emu.fullscreen();
+	emu.open(&x, 0, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL | XWIN_STATE_FULL_SCREEN);
+	emu.max();
 	/*_xwin = &emu;
 	uint32_t tid = timer_set(10000, loop);
 	x.run(NULL, &emu);
