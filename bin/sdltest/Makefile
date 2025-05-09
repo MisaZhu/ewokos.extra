@@ -1,5 +1,3 @@
-ARCH=arm
-
 SW_ROOT_DIR=../..
 SYS_DIR=../../../system
 include $(SW_ROOT_DIR)/make.inc

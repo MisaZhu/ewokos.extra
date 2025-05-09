@@ -9,10 +9,8 @@ TARGET_DIR = $(BUILD_DIR)
 DEPDIR := .deps
 PREFIX := /opt/ewokos
 
-#ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
-#CFLAGS += -DHAVE_CONFIG_H -I. -Iinclude -O20 -Wall -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp -ffast-math -fsigned-char -g -O2 
-ASFLAGS = --warn  -mfloat-abi=softfp
-CFLAGS += -DHAVE_CONFIG_H -I. -Iinclude -O20 -Wall -ffreestanding -marm  -mfloat-abi=softfp -ffast-math -fsigned-char -g -O2 
+ASFLAGS = --warn 
+CFLAGS += -DHAVE_CONFIG_H -I. -Iinclude -O20 -Wall -ffreestanding -ffast-math -fsigned-char -g -O2 
 CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 LIBOGG = $(TARGET_DIR)/lib/libogg.a

@@ -8,10 +8,8 @@ TARGET_DIR = $(BUILD_DIR)
 
 DEPDIR := .deps
 
-#ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
-#CFLAGS = -DHAVE_CONFIG_H -I. -I../libogg/include -Iinclude -Ilib -O20 -Wall -Wextra -ffast-math -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp -D_REENTRANT -fsigned-char -Wdeclaration-after-statement 
-ASFLAGS = --warn  -mfloat-abi=softfp
-CFLAGS += -I $(TARGET_DIR)/include  -DHAVE_CONFIG_H -I. -Iinclude -Ilib -O20 -Wall -Wextra -ffast-math -ffreestanding -marm -mfloat-abi=softfp -D_REENTRANT -fsigned-char -Wdeclaration-after-statement 
+ASFLAGS = --warn 
+CFLAGS += -I $(TARGET_DIR)/include  -DHAVE_CONFIG_H -I. -Iinclude -Ilib -O20 -Wall -Wextra -ffast-math -ffreestanding -D_REENTRANT -fsigned-char -Wdeclaration-after-statement 
 CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 LIBVORBIS = $(TARGET_DIR)/lib/libvorbis.a

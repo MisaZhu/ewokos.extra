@@ -18,10 +18,10 @@ EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-#ASFLAGS = --warn  -mfpu=vfp -mfloat-abi=softfp
-#CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding -marm  -mfpu=vfp -mfloat-abi=softfp $(DEFS)
-ASFLAGS = --warn -mfloat-abi=softfp
-CFLAGS += -O3 -I../SDL2/include -I../libpng -ffreestanding -marm -mfloat-abi=softfp $(DEFS)
+#ASFLAGS = --warn 
+#CFLAGS = -O3 -I../SDL2/include -I../libpng -ffreestanding  $(DEFS)
+ASFLAGS = --warn
+CFLAGS += -O3 -I../SDL2/include -I../libpng -ffreestanding $(DEFS)
 CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 all: deps libSDL2_image.a

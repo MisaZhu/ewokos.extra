@@ -17,8 +17,8 @@ EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-ASFLAGS = --warn -mfloat-abi=softfp
-CFLAGS += -O3 -Iinclude -Isrc -I../kernel -ffreestanding -fvisibility=hidden -mfloat-abi=softfp -D_REENTRANT -D__EWOKOS__
+ASFLAGS = --warn
+CFLAGS += -O3 -Iinclude -Isrc -I../kernel -ffreestanding -fvisibility=hidden -D_REENTRANT -D__EWOKOS__
 CXXFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 all: libSDL2.a
