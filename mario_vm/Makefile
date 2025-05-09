@@ -57,4 +57,5 @@ $(BCASM): $(BCASM_OBJS)
 	$(LD) -Ttext=100 $(BCASM_OBJS) -o $(BCASM) $(LDFLAGS) -lbsp $(BSP_LFLAGS)  $(EWOK_LIBC)
 
 clean:
-	rm -fr $(MARIO_OBJS)
+	rm -fr $(MARIO) $(BCASM)
+	rm -fr $(MARIO_OBJS) $(BCASM_OBJS)
