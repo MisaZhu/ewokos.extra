@@ -12,6 +12,7 @@ all:
 	cd tetris; make
 	cd snake; make
 	cd gobang; make
+	cd mandelbrot; make
 
 clean: 
 	cd anim; make clean
@@ -26,3 +27,4 @@ clean:
 	cd tetris; make clean
 	cd snake; make clean
 	cd gobang; make clean
+	cd mandelbrot; make clean
