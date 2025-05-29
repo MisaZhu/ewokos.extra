@@ -11,6 +11,7 @@ all:
 	cd sdl_gol; make
 	cd tetris; make
 	cd snake; make
+	cd gobang; make
 
 clean: 
 	cd anim; make clean
@@ -24,3 +25,4 @@ clean:
 	cd sdl_gol; make clean
 	cd tetris; make clean
 	cd snake; make clean
+	cd gobang; make clean
