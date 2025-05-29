@@ -145,7 +145,7 @@ protected:
 
     bool onMouse(xevent_t* xev) {
         gpos_t pos = getInsidePos(xev->value.mouse.x, xev->value.mouse.y);
-        if (xev->state == MOUSE_STATE_DOWN) {
+        if (xev->state == MOUSE_STATE_CLICK) {
             if (gameOver) {
                 // 游戏结束时，点击鼠标重启游戏
                 resetBoard();
