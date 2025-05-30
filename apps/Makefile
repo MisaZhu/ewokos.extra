@@ -13,6 +13,7 @@ all:
 	cd snake; make
 	cd gobang; make
 	cd mandelbrot; make
+	cd CircularClock; make
 
 clean: 
 	cd anim; make clean
@@ -28,3 +29,4 @@ clean:
 	cd snake; make clean
 	cd gobang; make clean
 	cd mandelbrot; make clean
+	cd CircularClock; make clean
