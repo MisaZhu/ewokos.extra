@@ -41,18 +41,23 @@ struct Firework {
 };
 
 // 定义最大烟花和粒子数量
-const int MAX_FIREWORKS = 100;
-const int MAX_PARTICLES = 1000;
+const int MAX_FIREWORKS = 16;
+const int MAX_PARTICLES = 512;
 
 // 自定义静态数组模板类
 template <typename T, int MaxSize>
 class StaticArray {
 private:
-    T data[MaxSize];
+    T* data;
     int size;
 
 public:
-    StaticArray() : size(0) {}
+    StaticArray() : size(0) {
+        data =  (T*)malloc(MaxSize*sizeof(T));
+    }
+    ~StaticArray() {
+        free(data);
+    }
 
     void push_back(const T& value) {
         if (size < MaxSize) {
@@ -107,11 +112,11 @@ protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         // 清空背景
         graph_fill(g, r.x, r.y, r.w, r.h, 0xff000000);
-
+    
         // 更新并绘制烟花
         for (int i = 0; i < fireworks.getSize();) {
             fireworks[i].y += fireworks[i].vy;
-            if (fireworks[i].y < area.h / 2 || rand() % 100 == 0) {
+            if (fireworks[i].y < (area.h / 3) || rand() % 100 == 0) {
                 // 烟花爆炸
                 fireworks[i].exploded = true;
                 for (int j = 0; j < 100; ++j) {
@@ -119,17 +124,28 @@ protected:
                     int speed = rand() % 5 + 1;
                     int vx = speed * cos(angle * 3.1415926 / 180);
                     int vy = speed * sin(angle * 3.1415926 / 180);
-                    particles.push_back(Particle(fireworks[i].x, fireworks[i].y, vx, vy, fireworks[i].color, rand() % 30 + 10));
+                    particles.push_back(Particle(fireworks[i].x, fireworks[i].y, vx, vy, fireworks[i].color, rand() % 40 + 10));
                 }
                 fireworks.erase(i);
             } else {
-                // 绘制上升的烟花，提高亮度
+                // 增加上升粒子大小
                 uint32_t brighterColor = adjustBrightness(fireworks[i].color, 1.5f);
-                graph_pixel_safe(g, fireworks[i].x, fireworks[i].y, brighterColor);
+                int radius = 2; // 增大粒子半径
+                graph_fill_circle(g, fireworks[i].x, fireworks[i].y, radius, brighterColor);
+                
+                // 添加尾巴轨迹
+                for (int t = 1; t <= 3; t++) {
+                    float alpha = 1.0f - t * 0.3f;
+                    uint32_t tailColor = adjustAlpha(brighterColor, alpha);
+                    graph_fill_circle(g, 
+                        fireworks[i].x, 
+                        fireworks[i].y + t*radius*3, 
+                        radius - t, tailColor);
+                }
                 ++i;
             }
         }
-
+    
         // 更新并绘制粒子
         for (int i = 0; i < particles.getSize();) {
             particles[i].x += particles[i].vx;
@@ -138,12 +154,22 @@ protected:
             if (particles[i].lifetime <= 0) {
                 particles.erase(i);
             } else {
-                // 根据生命周期计算透明度，实现渐变效果
+                // 保留原有大小和渐变效果
                 float alpha = (float)particles[i].lifetime / 30.0f;
                 uint32_t fadedColor = adjustAlpha(particles[i].color, alpha);
                 // 绘制圆形粒子
-                int radius = 3; // 粒子半径
+                int radius = 3;
                 graph_fill_circle(g, particles[i].x, particles[i].y, radius, fadedColor);
+                
+                // 添加尾巴轨迹
+                for (int t = 1; t <= 2; t++) {
+                    float tailAlpha = alpha * (1.0f - t * 0.3f);
+                    uint32_t tailColor = adjustAlpha(particles[i].color, tailAlpha);
+                    graph_fill_circle(g, 
+                        particles[i].x - particles[i].vx * t,
+                        particles[i].y - particles[i].vy * t,
+                        radius - t, tailColor);
+                }
                 ++i;
             }
         }
@@ -173,7 +199,7 @@ protected:
     }
 
     void onTimer(uint32_t timerFPS, uint32_t timerStep) {
-        if (timerStep % (timerFPS / 2) == 0) {
+        if (timerStep % (timerFPS/1) == 0) {
             launchFirework();
         }
         update();
@@ -187,17 +213,15 @@ public:
 int main(int argc, char** argv) {
     X x;
     WidgetWin win;
-    // 避免使用 new，在栈上创建对象
-    RootWidget root;
-    win.setRoot(&root);
-    root.setType(Container::HORIZONTAL);
-    root.setAlpha(false);
+    RootWidget *root = new RootWidget();
+    win.setRoot(root);
+    root->setType(Container::HORIZONTAL);
+    root->setAlpha(false);
 
-    // 避免使用 new，在栈上创建对象
-    FireworksWidget fireworks;
-    root.add(&fireworks);
+    FireworksWidget* fireworks = new FireworksWidget();
+    root->add(fireworks);
 
-    win.open(&x, 0, -1, -1, 800, 600, "Fireworks", XWIN_STYLE_NORMAL);
+    win.open(&x, 0, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
     win.setTimer(30);
 
     widgetXRun(&x, &win);
