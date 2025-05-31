@@ -124,7 +124,8 @@ protected:
                     int speed = rand() % 5 + 1;
                     int vx = speed * cos(angle * 3.1415926 / 180);
                     int vy = speed * sin(angle * 3.1415926 / 180);
-                    particles.push_back(Particle(fireworks[i].x, fireworks[i].y, vx, vy, fireworks[i].color, rand() % 40 + 10));
+                    // 爆炸粒子使用随机颜色
+                    particles.push_back(Particle(fireworks[i].x, fireworks[i].y, vx, vy, randomColor(), rand() % 40 + 10));
                 }
                 fireworks.erase(i);
             } else {
