@@ -14,6 +14,8 @@ all:
 	cd gobang; make
 	cd mandelbrot; make
 	cd CircularClock; make
+	cd Fireworks; make
+	cd SolarSystem; make
 
 clean: 
 	cd anim; make clean
@@ -30,3 +32,5 @@ clean:
 	cd gobang; make clean
 	cd mandelbrot; make clean
 	cd CircularClock; make clean
+	cd Fireworks; make clean
+	cd SolarSystem; make clean
