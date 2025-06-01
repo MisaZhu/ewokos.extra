@@ -1,7 +1,6 @@
 
 all: 
 	cd anim; make
-	cd xtest; make
 	cd emu; make
 	cd saver; make
 	cd 3ddemo;make
@@ -11,12 +10,10 @@ all:
 	cd snake; make
 	cd gobang; make
 	cd mandelbrot; make
-	cd CircularClock; make
 	cd Fireworks; make
 
 clean: 
 	cd anim; make clean
-	cd xtest; make clean
 	cd emu; make clean
 	cd saver; make clean
 	cd 3ddemo;make clean
@@ -26,5 +23,4 @@ clean:
 	cd snake; make clean
 	cd gobang; make clean
 	cd mandelbrot; make clean
-	cd CircularClock; make clean
 	cd Fireworks; make clean
