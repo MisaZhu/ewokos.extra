@@ -2,7 +2,6 @@
 all: 
 	cd anim; make
 	cd xtest; make
-	cd wtest; make
 	cd emu; make
 	cd saver; make
 	cd 3ddemo;make
@@ -18,7 +17,6 @@ all:
 clean: 
 	cd anim; make clean
 	cd xtest; make clean
-	cd wtest; make clean
 	cd emu; make clean
 	cd saver; make clean
 	cd 3ddemo;make clean
