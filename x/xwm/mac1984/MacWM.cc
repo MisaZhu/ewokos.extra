@@ -78,33 +78,6 @@ void MacWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 			r->x + 1, r->y + r->h, bright);
 }
 
-void MacWM::getTitle(xinfo_t* info, grect_t* rect) {
-	rect->x = info->winr.x;
-	rect->y = info->winr.y;
-	rect->w = info->winr.w;
-	rect->h = xwm.theme.titleH;
-}
-
-void MacWM::getClose(xinfo_t* info, grect_t* rect) {
-	rect->x = info->winr.x + 8;
-	rect->y = info->winr.y;// - titleH;
-	rect->w = xwm.theme.titleH;
-	rect->h = xwm.theme.titleH-1;
-}
-
-void MacWM::getMin(xinfo_t* info, grect_t* rect) {
-	rect->x = info->winr.x + info->winr.w - xwm.theme.titleH*2 - 8;
-	rect->y = info->winr.y;// - titleH;
-	rect->w = xwm.theme.titleH;
-	rect->h = xwm.theme.titleH-1;
-}
-
-void MacWM::getMax(xinfo_t* info, grect_t* rect) {
-	rect->x = info->winr.x + info->winr.w- xwm.theme.titleH - 8;
-	rect->y = info->winr.y;// - titleH;
-	rect->w = xwm.theme.titleH;
-	rect->h = xwm.theme.titleH-1;
-}
 
 MacWM::~MacWM(void) {
 }

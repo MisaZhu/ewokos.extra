@@ -62,42 +62,76 @@ void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	*/
 }
 
+enum {
+    BG_EFFECT_NONE = 0,
+    BG_EFFECT_TRANSPARENT,
+    BG_EFFECT_DOT,
+    BG_EFFECT_GLASS
+};
+
+void OpenLookWM::drawBGEffect(graph_t* desktop_g, graph_t* frame_g, xinfo_t* info, bool top) {
+	if(top || info->anti_bg_effect || xwm.theme.bgEffect == BG_EFFECT_NONE)
+		return;
+	graph_blt_alpha(frame_g, 0, 0, 
+		info->winr.w,
+		info->winr.h,
+		desktop_g,
+		info->winr.x,
+		info->winr.y,
+		info->winr.w,
+		info->winr.h, 0x88);
+
+	switch(xwm.theme.bgEffect) {
+		case BG_EFFECT_TRANSPARENT:
+			return;
+		case BG_EFFECT_DOT:
+			graph_draw_dot_pattern(desktop_g, 
+				info->wsr.x, info->wsr.y, info->wsr.w, info->wsr.h,
+				0x33ffffff, 0x33000000, 2, 1);	
+			graph_blt(desktop_g, 
+				info->winr.x, info->winr.y, info->winr.w, info->winr.h, 
+				frame_g, 0, 0, info->winr.w, info->winr.h);
+			return;
+		case BG_EFFECT_GLASS:
+			graph_glass(desktop_g, info->winr.x, info->winr.y, info->winr.w, info->winr.h, 2);
+			graph_blt(desktop_g, 
+				info->winr.x, info->winr.y, info->winr.w, info->winr.h, 
+				frame_g, 0, 0, info->winr.w, info->winr.h);
+			return;
+	}
+}
+
 void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* graph, xinfo_t* info, bool top) {
 	uint32_t fg, bg;
 	getColor(&fg, &bg, top);
 
-	int x = info->wsr.x;
-	int y = info->wsr.y;
-	int w = info->wsr.w;
-	int h = info->wsr.h;
+	int x = 0;
+	int y = 0;
+	int w = info->winr.w;
+	int h = info->winr.h;
 
-	if((info->style & XWIN_STYLE_NO_TITLE) == 0) {
-		h += xwm.theme.titleH;
-		y -= xwm.theme.titleH;
-	}
+	graph_fill(graph, x, y, w, xwm.theme.frameW, bg);
+	graph_fill(graph, x, y, xwm.theme.frameW, h, bg);
+	graph_fill(graph, x, y+h-xwm.theme.frameW, w, xwm.theme.frameW, bg);
+	graph_fill(graph, x+w-xwm.theme.frameW, y, xwm.theme.frameW, h, bg);
 
-	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, w+xwm.theme.frameW*2, xwm.theme.frameW, bg);
-	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, xwm.theme.frameW, h+xwm.theme.frameW*2, bg);
-	graph_fill(graph, x-xwm.theme.frameW, y+h, w+xwm.theme.frameW*2, xwm.theme.frameW, bg);
-	graph_fill(graph, x+w, y-xwm.theme.frameW, xwm.theme.frameW, h+xwm.theme.frameW*2, bg);
-
-	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, w+xwm.theme.frameW*2, 2, 0xff000000);
-	graph_fill(graph, x-xwm.theme.frameW, y-xwm.theme.frameW, 2, h+xwm.theme.frameW*2, 0xff000000);
-	graph_fill(graph, x-xwm.theme.frameW, y+h+xwm.theme.frameW-2, w+xwm.theme.frameW*2, 2, 0xff000000);
-	graph_fill(graph, x+w+xwm.theme.frameW-2, y-xwm.theme.frameW, 2, h+xwm.theme.frameW*2, 0xff000000);
+	graph_fill(graph, x, y, w, 2, 0xff000000);
+	graph_fill(graph, x, y, 2, h, 0xff000000);
+	graph_fill(graph, x, y+h-2, w, 2, 0xff000000);
+	graph_fill(graph, x+w-2, y, 2, h, 0xff000000);
 
 	if(frameTLIcon)
 		graph_blt_alpha(frameTLIcon, 0, 0, frameTLIcon->w, frameTLIcon->h,
-				graph, x-xwm.theme.frameW, y-xwm.theme.frameW, frameTLIcon->w, frameTLIcon->h, 0xff);
+				graph, x, y, frameTLIcon->w, frameTLIcon->h, 0xff);
 	if(frameTRIcon)
 		graph_blt_alpha(frameTRIcon, 0, 0, frameTRIcon->w, frameTRIcon->h,
-				graph, x+w-frameTRIcon->w+xwm.theme.frameW, y-xwm.theme.frameW, frameTLIcon->w, frameTLIcon->h, 0xff);
+				graph, x+w-frameTRIcon->w, y, frameTLIcon->w, frameTLIcon->h, 0xff);
 	if(frameBLIcon)
 		graph_blt_alpha(frameBLIcon, 0, 0, frameBLIcon->w, frameBLIcon->h,
-				graph, x-xwm.theme.frameW, y+h-frameBLIcon->h+xwm.theme.frameW, frameBLIcon->w, frameBLIcon->h, 0xff);
+				graph, x, y+h-frameBLIcon->h, frameBLIcon->w, frameBLIcon->h, 0xff);
 	if(frameBRIcon)
 		graph_blt_alpha(frameBRIcon, 0, 0, frameBRIcon->w, frameBRIcon->h,
-				graph, x+w-frameBRIcon->w+xwm.theme.frameW, y+h-frameBRIcon->h+xwm.theme.frameW, frameBRIcon->w, frameBRIcon->h, 0xff);
+				graph, x+w-frameBRIcon->w, y+h-frameBRIcon->h, frameBRIcon->w, frameBRIcon->h, 0xff);
 	//shadow
 	/*if(top) {
 		graph_fill(graph, x+w+xwm.theme.frameW, y, xwm.theme.frameW, h+xwm.theme.frameW, 0xaa000000);
