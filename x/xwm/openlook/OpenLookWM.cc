@@ -62,7 +62,7 @@ void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	*/
 }
 
-void OpenLookWM::drawFrame(graph_t* graph, xinfo_t* info, bool top) {
+void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* graph, xinfo_t* info, bool top) {
 	uint32_t fg, bg;
 	getColor(&fg, &bg, top);
 
