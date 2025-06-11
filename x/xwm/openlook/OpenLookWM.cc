@@ -83,6 +83,9 @@ void OpenLookWM::drawBGEffect(graph_t* desktop_g, graph_t* frame_g, xinfo_t* inf
 
 	switch(xwm.theme.bgEffect) {
 		case BG_EFFECT_TRANSPARENT:
+			graph_blt(desktop_g, 
+				info->winr.x, info->winr.y, info->winr.w, info->winr.h, 
+				frame_g, 0, 0, info->winr.w, info->winr.h);
 			return;
 		case BG_EFFECT_DOT:
 			graph_draw_dot_pattern(desktop_g, 
