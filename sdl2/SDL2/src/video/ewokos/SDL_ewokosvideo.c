@@ -338,7 +338,7 @@ EWOKOS_VideoInit(_THIS)
     phys_width = mailbuffer[5];
     phys_height = mailbuffer[6];
     */
-    xscreen_t scr;
+    xscreen_info_t scr;
     x_screen_info(&scr, 0);
     phys_width = scr.size.w;
     phys_height = scr.size.h;

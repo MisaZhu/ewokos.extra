@@ -362,7 +362,7 @@ int main(int argc, char *argv[])
 	NesEmu emu;
 
 	/*init window*/
-	xscreen_t scr;
+	xscreen_info_t scr;
 
 	//init emulator
 	if(argc < 2){

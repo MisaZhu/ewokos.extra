@@ -38,7 +38,7 @@ using namespace Ewok;
 #define BALL_RADIUS     16
 #define BALL_COUNT	16
 
-xscreen_t scr;
+xscreen_info_t scr;
 
 class ScreenSaver : public XWin {
 private:

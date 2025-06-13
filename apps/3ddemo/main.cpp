@@ -31,7 +31,7 @@
 #include "src/engine.h"
 
 using namespace Ewok;
-xscreen_t scr;
+xscreen_info_t scr;
 graph_t* graph;
 
 extern "C"{
