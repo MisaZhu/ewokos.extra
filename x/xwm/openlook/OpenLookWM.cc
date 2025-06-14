@@ -143,7 +143,7 @@ void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* graph, xinfo_t* info, gr
 	*/
 }
 
-void OpenLookWM::drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
+void OpenLookWM::drawTitle(graph_t* desktop_g, graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	uint32_t fg, bg;
 	getColor(&fg, &bg, top);
 

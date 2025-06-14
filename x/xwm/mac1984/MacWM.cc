@@ -19,7 +19,7 @@ void MacWM::drawTitlePattern(graph_t* g, int x, int y, int w, int h, uint32_t fg
 	}
 }
 
-void MacWM::drawTitle(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
+void MacWM::drawTitle(graph_t* desktop_g, graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	uint32_t fg, bg;
 	getColor(&fg, &bg, top);
 	gsize_t sz;
