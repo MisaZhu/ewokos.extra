@@ -180,7 +180,7 @@ void draw_block(int x, int y, int color) {
 }
 
 void clear_screen() {
-  SDL_SetRenderDrawColor(rend, 0, 0, 0, 0);
+  SDL_SetRenderDrawColor(rend, 0, 0, 0, 0xFF);
   SDL_RenderClear(rend);
 }
 
