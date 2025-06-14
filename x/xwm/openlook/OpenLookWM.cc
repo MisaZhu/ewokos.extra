@@ -104,14 +104,14 @@ void OpenLookWM::drawBGEffect(graph_t* desktop_g, graph_t* frame_g, xinfo_t* inf
 	}
 }
 
-void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* graph, xinfo_t* info, bool top) {
+void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* graph, xinfo_t* info, grect_t* r, bool top) {
 	uint32_t fg, bg;
 	getColor(&fg, &bg, top);
 
-	int x = 0;
-	int y = 0;
-	int w = info->winr.w;
-	int h = info->winr.h;
+	int x = r->x;
+	int y = r->y;
+	int w = r->w;
+	int h = r->h;
 
 	graph_fill(graph, x, y, w, xwm.theme.frameW, bg);
 	graph_fill(graph, x, y, xwm.theme.frameW, h, bg);
