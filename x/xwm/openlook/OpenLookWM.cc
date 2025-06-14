@@ -37,7 +37,6 @@ void OpenLookWM::drawDragFrame(graph_t* g, grect_t* r) {
 }
 
 void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
-	/*
 	(void)info;
 	if(!top)
 		return;
@@ -48,18 +47,17 @@ void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 	graph_get_3d_color(bg, &dark, &bright);
 
 	graph_line(g, 
-			r->x + r->w - frameW + 1, r->y,
+			r->x + r->w - xwm.theme.frameW + 1, r->y,
 			r->x + r->w, r->y, dark);
 	graph_line(g,
-			r->x + r->w - frameW + 1, r->y + 1,
+			r->x + r->w - xwm.theme.frameW + 1, r->y + 1,
 			r->x + r->w, r->y + 1, bright);
 	graph_line(g,
-			r->x, r->y + r->h - frameW + 1,
+			r->x, r->y + r->h - xwm.theme.frameW + 1,
 			r->x, r->y + r->h, dark);
 	graph_line(g,
-			r->x + 1, r->y + r->h - frameW + 1,
+			r->x + 1, r->y + r->h - xwm.theme.frameW + 1,
 			r->x + 1, r->y + r->h, bright);
-	*/
 }
 
 enum {
