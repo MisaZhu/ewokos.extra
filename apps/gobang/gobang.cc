@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
     RootWidget* root = new RootWidget();
     win.setRoot(root);
     root->setType(Container::HORIZONTAL);
-    root->setAlpha(false);
+    
 
     GobangGame* gobangGame = new GobangGame();
     root->add(gobangGame);
