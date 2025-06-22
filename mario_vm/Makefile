@@ -1,5 +1,8 @@
 SW_ROOT_DIR=..
+SYS_DIR=$(SW_ROOT_DIR)/../system
 include $(SW_ROOT_DIR)/make.inc
+
+BUILD_DIR = $(SYS_DIR)/build/$(HW)
 
 MARIO_VM= .
 include $(MARIO_VM)/lang/js/lang.mk
@@ -40,20 +43,28 @@ HEADS = \
 CFLAGS += $(HEADS)
 CXXFLAGS += $(HEADS)
 
-BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
-MARIO = $(BUILD_DIR)/mario
-BCASM = $(BUILD_DIR)/bcasm
+TARGET_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
+MARIO = $(TARGET_DIR)/mario
+BCASM = $(TARGET_DIR)/bcasm
 
 all: $(MARIO) $(BCASM)
 	@echo "done"
 
 
-$(MARIO): $(MARIO_OBJS)
-	mkdir -p $(BUILD_DIR)
+$(MARIO): $(MARIO_OBJS) \
+		$(EWOK_LIBC_A)  \
+		$(BUILD_DIR)/lib/libpng.a \
+		$(BUILD_DIR)/lib/libewokstl.a \
+		$(BUILD_DIR)/lib/libx++.a \
+		$(BUILD_DIR)/lib/libx.a \
+		$(BUILD_DIR)/lib/libfont.a \
+		$(BUILD_DIR)/lib/libwidget++.a \
+		$(BUILD_DIR)/lib/libcxx.a 
+	mkdir -p $(TARGET_DIR)
 	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 $(BCASM): $(BCASM_OBJS)
-	mkdir -p $(BUILD_DIR)
+	mkdir -p $(TARGET_DIR)
 	$(LD) -Ttext=100 $(BCASM_OBJS) -o $(BCASM) $(LDFLAGS) -lbsp $(BSP_LFLAGS)  $(EWOK_LIBC)
 
 clean:

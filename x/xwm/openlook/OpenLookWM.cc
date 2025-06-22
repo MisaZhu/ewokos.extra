@@ -37,60 +37,7 @@ void OpenLookWM::drawDragFrame(graph_t* g, grect_t* r) {
 }
 
 void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
-	(void)info;
-	if(!top)
-		return;
-	uint32_t fg, bg;
-	getColor(&fg, &bg, top);
-
-	uint32_t dark, bright;
-	graph_get_3d_color(bg, &dark, &bright);
-
-	graph_line(g, 
-			r->x + r->w - xwm.theme.frameW + 1, r->y,
-			r->x + r->w, r->y, dark);
-	graph_line(g,
-			r->x + r->w - xwm.theme.frameW + 1, r->y + 1,
-			r->x + r->w, r->y + 1, bright);
-	graph_line(g,
-			r->x, r->y + r->h - xwm.theme.frameW + 1,
-			r->x, r->y + r->h, dark);
-	graph_line(g,
-			r->x + 1, r->y + r->h - xwm.theme.frameW + 1,
-			r->x + 1, r->y + r->h, bright);
 }
-
-void OpenLookWM::drawShadow(graph_t* desktop_g, graph_t* g, xinfo_t* info, bool top) {
-	if(xwm.theme.shadow == 0)
-		return;
-	XWM::drawShadow(desktop_g, g, info, top);
-	
-	int x = info->winr.w - xwm.theme.shadow;
-	int y = xwm.theme.shadow;
-	int w = xwm.theme.shadow;
-	int h = info->winr.h - xwm.theme.shadow;
-	//graph_fill(desktop_g, x+info->winr.x, y+info->winr.y, w, h, 0x66000000);
-	graph_blt_alpha(g, x, y, w, h, desktop_g, x+info->winr.x, y+info->winr.y, w, h, 0xFF);
-	graph_glass(desktop_g, x+info->winr.x, y+info->winr.y, w, h, 2);
-	graph_blt(desktop_g, x+info->winr.x, y+info->winr.y, w, h, g, x, y, w, h);
-
-	x = xwm.theme.shadow;
-	y = info->winr.h - xwm.theme.shadow;
-	w = info->winr.w - xwm.theme.shadow*2;
-	h = xwm.theme.shadow;
-	//graph_fill(desktop_g, x+info->winr.x, y+info->winr.y, w, h, 0x66000000);
-	graph_blt_alpha(g, x, y, w, h, desktop_g, x+info->winr.x, y+info->winr.y, w, h, 0xFF);
-	graph_glass(desktop_g, x+info->winr.x, y+info->winr.y, w, h, 2);
-	graph_blt(desktop_g, x+info->winr.x, y+info->winr.y, w, h, g, x, y, w, h);
-}
-
-
-enum {
-    BG_EFFECT_NONE = 0,
-    BG_EFFECT_TRANSPARENT,
-    BG_EFFECT_DOT,
-    BG_EFFECT_GLASS
-};
 
 void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* frame_g, graph_t* ws_g, xinfo_t* info, grect_t* r, bool top) {
 	uint32_t fg, bg;
