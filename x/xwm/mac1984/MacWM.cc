@@ -85,9 +85,9 @@ MacWM::~MacWM(void) {
 MacWM::MacWM(void) {
 	xwm.theme.desktopBGColor = 0xff555588;
 	xwm.theme.desktopFGColor = 0xff8888aa;
-	xwm.theme.bgColor = 0xff222222;
-	xwm.theme.fgColor = 0xff888888;
-	xwm.theme.bgTopColor = 0xffaaaaaa;
-	xwm.theme.fgTopColor = 0xff222222;
+	xwm.theme.titleBGColor = 0xff222222;
+	xwm.theme.titleFGColor = 0xff888888;
+	xwm.theme.titleBGTopColor = 0xffaaaaaa;
+	xwm.theme.titleFGTopColor = 0xff222222;
 	xwm.theme.titleH = 32;
 }
