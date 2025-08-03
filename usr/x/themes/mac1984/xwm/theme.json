@@ -5,9 +5,6 @@
     "frame_bg_color": "0xffffffff",
     "frame_fg_color": "0xff000000",
 
-    "frame_bg_top_color": "0xffffffff",
-    "frame_fg_top_color": "0xff000000",
-
     "font_size": 14,
     "title_h": 24,
     "frame_width": 2,
