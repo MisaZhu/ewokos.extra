@@ -88,7 +88,7 @@ public:
 protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         // 绘制棋盘背景
-        graph_fill(g, r.x, r.y, r.w, r.h, theme->basic.widgetBGColor);
+        graph_fill(g, r.x, r.y, r.w, r.h, theme->basic.bgColor);
 
         // 绘制棋盘网格
         for (int i = 0; i < BOARD_SIZE; ++i) {
