@@ -15,7 +15,7 @@
 using namespace Ewok;
 
 const int BOARD_SIZE = 15;
-const int CELL_SIZE = 24;
+const int CELL_SIZE = 16;
 
 class GobangGame : public Widget {
     int board[BOARD_SIZE][BOARD_SIZE];
