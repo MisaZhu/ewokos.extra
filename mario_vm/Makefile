@@ -10,8 +10,10 @@ include $(MARIO_VM)/lang/js/lang.mk
 mario_OBJS = $(MARIO_VM)/mario/mario.o
 platform_OBJS = $(MARIO_VM)/platform/platform.o \
 		$(MARIO_VM)/platform/mem.o
-mvm_OBJS = bin/mario/main.o bin/lib/mbc.o bin/lib/js.o bin/lib/vm_json_var.o
-wjsvm_OBJS = bin/wjs/wjs.o bin/lib/mbc.o bin/lib/js.o  bin/lib/vm_json_var.o
+
+lib_OBJS = bin/lib/mbc.o bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o
+mvm_OBJS = bin/mario/main.o $(lib_OBJS)
+wjsvm_OBJS = bin/wjs/wjs.o bin/wjs/native_wjs.o $(lib_OBJS)
 bcasm_OBJS = bin/bcasm/main.o bin/bcasm/dump.o bin/lib/mbc.o bin/lib/js.o 
 
 MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
@@ -40,7 +42,6 @@ HEADS = \
 	-I$(NATIVE_PATH_BUILTIN) \
 	-I$(NATIVE_PATH_GRAPH) \
 	-I$(NATIVE_PATH_X) \
-	-I$(NATIVE_PATH_UNI_OBJECT) \
 	-I$(MARIO_VM)/mario \
 	-I$(MARIO_VM)/bin/lib \
 	-I$(MARIO_VM)/platform

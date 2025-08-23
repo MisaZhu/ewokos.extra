@@ -1,27 +1,16 @@
-#include <Widget/WidgetX.h>
-#include <Widget/Image.h>
-#include <Widget/Label.h>
-#include <Widget/LabelButton.h>
-#include <Widget/List.h>
-#include <Widget/EditLine.h>
-#include <Widget/Grid.h>
-#include <Widget/Scroller.h>
-#include <Widget/Splitter.h>
 #include <WidgetEx/LayoutWidget.h>
-#include <WidgetEx/FileDialog.h>
-#include <WidgetEx/ConfirmDialog.h>
-
 #include <WidgetEx/LayoutWin.h>
+#include <Widget/WidgetX.h>
 
 #include <x++/X.h>
 #include <unistd.h>
-#include <font/font.h>
 
 #include <tinyjson/tinyjson.h>
 
 #include "js.h"
 #include "mbc.h"
 #include "platform.h"
+#include "native_UniObject.h"
 #include "mem.h"
 
 /**
@@ -61,6 +50,8 @@ void quit_js(vm_t* vm) {
 	vm_close(vm);
 	mem_quit();
 }
+
+void reg_native_wjs(vm_t* vm, void* arg);
 
 #ifdef __cplusplus /* __cplusplus */
 }
@@ -138,65 +129,6 @@ static bool loadWJS(const string& wjs_fname, string& layout_fname, string& js_fn
     return true;
 }
 
-//============= Widget natives =================================
-
-#define CLS_WJS "WJS"
-#define CLS_XEvent "XEvent"
-#define CLS_UniObject "UniObject"
-
-static void free_none(void* data) {
-}
-
-var_t* native_wjs_getByName(vm_t* vm, var_t* env, void* data) {
-	LayoutWidget* layout = (LayoutWidget*)data;
-	const char* name = get_str(env, "name");
-	Widget* wd = layout->getChild(name);
-	if(wd == NULL)
-		return NULL;
-
-	var_t* var_wd = new_obj(vm, CLS_UniObject, 0);
-	var_wd->value = wd;
-	var_wd->free_func = free_none;
-	return var_wd;
-}
-
-var_t* native_wjs_getByID(vm_t* vm, var_t* env, void* data) {
-	LayoutWidget* layout = (LayoutWidget*)data;
-	uint32_t id = get_int(env, "id");
-	Widget* wd = layout->getChild(id);
-	if(wd == NULL)
-		return NULL;
-
-	var_t* var_wd = new_obj(vm, CLS_UniObject, 0);
-	var_wd->value = wd;
-	var_wd->free_func = free_none;
-	return var_wd;
-}
-
-
-#ifdef __cplusplus /* __cplusplus */
-extern "C" {
-#endif
-
-void reg_native_widget(vm_t* vm, LayoutWidget* layout) {
-	var_t* cls = vm_new_class(vm, CLS_WJS);
-	vm_reg_static(vm, cls, "getWidgetByName(name)", native_wjs_getByName, layout); 
-	vm_reg_static(vm, cls, "getWidgetByID(id)", native_wjs_getByID, layout); 
-
-	cls = vm_new_class(vm, CLS_XEvent);
-	vm_reg_var(vm, cls, "MOUSE", var_new_int(vm, XEVT_MOUSE), true);
-	vm_reg_var(vm, cls, "IM", var_new_int(vm, XEVT_IM), true);
-	vm_reg_var(vm, cls, "MOUSE_MOVE", var_new_int(vm, MOUSE_STATE_MOVE), true);
-	vm_reg_var(vm, cls, "MOUSE_DOWN", var_new_int(vm, MOUSE_STATE_DOWN), true);
-	vm_reg_var(vm, cls, "MOUSE_UP", var_new_int(vm, MOUSE_STATE_UP), true);
-	vm_reg_var(vm, cls, "MOUSE_DRAG", var_new_int(vm, MOUSE_STATE_DRAG), true);
-	vm_reg_var(vm, cls, "MOUSE_CLICK", var_new_int(vm, MOUSE_STATE_CLICK), true);
-}
-
-#ifdef __cplusplus /* __cplusplus */
-}
-#endif
-
 int main(int argc, char** argv) {
 	int argind = doargs(argc, argv);
 	if(argind < 0) {
@@ -224,7 +156,7 @@ int main(int argc, char** argv) {
 	LayoutWidget* layout = win.getLayoutWidget();
 
 	_vm = init_js();
-	reg_native_widget(_vm, layout);
+	reg_native_wjs(_vm, layout);
 	load_wjs(_vm, js_fname.c_str());
 	vm_run(_vm);
 

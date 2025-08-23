@@ -7,9 +7,7 @@
 using namespace std;
 using namespace Ewok;
 
-#define CLS_UniObject "UniObject"
-
-var_t* native_UniObject_call(vm_t* vm, var_t* env, void* data) {
+static var_t* native_UniObject_call(vm_t* vm, var_t* env, void* data) {
 	UniObject* obj = (UniObject*)get_raw(env, THIS);
 	if(obj == NULL)
 		return NULL;
@@ -28,7 +26,7 @@ var_t* native_UniObject_call(vm_t* vm, var_t* env, void* data) {
 	return ret;
 }
 
-var_t* native_UniObject_get(vm_t* vm, var_t* env, void* data) {
+static var_t* native_UniObject_get(vm_t* vm, var_t* env, void* data) {
 	UniObject* obj = (UniObject*)get_raw(env, THIS);
 	if(obj == NULL)
 		return NULL;
@@ -42,7 +40,7 @@ var_t* native_UniObject_get(vm_t* vm, var_t* env, void* data) {
 	return ret;
 }
 
-var_t* native_UniObject_set(vm_t* vm, var_t* env, void* data) {
+static var_t* native_UniObject_set(vm_t* vm, var_t* env, void* data) {
 	UniObject* obj = (UniObject*)get_raw(env, THIS);
 	if(obj == NULL)
 		return NULL;
@@ -57,17 +55,8 @@ var_t* native_UniObject_set(vm_t* vm, var_t* env, void* data) {
 	return NULL;
 }
 
-#ifdef __cplusplus /* __cplusplus */
-extern "C" {
-#endif
-
-void reg_native_UniObject(vm_t* vm) {
-	var_t* cls = vm_new_class(vm, CLS_UniObject);
+void vm_reg_uniobject_native(vm_t* vm, var_t* cls, void* data) {
 	vm_reg_native(vm, cls, "get(name)", native_UniObject_get, NULL); 
 	vm_reg_native(vm, cls, "set(name, value)", native_UniObject_set, NULL); 
 	vm_reg_native(vm, cls, "call(func, arg)", native_UniObject_call, NULL); 
 }
-
-#ifdef __cplusplus /* __cplusplus */
-}
-#endif

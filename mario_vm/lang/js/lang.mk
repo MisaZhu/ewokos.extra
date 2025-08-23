@@ -4,7 +4,6 @@ lang_OBJS = $(MARIO_VM)/lang/$(MARIO_LANG)/compiler.o
 NATIVE_PATH = $(MARIO_VM)/lang/$(MARIO_LANG)/native
 NATIVE_PATH_BUILTIN = $(MARIO_VM)/lang/$(MARIO_LANG)/native/builtin
 NATIVE_PATH_X = $(MARIO_VM)/lang/$(MARIO_LANG)/native/x
-NATIVE_PATH_UNI_OBJECT = $(MARIO_VM)/lang/$(MARIO_LANG)/native/UniObject
 NATIVE_PATH_GRAPH = $(MARIO_VM)/lang/$(MARIO_LANG)/native/graph
 
 NATIVE_OBJS= $(NATIVE_PATH)/natives.o  \
@@ -19,8 +18,6 @@ NATIVE_OBJS= $(NATIVE_PATH)/natives.o  \
 	$(NATIVE_PATH_BUILTIN)/system/native_system.o \
 	$(NATIVE_PATH_BUILTIN)/fs/native_fs.o \
 	$(NATIVE_PATH_BUILTIN)/dir/native_dir.o \
-	\
-	$(NATIVE_PATH_UNI_OBJECT)/native_UniObject.o \
 	\
 	$(NATIVE_PATH_GRAPH)/native_graph.o  \
 	\

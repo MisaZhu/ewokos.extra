@@ -2,6 +2,7 @@
 #include <x++/X.h>
 #include <x++/XWin.h>
 #include <ewoksys/klog.h>
+#include "native_UniObject.h"
 
 using namespace Ewok;
 
@@ -171,6 +172,7 @@ void reg_native_x(vm_t* vm) {
 	vm_reg_static(vm, cls, "run()", native_x_run, NULL); 
 
 	cls = vm_new_class(vm, CLS_XWIN);
+	vm_reg_uniobject_native(vm, cls, NULL); 
 	vm_reg_native(vm, cls, "setVisible(visible)", native_xwin_setVisible, NULL); 
 	vm_reg_native(vm, cls, "repaint()", native_xwin_repaint, NULL); 
 	vm_reg_native(vm, cls, "getSize()", native_xwin_getSize, NULL); 
