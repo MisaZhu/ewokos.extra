@@ -1,6 +1,7 @@
 #include "mario.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #ifdef MRCIO_THREAD
 #include <pthread.h>
@@ -34,9 +35,17 @@ static inline void dout(const char* s) {
 		_out_func(s);
 }
 
-inline void mario_debug(const char* s) {
-	if(_m_debug)
-		dout(s);
+#define BUF_SIZE 256
+void mario_debug(const char *format, ...) {
+	if(!_m_debug)
+		return;
+
+	char buf[BUF_SIZE+1] = {0};
+	va_list ap;
+	va_start(ap, format);
+	vsnprintf(buf, BUF_SIZE, format, ap);
+	va_end(ap);
+	dout(buf);
 }
 
 /**======array functions======*/
@@ -1475,8 +1484,8 @@ static inline void gc_mark_stack(vm_t* vm, bool mark) {
 				v = node->var;
 		}
 
-		mario_debug("mark stack go\n");
-		//gc_mark(v, mark);
+		mario_debug("mark stack go %d\n", mark);
+		gc_mark(v, mark);
 		mario_debug("mark stack go end\n");
 	}
 }
@@ -1563,6 +1572,8 @@ static inline void gc_vars(vm_t* vm) {
 	while(v != NULL) {
 		var_t* next = v->next;
 		if(v->status == V_ST_GC && v->gc_marked == false) {
+			if(v == vm->gc_vars)
+				vm->gc_vars = next;
 			var_free(v);
 		}
 		v = next;

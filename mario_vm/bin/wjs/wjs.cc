@@ -96,12 +96,51 @@ static void onEventFunc(Widget* wd, xevent_t* xev, void* arg) {
 	var_add(args, "event", evt_arg);
 
 	call_m_func_by_name(_vm, NULL, "_onWidgetEvent", args);
+	var_unref(args);
+}
+
+static int doargs(int argc, char* argv[]) {
+	int c = 0;
+	while (c != -1) {
+		c = getopt (argc, argv, "d");
+		if(c == -1)
+			break;
+
+		switch (c) {
+		case 'd':
+			_m_debug = true;
+			break;
+		case '?':
+			return -1;
+		default:
+			c = -1;
+			break;
+		}
+	}
+	return optind;
 }
 
 int main(int argc, char** argv) {
-	if(argc < 3) {
+	int argind = doargs(argc, argv);
+	if(argind < 0) {
+		return -1;
+	}
+
+	const char* layout_fname = "";
+	const char* js_fname = "";
+
+	if(argind < argc) {
+		layout_fname = argv[argind];
+		argind++;
+	}
+
+	if(argind < argc) {
+		js_fname = argv[argind];
+	}
+
+	if(layout_fname[0] == 0 || js_fname[0] == 0) {
 		klog("Usage: %s <xxxx.xw> <xxxx.js>\n", argv[0]);
-		return 0;
+		return -1;
 	}
 	
 	X x;
@@ -109,11 +148,10 @@ int main(int argc, char** argv) {
 	LayoutWidget* layout = win.getLayoutWidget();
 	layout->setMenuItemFunc(onMenuItemFunc);
 	layout->setEventFunc(onEventFunc);
-	win.loadConfig(argv[1]); // 加载布局文件
+	win.loadConfig(layout_fname); // 加载布局文件
 
 	_vm = init_js();
-	_m_debug = true;
-	load_wjs(_vm, argv[2]);
+	load_wjs(_vm, js_fname);
 	vm_run(_vm);
 
 	win.open(&x, 0, -1, -1, 0, 0, argv[1], XWIN_STYLE_NORMAL);
