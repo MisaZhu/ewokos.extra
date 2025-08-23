@@ -138,6 +138,117 @@ static bool loadWJS(const string& wjs_fname, string& layout_fname, string& js_fn
     return true;
 }
 
+//============= Widget natives =================================
+
+#define CLS_WJS "WJS"
+#define CLS_Widget "Widget"
+#define CLS_XEvent "XEvent"
+
+void free_none(void* data) {
+}
+
+var_t* native_wjs_getByName(vm_t* vm, var_t* env, void* data) {
+	LayoutWidget* layout = (LayoutWidget*)data;
+	const char* name = get_str(env, "name");
+	Widget* wd = layout->getChild(name);
+	if(wd == NULL)
+		return NULL;
+
+	var_t* var_wd = new_obj(vm, CLS_Widget, 0);
+	var_wd->value = wd;
+	var_wd->free_func = free_none;
+	return var_wd;
+}
+
+var_t* native_wjs_getByID(vm_t* vm, var_t* env, void* data) {
+	LayoutWidget* layout = (LayoutWidget*)data;
+	uint32_t id = get_int(env, "id");
+	Widget* wd = layout->getChild(id);
+	if(wd == NULL)
+		return NULL;
+
+	var_t* var_wd = new_obj(vm, CLS_Widget, 0);
+	var_wd->value = wd;
+	var_wd->free_func = free_none;
+	return var_wd;
+}
+
+var_t* native_widget_get(vm_t* vm, var_t* env, void* data) {
+	Widget* wd = (Widget*)get_raw(env, THIS);
+	if(wd == NULL)
+		return NULL;
+
+	string name = get_str(env, "name");
+	json_var_t* value = wd->get(name);	
+	string json_str = "";
+	if(value != NULL) {
+		str_t* str = str_new("");
+		if(str == NULL)
+			return NULL;
+		json_var_to_json_str(value, str, 0);
+		json_var_unref(value);
+		json_str = str->cstr;
+		str_free(str);
+	}
+
+	var_t* ret = var_new_str(vm, json_str.c_str());
+	return ret;
+}
+
+var_t* native_widget_set(vm_t* vm, var_t* env, void* data) {
+	Widget* wd = (Widget*)get_raw(env, THIS);
+	if(wd == NULL)
+		return NULL;
+
+	string name = get_str(env, "name");
+	var_t* value = get_obj(env, "value");
+
+	if(value != NULL) {
+		mstr_t* str = mstr_new("");
+		if(str == NULL)
+			return NULL;
+
+		var_to_json_str(value, str, 0);
+		json_var_t* json_value = json_parse_str(str->cstr);
+		mstr_free(str);
+
+		if(json_value == NULL)
+			return NULL;
+
+		wd->set(name, json_value);
+		json_var_unref(json_value);
+	}
+
+	return NULL;
+}
+
+#ifdef __cplusplus /* __cplusplus */
+extern "C" {
+#endif
+
+void reg_native_widget(vm_t* vm, LayoutWidget* layout) {
+	var_t* cls = vm_new_class(vm, CLS_WJS);
+	vm_reg_static(vm, cls, "getWidgetByName(name)", native_wjs_getByName, layout); 
+	vm_reg_static(vm, cls, "getWidgetByID(id)", native_wjs_getByID, layout); 
+
+	cls = vm_new_class(vm, CLS_XEvent);
+	vm_reg_var(vm, cls, "MOUSE", var_new_int(vm, XEVT_MOUSE), true);
+	vm_reg_var(vm, cls, "IM", var_new_int(vm, XEVT_IM), true);
+	vm_reg_var(vm, cls, "MOUSE_MOVE", var_new_int(vm, MOUSE_STATE_MOVE), true);
+	vm_reg_var(vm, cls, "MOUSE_DOWN", var_new_int(vm, MOUSE_STATE_DOWN), true);
+	vm_reg_var(vm, cls, "MOUSE_UP", var_new_int(vm, MOUSE_STATE_UP), true);
+	vm_reg_var(vm, cls, "MOUSE_DRAG", var_new_int(vm, MOUSE_STATE_DRAG), true);
+	vm_reg_var(vm, cls, "MOUSE_CLICK", var_new_int(vm, MOUSE_STATE_CLICK), true);
+
+	cls = vm_new_class(vm, CLS_Widget);
+	vm_reg_native(vm, cls, "get(name)", native_widget_get, layout); 
+	vm_reg_native(vm, cls, "set(name, value)", native_widget_set, layout); 
+}
+
+#ifdef __cplusplus /* __cplusplus */
+}
+#endif
+
 int main(int argc, char** argv) {
 	int argind = doargs(argc, argv);
 	if(argind < 0) {
@@ -160,13 +271,15 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	_vm = init_js();
-	load_wjs(_vm, js_fname.c_str());
-	vm_run(_vm);
-	
 	X x;
 	LayoutWin win;
 	LayoutWidget* layout = win.getLayoutWidget();
+
+	_vm = init_js();
+	reg_native_widget(_vm, layout);
+	load_wjs(_vm, js_fname.c_str());
+	vm_run(_vm);
+
 	layout->setMenuItemFunc(onMenuItemFunc);
 	layout->setEventFunc(onEventFunc);
 
