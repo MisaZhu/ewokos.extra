@@ -17,6 +17,8 @@
 #include <unistd.h>
 #include <font/font.h>
 
+#include <tinyjson/tinyjson.h>
+
 #include "js.h"
 #include "mbc.h"
 #include "platform.h"
@@ -69,7 +71,11 @@ vm_t* _vm;
 using namespace Ewok;
 
 static void onMenuItemFunc(MenuItem* it, void* data) {
-	klog("onMenuItemFunc: %d\n", it->id);
+	vm_t* vm = _vm;
+	var_t* args = var_new(vm);
+	var_add(args, "menuID", var_new_int(vm, it->id));
+	call_m_func_by_name(_vm, NULL, "_onMenuItemEvent", args);
+	var_unref(args);
 }
 
 static void onEventFunc(Widget* wd, xevent_t* xev, void* arg) {
@@ -120,40 +126,51 @@ static int doargs(int argc, char* argv[]) {
 	return optind;
 }
 
+static bool loadWJS(const string& wjs_fname, string& layout_fname, string& js_fname) {
+    json_var_t* conf_var = json_parse_file(wjs_fname.c_str());
+    if(conf_var == NULL)
+        return false;
+		
+	layout_fname = json_get_str(conf_var, "layout");
+	js_fname = json_get_str(conf_var, "js");
+    
+    json_var_unref(conf_var);
+    return true;
+}
+
 int main(int argc, char** argv) {
 	int argind = doargs(argc, argv);
 	if(argind < 0) {
 		return -1;
 	}
 
-	const char* layout_fname = "";
-	const char* js_fname = "";
-
+	const char* wsj_fname = "";
 	if(argind < argc) {
-		layout_fname = argv[argind];
+		wsj_fname = argv[argind];
 		argind++;
 	}
 
-	if(argind < argc) {
-		js_fname = argv[argind];
-	}
-
-	if(layout_fname[0] == 0 || js_fname[0] == 0) {
-		klog("Usage: %s <xxxx.xw> <xxxx.js>\n", argv[0]);
+	if(wsj_fname[0] == 0) {
+		klog("Usage: %s <xxxx.wjs>\n", argv[0]);
 		return -1;
 	}
+
+	string layout_fname, js_fname;
+	if(!loadWJS(wsj_fname, layout_fname, js_fname)) {
+		return -1;
+	}
+
+	_vm = init_js();
+	load_wjs(_vm, js_fname.c_str());
+	vm_run(_vm);
 	
 	X x;
 	LayoutWin win;
 	LayoutWidget* layout = win.getLayoutWidget();
 	layout->setMenuItemFunc(onMenuItemFunc);
 	layout->setEventFunc(onEventFunc);
-	win.loadConfig(layout_fname); // 加载布局文件
 
-	_vm = init_js();
-	load_wjs(_vm, js_fname);
-	vm_run(_vm);
-
+	win.loadConfig(layout_fname.c_str()); // 加载布局文件
 	win.open(&x, 0, -1, -1, 0, 0, argv[1], XWIN_STYLE_NORMAL);
 	win.setTimer(16);
 
