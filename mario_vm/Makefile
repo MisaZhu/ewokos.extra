@@ -11,9 +11,13 @@ mario_OBJS = $(MARIO_VM)/mario/mario.o
 platform_OBJS = $(MARIO_VM)/platform/platform.o \
 		$(MARIO_VM)/platform/mem.o
 mvm_OBJS = bin/mario/main.o bin/lib/mbc.o bin/lib/js.o 
+wjsvm_OBJS = bin/wjs/wjs.o bin/lib/mbc.o bin/lib/js.o 
 bcasm_OBJS = bin/bcasm/main.o bin/bcasm/dump.o bin/lib/mbc.o bin/lib/js.o 
 
 MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
+		$(NATIVE_OBJS)
+
+WJS_OBJS = $(mario_OBJS) $(wjsvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
 		$(NATIVE_OBJS)
 
 BCASM_OBJS = $(mario_OBJS) $(bcasm_OBJS) $(lang_OBJS) $(platform_OBJS)
@@ -45,9 +49,10 @@ CXXFLAGS += $(HEADS)
 
 TARGET_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
 MARIO = $(TARGET_DIR)/mario
+WJS = $(TARGET_DIR)/wjs
 BCASM = $(TARGET_DIR)/bcasm
 
-all: $(MARIO) $(BCASM)
+all: $(MARIO) $(BCASM) $(WJS)
 	@echo "done"
 
 
@@ -62,6 +67,19 @@ $(MARIO): $(MARIO_OBJS) \
 		$(BUILD_DIR)/lib/libcxx.a 
 	mkdir -p $(TARGET_DIR)
 	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
+
+$(WJS): $(WJS_OBJS) \
+		$(EWOK_LIBC_A)  \
+		$(BUILD_DIR)/lib/libpng.a \
+		$(BUILD_DIR)/lib/libewokstl.a \
+		$(BUILD_DIR)/lib/libx++.a \
+		$(BUILD_DIR)/lib/libx.a \
+		$(BUILD_DIR)/lib/libfont.a \
+		$(BUILD_DIR)/lib/libwidget++.a \
+		$(BUILD_DIR)/lib/libcxx.a 
+	mkdir -p $(TARGET_DIR)
+	$(LD) -Ttext=100 $(WJS_OBJS) -o $(WJS) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
+
 
 $(BCASM): $(BCASM_OBJS)
 	mkdir -p $(TARGET_DIR)

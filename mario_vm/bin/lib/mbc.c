@@ -6,6 +6,10 @@
 #include <fcntl.h>
 #include <stdio.h>
 
+#ifdef __cplusplus /* __cplusplus */
+extern "C" {
+#endif
+
 #define MAGIC_NO 0x19760427
 #define VERSION  0x00000001
 
@@ -120,3 +124,6 @@ bool vm_load_mbc(vm_t* vm, const char* fname) {
 	return ret;
 }
 
+#ifdef __cplusplus /* __cplusplus */
+}
+#endif
