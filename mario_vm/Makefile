@@ -10,8 +10,8 @@ include $(MARIO_VM)/lang/js/lang.mk
 mario_OBJS = $(MARIO_VM)/mario/mario.o
 platform_OBJS = $(MARIO_VM)/platform/platform.o \
 		$(MARIO_VM)/platform/mem.o
-mvm_OBJS = bin/mario/main.o bin/lib/mbc.o bin/lib/js.o 
-wjsvm_OBJS = bin/wjs/wjs.o bin/lib/mbc.o bin/lib/js.o 
+mvm_OBJS = bin/mario/main.o bin/lib/mbc.o bin/lib/js.o bin/lib/vm_json_var.o
+wjsvm_OBJS = bin/wjs/wjs.o bin/lib/mbc.o bin/lib/js.o  bin/lib/vm_json_var.o
 bcasm_OBJS = bin/bcasm/main.o bin/bcasm/dump.o bin/lib/mbc.o bin/lib/js.o 
 
 MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
