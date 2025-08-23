@@ -1458,6 +1458,7 @@ static inline void gc_mark_cache(vm_t* vm, bool mark) {
 static inline void gc_mark_stack(vm_t* vm, bool mark) {
 	int i = vm->stack_top-1;
 	while(i>=0) {
+		mario_debug("mark stack\n");
 		void *p = vm->stack[i];
 		i--;
 		if(p == NULL)
@@ -1474,7 +1475,9 @@ static inline void gc_mark_stack(vm_t* vm, bool mark) {
 				v = node->var;
 		}
 
-		gc_mark(v, mark);
+		mario_debug("mark stack go\n");
+		//gc_mark(v, mark);
+		mario_debug("mark stack go end\n");
 	}
 }
 
@@ -1545,11 +1548,16 @@ inline void var_unref(var_t* var) {
 }
 
 static inline void gc_vars(vm_t* vm) {
+	mario_debug("gc marking root\n");
 	gc_mark(vm->root, true); //mark all rooted vars
+	mario_debug("gc marking stack\n");
 	gc_mark_stack(vm, true); //mark all stacked vars
+	mario_debug("gc marking interrupt\n");
 	gc_mark_isignal(vm, true); //mark all interrupt signal vars
+	mario_debug("gc marking cache\n");
 	gc_mark_cache(vm, true); //mark all cached vars
 
+	mario_debug("free all marked var\n");
 	var_t* v = vm->gc_vars;
 	//first step: free unmarked vars
 	while(v != NULL) {
@@ -1560,11 +1568,16 @@ static inline void gc_vars(vm_t* vm) {
 		v = next;
 	}
 
+	mario_debug("gc unmarking root\n");
 	gc_mark(vm->root, false); //unmark all rooted vars
+	mario_debug("gc unmarking stack\n");
 	gc_mark_stack(vm, false); //unmark all stacked vars
+	mario_debug("gc unmarking interrupt\n");
 	gc_mark_isignal(vm, false); //unmark all interrupt signal vars
+	mario_debug("gc unmarking cache\n");
 	gc_mark_cache(vm, false); //unmark all cached vars
 
+	mario_debug("gc recycle free vars\n");
 	//second step: move freed var to free_var_list for reusing.
 	v = vm->gc_vars;
 	while(v != NULL) {
@@ -1575,6 +1588,7 @@ static inline void gc_vars(vm_t* vm) {
 		}
 		v = next;
 	}
+	mario_debug("gc_var done\n");
 }
 
 static inline void gc_free_vars(vm_t* vm, uint32_t buffer_size) {
@@ -1595,12 +1609,14 @@ static inline void gc(vm_t* vm, bool force) {
 		return;
 	if(!force && vm->gc_vars_num < vm->gc_buffer_size)
 		return;
-	mario_debug("[debug] do gc ......");
+	mario_debug("[debug] do gc ......\n");
 	vm->is_doing_gc = true;
+	mario_debug("[debug] marking ......\n");
 	gc_vars(vm);
+	mario_debug("[debug] freeing ......");
 	gc_free_vars(vm, force ? 0:vm->gc_free_buffer_size);
 	vm->is_doing_gc = false;
-	mario_debug(" gc done.\n");
+	mario_debug("[debug] gc done.\n");
 }
 
 static const char* get_typeof(var_t* var) {
