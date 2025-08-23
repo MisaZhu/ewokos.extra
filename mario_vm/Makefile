@@ -40,6 +40,7 @@ HEADS = \
 	-I$(NATIVE_PATH_BUILTIN) \
 	-I$(NATIVE_PATH_GRAPH) \
 	-I$(NATIVE_PATH_X) \
+	-I$(NATIVE_PATH_UNI_OBJECT) \
 	-I$(MARIO_VM)/mario \
 	-I$(MARIO_VM)/bin/lib \
 	-I$(MARIO_VM)/platform
