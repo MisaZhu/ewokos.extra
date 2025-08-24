@@ -10,9 +10,6 @@
 
 using namespace Ewok;
 
-static void free_none(void* data) {
-}
-
 var_t* native_wjs_getByName(vm_t* vm, var_t* env, void* data) {
 	LayoutWidget* layout = (LayoutWidget*)data;
 	const char* name = get_str(env, "name");

@@ -60,6 +60,7 @@ void reg_native_wjs(vm_t* vm, void* arg);
 vm_t* _vm;
 
 using namespace Ewok;
+#define CLS_Widget "Widget"
 
 static void onMenuItemFunc(MenuItem* it, void* data) {
 	vm_t* vm = _vm;
@@ -88,8 +89,10 @@ static void onEventFunc(Widget* wd, xevent_t* xev, void* arg) {
 	var_add(evt_arg, "im", im_arg);
 
 	var_t* args = var_new(vm);
-	var_add(args, "widgetID", var_new_int(vm, wd->getID()));
-	var_add(args, "widgetName", var_new_str(vm, wd->getName().c_str()));
+	var_t* var_wd = new_obj(vm, CLS_Widget, 0);
+	var_wd->value = wd;
+	var_wd->free_func = free_none;
+	var_add(args, "widget", var_wd);
 	var_add(args, "event", evt_arg);
 
 	call_m_func_by_name(_vm, NULL, "_onWidgetEvent", args);

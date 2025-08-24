@@ -361,6 +361,7 @@ typedef struct st_var {
 } var_t;
 
 typedef var_t* (*native_func_t)(struct st_vm *, var_t*, void*);
+void free_none(void* p);
 
 typedef struct st_func {
 	native_func_t native;

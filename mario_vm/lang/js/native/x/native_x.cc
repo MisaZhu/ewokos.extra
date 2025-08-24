@@ -10,10 +10,6 @@ using namespace Ewok;
 #define CLS_X "X"
 #define CLS_XWIN "XWin"
 
-static void free_none(void* p) {
-	return;
-}
-
 class JSWin : public XWin {
 public:
 	var_t* var_win;

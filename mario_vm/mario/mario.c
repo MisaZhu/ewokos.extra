@@ -15,6 +15,7 @@ extern "C" {
 void* (*_malloc)(uint32_t size) = NULL;
 void  (*_free)(void* p) = NULL;
 void  (*_out_func)(const char*) = NULL;
+void  free_none(void* p) { }
 
 /**======memory functions======*/
 
