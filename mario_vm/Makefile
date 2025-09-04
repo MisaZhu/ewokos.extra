@@ -7,14 +7,14 @@ BUILD_DIR = $(SYS_DIR)/build/$(HW)
 MARIO_VM= .
 include $(MARIO_VM)/lang/js/lang.mk
 
-mario_OBJS = $(MARIO_VM)/mario/mario.o
+mario_OBJS = $(MARIO_VM)/mario/mario.o $(MARIO_VM)/mario/mbc/mbc.o $(MARIO_VM)/mario/mbc/dump.o
 platform_OBJS = $(MARIO_VM)/platform/platform.o \
 		$(MARIO_VM)/platform/mem.o
 
-lib_OBJS = bin/lib/mbc.o bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o
+lib_OBJS = bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o
 mvm_OBJS = bin/mario/main.o $(lib_OBJS)
 wjsvm_OBJS = bin/wjs/wjs.o bin/wjs/native_wjs.o $(lib_OBJS)
-bcasm_OBJS = bin/bcasm/main.o bin/bcasm/dump.o bin/lib/mbc.o bin/lib/js.o 
+bcasm_OBJS = bin/bcasm/main.o bin/lib/js.o 
 
 MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
 		$(NATIVE_OBJS)
