@@ -1,5 +1,5 @@
 #include "js.h"
-#include "mbc/mbc.h"
+#include "mbc.h"
 #include "platform.h"
 #include "mem.h"
 
