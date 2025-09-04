@@ -14,7 +14,7 @@ platform_OBJS = $(MARIO_VM)/platform/platform.o \
 lib_OBJS = bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o bin/lib/mbc.o
 mvm_OBJS = bin/mario/main.o $(lib_OBJS)
 wjsvm_OBJS = bin/wjs/wjs.o bin/wjs/native_wjs.o $(lib_OBJS)
-bcasm_OBJS = bin/bcasm/main.o bin/bcasm/dump.o bin/lib/mbc.o bin/lib/js.o
+bcasm_OBJS = bin/bcasm/main.o $(MARIO_VM)/mario/bcdump/bcdump.o bin/lib/mbc.o bin/lib/js.o
 
 MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
 		$(NATIVE_OBJS)

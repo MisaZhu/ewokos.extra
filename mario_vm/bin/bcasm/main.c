@@ -1,5 +1,6 @@
 #include "js.h"
 #include "mbc.h"
+#include "bcdump/bcdump.h"
 #include "platform.h"
 #include "mem.h"
 
@@ -48,7 +49,11 @@ int main(int argc, char** argv) {
 			}
 			
 			if(res) {
-				bc_dump_out(&vm->bc);
+				mstr_t* dump = bc_dump(&vm->bc);
+				if(dump != NULL) {
+					_out_func(dump->cstr);
+					mstr_free(dump);
+				}
 			}
 		}
 	}
