@@ -4,19 +4,16 @@ include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_DIR)/build/$(HW)
 
-MARIO_VM= .
-include $(MARIO_VM)/lang/js/lang.mk
+MARIO_VM = mario_vm
+MARIOX = .
+include $(MARIOX)/lang/js/lang.mk
 
 mario_OBJS = $(MARIO_VM)/mario/mario.o $(MARIO_VM)/mario/bcdump/bcdump.o
 platform_OBJS = $(MARIO_VM)/platform/platform.o \
 		$(MARIO_VM)/platform/mem.o
 
-lib_OBJS = bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o bin/lib/mbc.o
-mvm_OBJS = bin/mario/main.o $(lib_OBJS)
+lib_OBJS =  $(MARIO_VM)/bin/lib/mbc.o $(MARIO_VM)/bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o
 wjsvm_OBJS = bin/wjs/wjs.o bin/wjs/native_wjs.o $(lib_OBJS)
-
-MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
-		$(NATIVE_OBJS)
 
 WJS_OBJS = $(mario_OBJS) $(wjsvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
 		$(NATIVE_OBJS)
@@ -40,6 +37,7 @@ HEADS = \
 	-I$(NATIVE_PATH_GRAPH) \
 	-I$(NATIVE_PATH_X) \
 	-I$(MARIO_VM)/mario \
+	-I$(MARIOX)/bin/lib \
 	-I$(MARIO_VM)/bin/lib \
 	-I$(MARIO_VM)/platform
 
@@ -47,24 +45,10 @@ CFLAGS += $(HEADS)
 CXXFLAGS += $(HEADS)
 
 TARGET_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
-MARIO = $(TARGET_DIR)/mario
 WJS = $(TARGET_DIR)/wjs
 
-all: $(MARIO) $(WJS)
+all: $(WJS)
 	@echo "done"
-
-
-$(MARIO): $(MARIO_OBJS) \
-		$(EWOK_LIBC_A)  \
-		$(BUILD_DIR)/lib/libpng.a \
-		$(BUILD_DIR)/lib/libewokstl.a \
-		$(BUILD_DIR)/lib/libx++.a \
-		$(BUILD_DIR)/lib/libx.a \
-		$(BUILD_DIR)/lib/libfont.a \
-		$(BUILD_DIR)/lib/libwidget++.a \
-		$(BUILD_DIR)/lib/libcxx.a 
-	mkdir -p $(TARGET_DIR)
-	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 $(WJS): $(WJS_OBJS) \
 		$(EWOK_LIBC_A)  \
