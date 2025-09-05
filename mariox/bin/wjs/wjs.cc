@@ -22,7 +22,12 @@ extern "C" {
 #endif
 
 void reg_natives(vm_t* vm);
+void reg_native_wjs(vm_t* vm, void* arg);
 bool js_compile(bytecode_t *bc, const char* input);
+
+#ifdef __cplusplus /* __cplusplus */
+}
+#endif
 
 vm_t* init_js(void) {
 	platform_init();
@@ -50,12 +55,6 @@ void quit_js(vm_t* vm) {
 	vm_close(vm);
 	mem_quit();
 }
-
-void reg_native_wjs(vm_t* vm, void* arg);
-
-#ifdef __cplusplus /* __cplusplus */
-}
-#endif
 
 vm_t* _vm;
 

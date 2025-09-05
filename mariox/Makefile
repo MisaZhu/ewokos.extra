@@ -16,24 +16,28 @@ lib_OBJS =  $(MARIO_VM)/bin/lib/mbc.o $(MARIO_VM)/bin/lib/js.o bin/lib/vm_json_v
 wjsvm_OBJS = bin/wjs/wjs.o bin/wjs/native_wjs.o $(lib_OBJS)
 mvm_OBJS = $(MARIO_VM)/bin/mario/mario.o $(lib_OBJS)
 
-WJS_OBJS = $(mario_OBJS) $(wjsvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
+WJS_OBJS = $(mario_OBJS) $(platform_OBJS) $(wjsvm_OBJS) $(lang_OBJS) \
 		$(NATIVE_OBJS)
 
-MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
+MARIO_OBJS = $(mario_OBJS) $(platform_OBJS) $(mvm_OBJS) $(lang_OBJS) \
 		$(NATIVE_OBJS)
 
 ifneq ($(MARIO_DEBUG), no)
 CFLAGS += -g -DMARIO_DEBUG
+CXXFLAGS += -g -DMARIO_DEBUG
 else
 CFLAGS += -O2
+CXXFLAGS += -O2
 endif
 
 ifneq ($(MARIO_CACHE), no)
 CFLAGS += -DMARIO_CACHE
+CXXFLAGS += -DMARIO_CACHE
 endif
 
 ifneq ($(MARIO_THREAD), no)
 CFLAGS += -DMARIO_THREAD
+CXXFLAGS += -DMARIO_THREAD
 endif
 
 HEADS = \
