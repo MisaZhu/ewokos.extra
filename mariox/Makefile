@@ -14,8 +14,12 @@ platform_OBJS = $(MARIO_VM)/platform/platform.o \
 
 lib_OBJS =  $(MARIO_VM)/bin/lib/mbc.o $(MARIO_VM)/bin/lib/js.o bin/lib/vm_json_var.o bin/lib/native_UniObject.o
 wjsvm_OBJS = bin/wjs/wjs.o bin/wjs/native_wjs.o $(lib_OBJS)
+mvm_OBJS = $(MARIO_VM)/bin/mario/mario.o $(lib_OBJS)
 
 WJS_OBJS = $(mario_OBJS) $(wjsvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
+		$(NATIVE_OBJS)
+
+MARIO_OBJS = $(mario_OBJS) $(mvm_OBJS) $(lang_OBJS) $(platform_OBJS) \
 		$(NATIVE_OBJS)
 
 ifneq ($(MARIO_DEBUG), no)
@@ -46,9 +50,22 @@ CXXFLAGS += $(HEADS)
 
 TARGET_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
 WJS = $(TARGET_DIR)/wjs
+MARIO = $(TARGET_DIR)/mario
 
-all: $(WJS)
+all: $(MARIO) $(WJS)
 	@echo "done"
+
+$(MARIO): $(MARIO_OBJS) \
+		$(EWOK_LIBC_A)  \
+		$(BUILD_DIR)/lib/libpng.a \
+		$(BUILD_DIR)/lib/libewokstl.a \
+		$(BUILD_DIR)/lib/libx++.a \
+		$(BUILD_DIR)/lib/libx.a \
+		$(BUILD_DIR)/lib/libfont.a \
+		$(BUILD_DIR)/lib/libwidget++.a \
+		$(BUILD_DIR)/lib/libcxx.a 
+	mkdir -p $(TARGET_DIR)
+	$(LD) -Ttext=100 $(MARIO_OBJS) -o $(MARIO) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 $(WJS): $(WJS_OBJS) \
 		$(EWOK_LIBC_A)  \
