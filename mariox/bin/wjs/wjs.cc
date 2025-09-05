@@ -29,12 +29,26 @@ bool js_compile(bytecode_t *bc, const char* input);
 }
 #endif
 
+static inline var_t* vm_load_var(vm_t* vm, const char* name, bool create) {
+	node_t* n = vm_load_node(vm, name, create);
+	if(n != NULL)
+		return n->var;
+	return NULL;
+}
+
+static inline void vm_load_basic_classes(vm_t* vm) {
+	vm->var_String = vm_load_var(vm, "String", false);
+	vm->var_Array = vm_load_var(vm, "Array", false);
+	vm->var_Number = vm_load_var(vm, "Number", false);
+}
+
 vm_t* init_js(void) {
 	platform_init();
 	mem_init();
 	vm_t* vm = vm_new(js_compile);
 	vm->gc_buffer_size = 1024;
 	vm_init(vm, reg_natives, NULL);
+	vm_load_basic_classes(vm);
 	return vm;
 }
 
@@ -130,6 +144,7 @@ static bool loadWJS(const string& wjs_fname, string& layout_fname, string& js_fn
     json_var_unref(conf_var);
     return true;
 }
+
 
 int main(int argc, char** argv) {
 	int argind = doargs(argc, argv);
