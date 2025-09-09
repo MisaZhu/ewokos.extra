@@ -84,5 +84,5 @@ $(WJS): $(WJS_OBJS) \
 	$(LD) -Ttext=100 $(WJS_OBJS) -o $(WJS) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 clean:
-	rm -fr $(MARIO) $(BCASM)
-	rm -fr $(MARIO_OBJS) $(BCASM_OBJS)
+	rm -fr $(MARIO) $(WJS)
+	rm -fr $(MARIO_OBJS) $(WJS_OBJS)
