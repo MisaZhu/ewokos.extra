@@ -25,10 +25,6 @@ void reg_natives(vm_t* vm);
 void reg_native_wjs(vm_t* vm, void* arg);
 bool js_compile(bytecode_t *bc, const char* input);
 
-#ifdef __cplusplus /* __cplusplus */
-}
-#endif
-
 static inline var_t* vm_load_var(vm_t* vm, const char* name, bool create) {
 	node_t* n = vm_load_node(vm, name, create);
 	if(n != NULL)
@@ -69,6 +65,10 @@ void quit_js(vm_t* vm) {
 	vm_close(vm);
 	mem_quit();
 }
+
+#ifdef __cplusplus /* __cplusplus */
+}
+#endif
 
 vm_t* _vm;
 
