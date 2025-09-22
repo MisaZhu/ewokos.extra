@@ -381,7 +381,7 @@ int main(int argc, char *argv[])
 	x.getScreenInfo(scr, 0);
 
 	scale = 1.0;
-#ifdef NEON_BOOST
+#ifdef BSP_BOOST
 	if(scr.size.h > 240)
 		scale = scr.size.h / 240.0;
 #endif
