@@ -121,6 +121,10 @@ void InfoNES_ReleaseRom(){
 
 static float scale = 1.0;
 void graph_scale_fix_center(graph_t *src, graph_t *dst){
+	if(dst->h < dst->w)
+		scale = (float)dst->h / (float)src->h;
+	else
+		scale = (float)dst->w / (float)src->w;
 	static int dstW,dstH;
 	static int sx;
 	static int sy; 
@@ -337,6 +341,7 @@ protected:
 	void onRepaint(graph_t* g) {
 		static int framecnt= 0;
 		screen = g;
+		graph_clear(g, 0xff000000);
 		InfoNES_Cycle();
 		//printf("wait\n");
 	}
@@ -381,13 +386,15 @@ int main(int argc, char *argv[])
 	x.getScreenInfo(scr, 0);
 
 	scale = 1.0;
+	/*
 #ifdef BSP_BOOST
 	if(scr.size.h > 240)
 		scale = scr.size.h / 240.0;
 #endif
+*/
 
-	emu.open(&x, 0, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL | XWIN_STATE_FULL_SCREEN);
-	emu.max();
+	emu.open(&x, 0, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
+	//emu.max();
 	/*_xwin = &emu;
 	uint32_t tid = timer_set(10000, loop);
 	x.run(NULL, &emu);
