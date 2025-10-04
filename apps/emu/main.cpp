@@ -363,7 +363,7 @@ static void loop(void) {
 
 int main(int argc, char *argv[])
 {
-	const char* path;
+	string path;
 	NesEmu emu;
 
 	/*init window*/
@@ -376,9 +376,9 @@ int main(int argc, char *argv[])
 			path = argv[1];
 	}
 
-	printf("load game: %s\n", path);
-	if(emu.loadGame((char*)path) != true){
-			printf("Error load rom file:%s\n", argv[1]);
+	printf("load game: %s\n", path.c_str());
+	if(emu.loadGame((char*)path.c_str()) != true){
+			printf("Error load rom file:%s\n", path.c_str());
 			return -1;
 	}
 

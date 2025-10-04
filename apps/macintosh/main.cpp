@@ -213,8 +213,8 @@ void env_init(void){
 	mkdir("/tmp/run");
     //char* path = (char*)X::getResName("hd1.img");
 	//copyfile(path, "/tmp/run/hd1.img");
-	char *path =  (char*)X::getResName("mac-plus-pram.dat");
-	copyfile(path, "/tmp/run/mac-plus-pram.dat");
+	string path =  X::getResName("mac-plus-pram.dat");
+	copyfile(path.c_str(), "/tmp/run/mac-plus-pram.dat");
 //	copyfile("/apps/macplus/res/rom/mac-plus.rom", "/tmp/res/rom/mac-plus.rom");
 //	copyfile("/apps/macplus/res/rom/macplus-pcex.rom", "/tmp/res/rom/macplus-pcex.rom");
 //	copyfile("/apps/macplus/res/fd2.image", "/tmp/res/fd2.image");
@@ -224,7 +224,7 @@ void env_init(void){
 
 void* emu_thread(void* param){
 	env_init();
-	return emu_main((char*)X::getResName("mac-plus.cfg"));
+	return emu_main(X::getResName("mac-plus.cfg").c_str());
 }
 
 int main(int argc, char *argv[])

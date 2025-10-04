@@ -3,12 +3,6 @@
 
 #define WIN_TITLE "Tetris"
 
-#ifdef __ENSCRIPTEN__
-#define FONT_PATH "font.ttf"
-#else
-#define FONT_PATH x_get_res_name("font.ttf")
-#endif
-
 #define SCORE_SIZE 7
 #define LEVEL_SIZE 3
 
@@ -31,6 +25,8 @@ static int init_fonts() {
     return -1;
   };
 
+  char FONT_PATH[256+1];
+  x_get_res_name("font.ttf", FONT_PATH, 256);
 
   font_small = TTF_OpenFont(FONT_PATH, 10);
   if (!font_small) {

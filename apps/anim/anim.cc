@@ -30,7 +30,7 @@ public:
 		fps = 0;
 		fps_counter = 0;
 		fighter_step = 0;
-		img_fighter = png_image_new(X::getResName("data/fighter.png"));
+		img_fighter = png_image_new(X::getResName("data/fighter.png").c_str());
 	}
 	
 	inline ~TestX() {
