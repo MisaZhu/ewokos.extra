@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
 	}
 
 	if(wsj_fname[0] == 0) {
-		klog("Usage: %s <xxxx.wjs>\n", argv[0]);
+		slog("Usage: %s <xxxx.wjs>\n", argv[0]);
 		return -1;
 	}
 
