@@ -92,17 +92,12 @@ int main(int argc, char* argv[]) {
 	(void)argv;
 	X x;
 
-	int displayNum = x_get_display_num();
-	if(displayNum == 0)
-		return -1;
-
 	TestX xwin;
 	int32_t w, h;
 	xwin.getSize(w, h);
 	xwin.open(&x, 0, -1, -1, w, h,
 			"anim", XWIN_STYLE_NO_FRAME);
 
-	xwin.setDisplay(displayNum-1);
 	xwin.setAlpha(true);
 	x.run(loop, &xwin);
 	return 0;
