@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
 
 	X x;
 
-	emu.open(&x, 0, -1, -1, 512, 342, "Macintosh", XWIN_STYLE_NO_RESIZE);
+	emu.open(&x, -1, -1, -1, 512, 342, "Macintosh", XWIN_STYLE_NO_RESIZE);
 	//emu.fullscreen();
 
 	pthread_t tid;

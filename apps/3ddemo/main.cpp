@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 
 	X x;
 	x.getScreenInfo(scr, 0);
-	demo.open(&x, 0, -1, -1, 0, 0, "Demo", XWIN_STYLE_NORMAL);
+	demo.open(&x, -1, -1, -1, 0, 0, "Demo", XWIN_STYLE_NORMAL);
 	x.run(loop, &demo);
 
     return 0;

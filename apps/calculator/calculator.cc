@@ -474,7 +474,7 @@ int main(int argc, char** argv) {
     Calculator* calculator = new Calculator();
     root->add(calculator);
     
-    win.open(&x, 0, -1, -1, 300, 400, "Calculator", XWIN_STYLE_NORMAL);
+    win.open(&x, -1, -1, -1, 300, 400, "Calculator", XWIN_STYLE_NORMAL);
     win.setTimer(60);
     
     widgetXRun(&x, &win);

@@ -276,7 +276,7 @@ int main(int argc, char* argv[]) {
 
     X x;
     SnakeGame snakeGame;
-    snakeGame.open(&x, 0, -1, -1, 0, 0, "Snake Game", XWIN_STYLE_NORMAL);
+    snakeGame.open(&x, -1, -1, -1, 0, 0, "Snake Game", XWIN_STYLE_NORMAL);
     snakeGame.start();
     x.run(loop, &snakeGame);
     return 0;

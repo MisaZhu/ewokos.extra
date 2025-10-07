@@ -393,7 +393,7 @@ int main(int argc, char *argv[])
 #endif
 */
 
-	emu.open(&x, 0, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
+	emu.open(&x, -1, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
 	//emu.max();
 	/*_xwin = &emu;
 	uint32_t tid = timer_set(10000, loop);

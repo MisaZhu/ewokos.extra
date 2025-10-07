@@ -183,7 +183,7 @@ int main(int argc, char** argv) {
 
     int windowWidth = (BOARD_SIZE + 1) * CELL_SIZE;
     int windowHeight = (BOARD_SIZE + 1) * CELL_SIZE;
-    win.open(&x, 0, -1, -1, windowWidth, windowHeight, "Gobang Game", XWIN_STYLE_NORMAL);
+    win.open(&x, -1, -1, -1, windowWidth, windowHeight, "Gobang Game", XWIN_STYLE_NORMAL);
     win.setTimer(60);
 
     widgetXRun(&x, &win);    

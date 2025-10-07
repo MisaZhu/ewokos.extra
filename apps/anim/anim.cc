@@ -95,7 +95,7 @@ int main(int argc, char* argv[]) {
 	TestX xwin;
 	int32_t w, h;
 	xwin.getSize(w, h);
-	xwin.open(&x, 0, -1, -1, w, h,
+	xwin.open(&x, -1, -1, -1, w, h,
 			"anim", XWIN_STYLE_NO_FRAME);
 
 	xwin.setAlpha(true);

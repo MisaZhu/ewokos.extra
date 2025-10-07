@@ -98,7 +98,7 @@ int main(int argc, char** argv) {
     Mandelbrot* mandelbrot = new Mandelbrot();
     root->add(mandelbrot);
 
-    win.open(&x, 0, -1, -1, 300, 200, "Mandelbrot Set", XWIN_STYLE_NORMAL);
+    win.open(&x, -1, -1, -1, 300, 200, "Mandelbrot Set", XWIN_STYLE_NORMAL);
     widgetXRun(&x, &win);    
     return 0;
 }
