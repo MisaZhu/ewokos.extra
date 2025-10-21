@@ -12,6 +12,7 @@ all:
 	cd mandelbrot; make
 	cd Fireworks; make
 	cd calculator; make
+	cd clock; make
 
 clean: 
 	cd anim; make clean
@@ -26,3 +27,4 @@ clean:
 	cd mandelbrot; make clean
 	cd Fireworks; make clean
 	cd calculator; make clean
+	cd clock; make clean
