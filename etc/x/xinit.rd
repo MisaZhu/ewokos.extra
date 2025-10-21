@@ -9,5 +9,5 @@
 #@export XTHEME=opencde
 #@/bin/ipcserv /sbin/x/xwm_opencde
 
-#@/bin/x/statusbar &
+@/bin/x/statusbar &
 @/bin/x/xlauncher &
