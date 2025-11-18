@@ -26,7 +26,6 @@
 #include <ewoksys/basic_math.h>
 #include <ewoksys/klog.h>
 #include <x++/X.h>
-#include <ferox.h>
 
 #include "src/engine.h"
 
