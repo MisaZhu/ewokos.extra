@@ -9,6 +9,7 @@
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/basic_math.h>
 #include <openlibm.h>
+#include <time.h>
 
 using namespace Ewok;
 
@@ -94,6 +95,9 @@ T myMin(T a, T b) {
 class FireworksWidget : public Widget {
     StaticArray<Firework, MAX_FIREWORKS> fireworks;
     StaticArray<Particle, MAX_PARTICLES> particles;
+    char dateTimeStr[32];
+    uint32_t xOffset = 0;
+    uint32_t yOffset = 0;
 
     // 生成随机颜色
     uint32_t randomColor() {
@@ -108,11 +112,28 @@ class FireworksWidget : public Widget {
         fireworks.push_back(Firework(x, area.h, vy, color));
     }
 
+    void drawDateTime(graph_t* g, XTheme* theme, const grect_t& r) {
+        uint32_t fontSize = 42;
+        if(fontSize > (r.w / 24))
+            fontSize = r.w / 24;
+        
+        xOffset  %= (r.w - fontSize*strlen(dateTimeStr));
+        yOffset  %= (r.h - fontSize*2);
+
+        graph_draw_text_font(g, r.x+1+xOffset, r.y+1+yOffset,
+                    dateTimeStr, theme->getFont(), fontSize, 0xff222222);
+        graph_draw_text_font(g, r.x+xOffset, r.y+yOffset,
+                    dateTimeStr, theme->getFont(), fontSize, 0xffdddddd);
+    }
+
 protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         // 清空背景
         graph_fill(g, r.x, r.y, r.w, r.h, 0xff000000);
-    
+        
+        // 绘制日期时间
+        drawDateTime(g, theme, r);
+
         // 更新并绘制烟花
         for (int i = 0; i < fireworks.getSize();) {
             fireworks[i].y += fireworks[i].vy;
@@ -200,10 +221,33 @@ protected:
     }
 
     void onTimer(uint32_t timerFPS, uint32_t timerStep) {
-        if (timerStep % (timerFPS/1) == 0) {
+        if (timerStep % (timerFPS) == 0) {
             launchFirework();
+
+            struct tm time_info;
+            proto_t out;
+            PF->init(&out);
+            if(dev_cntl("/dev/localtime", 0, NULL, &out) == 0) {
+                int res = proto_read_int(&out);
+                if(res == 0) {
+                    proto_read_to(&out, &time_info, sizeof(time_info));
+                    strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &time_info);
+                }
+                PF->clear(&out);
+                if (timerStep % (timerFPS*3) == 0) {
+                    xOffset = rand();
+                    yOffset = rand();
+                }
+            }
         }
         update();
+    }
+
+    bool onMouse(xevent_t* ev) {
+        if (ev->state == MOUSE_STATE_CLICK) {
+            getWin()->close();
+        }
+        return true;
     }
 
 public:
@@ -222,7 +266,9 @@ int main(int argc, char** argv) {
     FireworksWidget* fireworks = new FireworksWidget();
     root->add(fireworks);
 
-    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
+    //win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
+    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NO_TITLE);
+    win.max();
     win.setTimer(30);
 
     widgetXRun(&x, &win);
