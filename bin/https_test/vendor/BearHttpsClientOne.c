@@ -20257,8 +20257,6 @@ typedef struct BearHttpsRequest{
     bool route_owner;
     int max_redirections;
     const char *custom_bear_dns;
-    const  char **known_ips;
-    int known_ips_size;
     short http_protocol; 
    BearHttpsClientDnsProvider  *dns_providers;
     int total_dns_providers;
@@ -20419,7 +20417,6 @@ typedef struct BearHttpsRequestNamespace{
     BearHttpsRequest * (*newBearHttpsRequest_with_url_ownership_config)(char *url,short url_ownership_mode);
     BearHttpsRequest * (*newBearHttpsRequest)(const char *url);
     BearHttpsRequest * (*newBearHttpsRequest_fmt)(const char *url,...);
-    void (*set_known_ips)(BearHttpsRequest *self ,const char *known_ips[],int known_ips_size);
     void (*set_url_with_ownership_config)(BearHttpsRequest *self , char *url,short url_ownership_mode);
     void (*set_url)(BearHttpsRequest *self ,const char *url);
     void (*add_header_with_ownership_config)(BearHttpsRequest *self ,char *key,short key_ownership_mode,char *value,short value_owner);
@@ -20666,9 +20663,6 @@ BearHttpsNamespace newBearHttpsNamespace();
 
 
 BearHttpsRequest * newBearHttpsRequest_with_url_ownership_config(char *url,short url_ownership_mode);
-
-void BearHttpsRequest_set_known_ips(BearHttpsRequest *self , const char *known_ips[],int known_ips_size);
-
 
 void BearHttpsRequest_set_max_redirections(BearHttpsRequest *self ,int max_redirections);
 
@@ -93919,7 +93913,6 @@ BearHttpsRequestNamespace newBearHttpsRequestNamespace(){
     self.newBearHttpsRequest_fmt = newBearHttpsRequest_fmt;
     self.set_url_with_ownership_config = BearHttpsRequest_set_url_with_ownership_config;
     self.set_url = BearHttpsRequest_set_url;
-    self.set_known_ips = BearHttpsRequest_set_known_ips;
     self.add_header_with_ownership_config = BearHttpsRequest_add_header_with_ownership_config;
     self.add_header = BearHttpsRequest_add_header;
     self.add_header_fmt =BearHttpsRequest_add_header_fmt;
@@ -93977,21 +93970,10 @@ BearHttpsResponseNamespace newBearHttpsResponseNamespace(){
 
 #if  (!defined(BEARSSL_USSE_GET_ADDRINFO) && !defined(BEARSSL_HTTPS_MOCK_CJSON))
 static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsResponse *response, const char *host, int port){
-    
-
     if(strcmp(host,"localhost")==0){
         return private_BearHttpsRequest_connect_ipv4(response,"0.0.0.0",port,self->connection_timeout);
     }
-    for(int i = 0; i < self->known_ips_size;i++){
-        const char *ip = self->known_ips[i];
-        int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip,port,self->connection_timeout);
-        if(sockfd < 0){
-            continue;
-        }
 
-        return sockfd;
-    }
-    
     for(int i = 0; i < BEARSSL_DNS_CACHE_SIZE;i++){
         privateBearHttpsDnsCache *cache = &privateBearHttpsDnsCache_itens[i];
 
@@ -94588,12 +94570,6 @@ BearHttpsRequest * newBearHttpsRequest_with_url_ownership_config(char *url,short
     private_BearsslHttps_strcpy(self->method,"GET");
     return self;
 }
-
-void BearHttpsRequest_set_known_ips(BearHttpsRequest *self , const char *known_ips[],int known_ips_size){
-    self->known_ips = known_ips;
-    self->known_ips_size = known_ips_size;
-}
-
 
 void BearHttpsRequest_set_max_redirections(BearHttpsRequest *self ,int max_redirections){
     self->max_redirections = max_redirections;

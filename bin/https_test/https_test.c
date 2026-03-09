@@ -84,14 +84,6 @@ static int ewok_https_validation_time(uint32_t *days, uint32_t *seconds);
 
 static uint64_t ewok_https_entropy_state = 0;
 
-in_addr_t inet_addr(const char *cp) {
-	struct in_addr addr;
-	if (inet_pton(AF_INET, cp, &addr) != 1) {
-		return INADDR_NONE;
-	}
-	return addr.s_un.s_addr;
-}
-
 static uint64_t ewok_https_entropy_word(void) {
 	uint64_t usec = 0;
 	uint64_t mix;
@@ -303,14 +295,13 @@ static void print_preview(const char *body, int body_size) {
 }
 
 static void print_usage(const char *prog) {
-	printf("usage: %s <https-url> <ipv4> [timeout_ms]\n", prog);
-	printf("example: %s https://dns.google/resolve?name=example.com&type=A 8.8.8.8 5000\n", prog);
+	printf("usage: %s <https-url> [timeout_ms]\n", prog);
+	printf("example: %s https://dns.google/resolve?name=example.com&type=A 5000\n", prog);
 	printf("note: Ewok has no usable DNS yet, so keep the HTTPS host in the URL and pass its IPv4 separately.\n");
 }
 
 int main(int argc, char **argv) {
 	const char *url;
-	const char *known_ips[1];
 	const char *body;
 	const char *content_type;
 	BearHttpsRequest *request;
@@ -319,14 +310,13 @@ int main(int argc, char **argv) {
 	int status;
 	int body_size;
 
-	if (argc < 3) {
+	if (argc < 2) {
 		print_usage(argv[0]);
 		return 1;
 	}
 
 	url = argv[1];
-	known_ips[0] = argv[2];
-	if (argc > 3) {
+	if (argc > 2) {
 		timeout_ms = parse_timeout_ms(argv[3]);
 	}
 
@@ -342,11 +332,11 @@ int main(int argc, char **argv) {
 	}
 
 	request->connection_timeout = timeout_ms;
-	BearHttpsRequest_set_known_ips(request, known_ips, 1);
+	//BearHttpsRequest_set_known_ips(request, known_ips, 1);
 	BearHttpsRequest_set_max_redirections(request, 0);
 	BearHttpsRequest_add_header(request, "User-Agent", "ewokos-https-test/1");
 
-	printf("requesting %s via %s (timeout=%dms)\n", url, known_ips[0], timeout_ms);
+	printf("requesting %s (timeout=%dms)\n", url, timeout_ms);
 	response = BearHttpsRequest_fetch(request);
 	if (response == NULL) {
 		printf("error: fetch returned null response\n");
