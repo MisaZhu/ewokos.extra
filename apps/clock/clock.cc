@@ -9,9 +9,9 @@
 using namespace Ewok;
 
 class CircularClock : public Widget {
-    uint32_t sec;
-    uint32_t min;
-    uint32_t hour;
+    uint32_t sec, sec_init;
+    uint32_t min, min_init;
+    uint32_t hour, hour_init;
 
     // 绘制时钟刻度
     void drawClockTicks(graph_t* g, XTheme* theme, const grect_t& r) {
@@ -102,10 +102,10 @@ protected:
     void onTimer(uint32_t timerFPS, uint32_t timerStep) {
         uint32_t ksec;
         kernel_tic(&ksec, NULL);
-        min = ksec / 60;
-        hour = min / 60;
+        min = min_init + (ksec / 60);
+        hour = hour_init + (min / 60);
         min = min % 60;
-        sec = ksec % 60;
+        sec = sec_init + (ksec % 60);
         update();
     }
 
@@ -114,6 +114,9 @@ public:
         sec = 0;
         min = 0;
         hour = 0;
+        sec_init = 0;
+        min_init = 0;
+        hour_init = 0;
     }
 
     void updateTime() {
@@ -122,9 +125,9 @@ public:
         if (time_info == NULL) {
             return;
         }
-        hour = time_info->tm_hour;
-        min = time_info->tm_min;
-        sec = time_info->tm_sec;
+        hour_init = time_info->tm_hour;
+        min_init = time_info->tm_min;
+        sec_init = time_info->tm_sec;
     }
 };
 
@@ -158,7 +161,7 @@ int main(int argc, char** argv) {
     CircularClock* clock = new CircularClock();
     root->add(clock);
 
-    win.open(&x, -1, -1, -1, 0, 0, "Circular Clock", XWIN_STYLE_NO_FRAME);
+    win.open(&x, -1, -1, -1, 240, 240, "Circular Clock", XWIN_STYLE_NO_FRAME);
     clock->updateTime();
     win.setTimer(1);
     win.setAlpha(true);
