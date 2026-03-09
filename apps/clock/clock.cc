@@ -11,8 +11,8 @@ using namespace Ewok;
 
 class CircularClock : public Widget {
     uint32_t sec, sec_init, ksec_start;
-    uint32_t min, min_init;
-    uint32_t hour, hour_init;
+    uint32_t min;
+    uint32_t hour;
     bool time_inited;
 
     // 绘制时钟刻度
@@ -111,12 +111,12 @@ protected:
 
         uint32_t ksec;
         kernel_tic(&ksec, NULL);
-        ksec = ksec - ksec_start;
+        ksec = ksec - ksec_start + sec_init;
 
-        min = min_init + (ksec / 60);
-        hour = hour_init + (min / 60);
+        min = (ksec / 60);
+        hour = (min / 60);
         min = min % 60;
-        sec = sec_init + (ksec % 60);
+        sec = ksec % 60;
         update();
     }
 
@@ -133,9 +133,7 @@ protected:
         if(res != 0)
             return;
         
-        hour_init = time_info.tm_hour;
-        min_init = time_info.tm_min;
-        sec_init = time_info.tm_sec;
+        sec_init = time_info.tm_hour*3600 + time_info.tm_min*60 + time_info.tm_sec;
         time_inited = true;
     }
 public:
@@ -144,8 +142,6 @@ public:
         min = 0;
         hour = 0;
         sec_init = 0;
-        min_init = 0;
-        hour_init = 0;
         time_inited = false;
     }
 };
