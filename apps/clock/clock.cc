@@ -4,14 +4,16 @@
 #include <unistd.h>
 #include <ewoksys/kernel_tic.h>
 #include <openlibm.h>
-#include <ntpc/ntpc.h>
+#include <ewoksys/vdevice.h>
+#include <time.h>
 
 using namespace Ewok;
 
 class CircularClock : public Widget {
-    uint32_t sec, sec_init;
+    uint32_t sec, sec_init, ksec_start;
     uint32_t min, min_init;
     uint32_t hour, hour_init;
+    bool time_inited;
 
     // 绘制时钟刻度
     void drawClockTicks(graph_t* g, XTheme* theme, const grect_t& r) {
@@ -100,8 +102,17 @@ protected:
     }
 
     void onTimer(uint32_t timerFPS, uint32_t timerStep) {
+        if(!time_inited) {
+            updateTime();
+            if(!time_inited)
+                return;
+            kernel_tic(&ksec_start, NULL);
+        }
+
         uint32_t ksec;
         kernel_tic(&ksec, NULL);
+        ksec = ksec - ksec_start;
+
         min = min_init + (ksec / 60);
         hour = hour_init + (min / 60);
         min = min % 60;
@@ -109,6 +120,24 @@ protected:
         update();
     }
 
+    void updateTime() {
+        struct tm time_info;
+        proto_t out;
+        PF->init(&out);
+        if(dev_cntl("/dev/localtime", 0, NULL, &out) != 0)
+            return;
+        int res = proto_read_int(&out);
+        if(res == 0)
+            proto_read_to(&out, &time_info, sizeof(time_info));
+        PF->clear(&out);
+        if(res != 0)
+            return;
+        
+        hour_init = time_info.tm_hour;
+        min_init = time_info.tm_min;
+        sec_init = time_info.tm_sec;
+        time_inited = true;
+    }
 public:
     CircularClock() {
         sec = 0;
@@ -117,17 +146,7 @@ public:
         sec_init = 0;
         min_init = 0;
         hour_init = 0;
-    }
-
-    void updateTime() {
-        time_t current_time = ntpc_get_time(DEFAULT_NTP_SERVER, DEFAULT_NTP_PORT);
-        struct tm* time_info = localtime(&current_time);
-        if (time_info == NULL) {
-            return;
-        }
-        hour_init = time_info->tm_hour;
-        min_init = time_info->tm_min;
-        sec_init = time_info->tm_sec;
+        time_inited = false;
     }
 };
 
@@ -162,7 +181,6 @@ int main(int argc, char** argv) {
     root->add(clock);
 
     win.open(&x, -1, -1, -1, 240, 240, "Circular Clock", XWIN_STYLE_NO_FRAME);
-    clock->updateTime();
     win.setTimer(1);
     win.setAlpha(true);
     widgetXRun(&x, &win);
