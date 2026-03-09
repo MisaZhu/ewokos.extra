@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <ewoksys/kernel_tic.h>
 #include <openlibm.h>
+#include <ntpc/ntpc.h>
 
 using namespace Ewok;
 
@@ -114,6 +115,17 @@ public:
         min = 0;
         hour = 0;
     }
+
+    void updateTime() {
+        time_t current_time = ntpc_get_time(DEFAULT_NTP_SERVER, DEFAULT_NTP_PORT);
+        struct tm* time_info = localtime(&current_time);
+        if (time_info == NULL) {
+            return;
+        }
+        hour = time_info->tm_hour;
+        min = time_info->tm_min;
+        sec = time_info->tm_sec;
+    }
 };
 
 class CircularClockWin : public WidgetWin {
@@ -147,6 +159,7 @@ int main(int argc, char** argv) {
     root->add(clock);
 
     win.open(&x, -1, -1, -1, 0, 0, "Circular Clock", XWIN_STYLE_NO_FRAME);
+    clock->updateTime();
     win.setTimer(1);
     win.setAlpha(true);
     widgetXRun(&x, &win);
