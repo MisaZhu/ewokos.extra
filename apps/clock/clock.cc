@@ -10,10 +10,9 @@
 using namespace Ewok;
 
 class CircularClock : public Widget {
-    uint32_t sec, sec_init, ksec_start;
+    uint32_t sec;
     uint32_t min;
     uint32_t hour;
-    bool time_inited;
 
     // 绘制时钟刻度
     void drawClockTicks(graph_t* g, XTheme* theme, const grect_t& r) {
@@ -101,18 +100,37 @@ protected:
         drawHands(g, theme, r);
     }
 
+
+    uint32_t updateTime() {
+		static uint32_t sec_init = 0 , ksec_start = 0;
+		uint32_t curr_sec;
+        kernel_tic(&curr_sec, NULL);
+		uint32_t sec_offset = curr_sec - ksec_start;
+
+        if(sec_init == 0 || sec_offset >= 3600) {
+			struct tm time_info;
+			proto_t out;
+			PF->init(&out);
+			if(dev_cntl("/dev/localtime", 0, NULL, &out) == 0) {
+				int res = proto_read_int(&out);
+				if(res == 0) {
+					proto_read_to(&out, &time_info, sizeof(time_info));
+					sec_init = time_info.tm_hour * 3600 + time_info.tm_min * 60 + time_info.tm_sec;
+					kernel_tic(&ksec_start, NULL);
+                    sec_offset = 0;
+				}
+				PF->clear(&out);
+			}
+		}
+        if(sec_init == 0)
+            return 0;
+        return sec_offset + sec_init;
+    }
+
     void onTimer(uint32_t timerFPS, uint32_t timerStep) {
-        if(!time_inited) {
-            updateTime();
-            if(!time_inited)
-                return;
-            kernel_tic(&ksec_start, NULL);
-        }
-
-        uint32_t ksec;
-        kernel_tic(&ksec, NULL);
-        ksec = ksec - ksec_start + sec_init;
-
+        uint32_t ksec = updateTime();
+        if(ksec == 0)
+            return;
         min = (ksec / 60);
         hour = (min / 60);
         min = min % 60;
@@ -120,29 +138,11 @@ protected:
         update();
     }
 
-    void updateTime() {
-        struct tm time_info;
-        proto_t out;
-        PF->init(&out);
-        if(dev_cntl("/dev/localtime", 0, NULL, &out) != 0)
-            return;
-        int res = proto_read_int(&out);
-        if(res == 0)
-            proto_read_to(&out, &time_info, sizeof(time_info));
-        PF->clear(&out);
-        if(res != 0)
-            return;
-        
-        sec_init = time_info.tm_hour*3600 + time_info.tm_min*60 + time_info.tm_sec;
-        time_inited = true;
-    }
 public:
     CircularClock() {
         sec = 0;
         min = 0;
         hour = 0;
-        sec_init = 0;
-        time_inited = false;
     }
 };
 
