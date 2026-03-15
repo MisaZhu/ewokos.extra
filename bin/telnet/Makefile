@@ -1,8 +1,8 @@
 SW_ROOT_DIR=../..
 include $(SW_ROOT_DIR)/make.inc
 
-TASK = echo_test
-TASK_OBJS = echo_test.o
+TASK = telnet 
+TASK_OBJS = telnet.o
 BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/bin
 
 all: $(TASK)
