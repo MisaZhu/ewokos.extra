@@ -154,6 +154,11 @@ int main(int argc, char *argv[]) {
         n = read(STDIN_FILENO, buf, BUFFER_SIZE - 1);
         if (n > 0) {
             buf[n] = '\0';
+            for(int i = 0; i < n; i++) {
+                if(buf[i] == '\n') {
+                    buf[i] = '\r';
+                }
+            }
             // 特殊字符处理
             /*
             if (c == 0x1D) { // Ctrl+]
@@ -177,11 +182,12 @@ int main(int argc, char *argv[]) {
                 break;
             }
         } 
-        else if(errno != EAGAIN){
+        /*else if(errno != EAGAIN){
             printf("\nEOF received. Exiting...\n");
             _ended = true;
             break;
         }
+        */
         usleep(10000);
     }
     // 关闭连接
