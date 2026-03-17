@@ -95014,9 +95014,6 @@ const unsigned char *BearHttpsResponse_read_body(BearHttpsResponse *self) {
     unsigned char *buffer = self->body;
     long total_readded = 0;
     while (true) {
-      
-
-        
         if ((total_readded + self->body_chunk_size + 2) > body_allocated) {
             
             while(body_allocated < (total_readded+ self->body_chunk_size + 2)) {
@@ -95039,13 +95036,14 @@ const unsigned char *BearHttpsResponse_read_body(BearHttpsResponse *self) {
     
         // Lê usando a função chunck
         int readded  = BearHttpsResponse_read_body_chunck(self, buffer, self->body_chunk_size);
+
         if(readded > 0){
+			buffer[readded] = 0;
             buffer += readded;
             total_readded += readded;
             continue;
         }        
         break;
-        
     }
 
     self->body_size = self->body_readded_size;
@@ -95241,8 +95239,8 @@ void private_BearHttpsResponse_parse_headers(BearHttpsResponse *self,int headers
             self->body_read_mode = PRIVATE_BEARSSL_BY_CHUNKED;
         }
     }
-
 }
+
 void private_BearHttpsResponse_read_til_end_of_headers_or_reach_limit(
     BearHttpsResponse *self,
     int chunk_size,

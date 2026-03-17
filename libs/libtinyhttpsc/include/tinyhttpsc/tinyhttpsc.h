@@ -20,6 +20,7 @@ int HttpsResponseGetErrorCode(TinyHttpsResponse* response);
 int HttpsResponseGetStatusCode(TinyHttpsResponse* response);
 int HttpsResponseGetBodySize(TinyHttpsResponse* response);
 const char* HttpsResponseGetHeaderValueByKey(TinyHttpsResponse* response, const char* key);
-char* HttpsResponseReadBodyStr(TinyHttpsResponse* response);  
+const char* HttpsResponseReadBody(TinyHttpsResponse* response, int* size);
+const char* HttpsResponseReadBodyStr(TinyHttpsResponse* response, int* size);  
 
 #endif

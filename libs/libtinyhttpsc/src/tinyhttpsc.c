@@ -42,6 +42,17 @@ int HttpsResponseGetBodySize(TinyHttpsResponse* response) {
 const char* HttpsResponseGetHeaderValueByKey(TinyHttpsResponse* response, const char* key) {
 	return BearHttpsResponse_get_header_value_by_sanitized_key(response, key);
 }
-char* HttpsResponseReadBodyStr(TinyHttpsResponse* response) {
-	return BearHttpsResponse_read_body_str(response);
+
+const char* HttpsResponseReadBody(TinyHttpsResponse* response, int* size) {
+	const char* ret = BearHttpsResponse_read_body(response);
+	if(size != NULL)
+		*size = BearHttpsResponse_get_body_size(response);
+	return ret;
+}
+
+const char* HttpsResponseReadBodyStr(TinyHttpsResponse* response, int* size) {
+	const char* ret = BearHttpsResponse_read_body_str(response);
+	if(size != NULL)
+		*size = BearHttpsResponse_get_body_size(response);
+	return ret;
 }

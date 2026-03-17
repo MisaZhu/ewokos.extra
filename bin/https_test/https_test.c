@@ -26,14 +26,13 @@ static int parse_timeout_ms(const char *value) {
 	return timeout > 0 ? timeout : 5000;
 }
 
-#define EWOK_HTTPS_PREVIEW_LIMIT 512
-static void print_preview(const char *body, int body_size) {
-	int limit = body_size;
-	if (limit > EWOK_HTTPS_PREVIEW_LIMIT) {
-		limit = EWOK_HTTPS_PREVIEW_LIMIT;
-	}
+#define EWOK_HTTPS_PREVIEW_LIMIT -1
 
-	printf("body_preview(%d bytes):\n", limit);
+static void print_preview(const char *body, int body_size) {
+	int limit = EWOK_HTTPS_PREVIEW_LIMIT;
+	if(limit < 0 || limit > body_size)
+		limit = body_size;
+
 	for (int i = 0; i < limit; ++i) {
 		unsigned char ch = (unsigned char)body[i];
 		if (ch == '\n' || ch == '\r' || ch == '\t' || (ch >= 32 && ch <= 126)) {
@@ -51,7 +50,6 @@ static void print_preview(const char *body, int body_size) {
 static void print_usage(const char *prog) {
 	printf("usage: %s <https-url> [timeout_ms]\n", prog);
 	printf("example: %s https://dns.google/resolve?name=example.com&type=A 5000\n", prog);
-	printf("note: Ewok has no usable DNS yet, so keep the HTTPS host in the URL and pass its IPv4 separately.\n");
 }
 
 int main(int argc, char **argv) {
@@ -89,7 +87,7 @@ int main(int argc, char **argv) {
 	HttpsRequestSetMaxRedirections(request, 2);
 	HttpsRequestAddHeader(request, "User-Agent", "ewokos-https-test/1");
 
-	printf("requesting %s (timeout=%dms)\n", url, timeout_ms);
+	//printf("requesting %s (timeout=%dms)\n", url, timeout_ms);
 	response = HttpsRequestFetch(request);
 	if (response == NULL) {
 		printf("error: fetch returned null response\n");
@@ -112,27 +110,23 @@ int main(int argc, char **argv) {
 	}
 
 	status = HttpsResponseGetStatusCode(response);
-	body_size = HttpsResponseGetBodySize(response);
 	content_type = HttpsResponseGetHeaderValueByKey(response, "content-type");
-	body = HttpsResponseReadBodyStr(response);
+	body = HttpsResponseReadBodyStr(response, &body_size);
 
-	printf("status: %d\n", status);
+	//printf("status: %d\n", status);
 	if (status >= 300 && status < 400) {
 		const char *location = HttpsResponseGetHeaderValueByKey(response, "location");
 		if (location != NULL) {
 			printf("location: %s\n", location);
 		}
 	}
-	printf("body_size: %d\n", body_size);
+	//printf("body_size: %d\n", body_size);
 	if (content_type != NULL) {
 		printf("content_type: %s\n", content_type);
 	}
 
 	if (body != NULL && body_size > 0) {
 		print_preview(body, body_size);
-	}
-	else {
-		printf("body_preview: <empty>\n");
 	}
 
 	HttpsResponseFree(response);
