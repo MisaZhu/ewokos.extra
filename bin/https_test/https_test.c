@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 	}
 
 	HttpsRequestSetTimeout(request, timeout_ms);
-	HttpsRequestSetMaxRedirections(request, 0);
+	HttpsRequestSetMaxRedirections(request, 2);
 	HttpsRequestAddHeader(request, "User-Agent", "ewokos-https-test/1");
 
 	printf("requesting %s (timeout=%dms)\n", url, timeout_ms);

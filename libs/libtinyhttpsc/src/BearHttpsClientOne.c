@@ -201,7 +201,10 @@ int ewok_https_open_compat(const char *path, int flags, ...) {
 	if (path != NULL && strcmp(path, "/dev/urandom") == 0) {
 		return EWOK_HTTPS_FAKE_URANDOM_FD;
 	}
-	return open(path, flags);
+	#undef open
+	int ret = open(path, flags);
+	#define open ewok_https_open_compat
+	return ret;
 }
 
 ssize_t ewok_https_read_compat(int fd, void *buf, size_t len) {
@@ -209,14 +212,20 @@ ssize_t ewok_https_read_compat(int fd, void *buf, size_t len) {
 		ewok_https_entropy_fill(buf, len);
 		return (ssize_t)len;
 	}
-	return read(fd, buf, len);
+	#undef read
+	ssize_t ret = read(fd, buf, len);
+	#define read ewok_https_read_compat
+	return ret;
 }
 
 int ewok_https_close_compat(int fd) {
 	if (fd == EWOK_HTTPS_FAKE_URANDOM_FD) {
 		return 0;
 	}
-	return close(fd);
+	#undef close
+	int ret = close(fd);
+	#define close ewok_https_close_compat
+	return ret;
 }
 
 int ewok_https_select_compat(int nfds, void *readfds, void *writefds, void *exceptfds, void *timeout) {
