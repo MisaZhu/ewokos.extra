@@ -1,9 +1,9 @@
 ifeq ($(ARCH),)
-export ARCH=arm
+export ARCH=aarch64
 endif
 
 ifeq ($(HW),)
-export HW=versatilepb
+export HW=virt
 endif
 
 EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
