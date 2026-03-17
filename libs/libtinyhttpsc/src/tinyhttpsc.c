@@ -56,3 +56,11 @@ const char* HttpsResponseReadBodyStr(TinyHttpsResponse* response, int* size) {
 		*size = BearHttpsResponse_get_body_size(response);
 	return ret;
 }
+
+void HttpsRequestSendAny(TinyHttpsRequest *self, unsigned char *content, long size) {
+	BearHttpsRequest_send_any(self, content, size);
+}
+
+void HttpsRequestSendBodyStr(TinyHttpsRequest *self, char *content) {
+	BearHttpsRequest_send_body_str(self, content);
+}
