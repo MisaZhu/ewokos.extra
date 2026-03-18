@@ -263,9 +263,8 @@ void add_context(bool user, const char* context) {
 	}
 }
 
-static int  chat(const char* prompt) {
+static char* chat(const char* prompt) {
 	add_context(true, prompt);
-	printf("doubao: %s", THINKING);
 
 	// Get response from Doubao
 	char* content = NULL;
@@ -275,24 +274,43 @@ static int  chat(const char* prompt) {
 		free(resp);
 	}
 
-	uint32_t len = strlen(THINKING);
-	for(uint32_t i=0; i<len; i++) {
-		write(1, "\b \b", 3);
-	}
-
-	// Print Doubao's response
-	if(content != NULL) {
-		printf("%s\n", content);
-	}
-	else
-		printf("\n");
-
 	if(content != NULL) {
 		if (content[0] != 0)
 			add_context(false, content);
-		free(content);
 	}
-	return 0;
+	return content;
+}
+
+static int read_prompt(char* prompt, int32_t size) {
+	int i=0;
+	for(i=0; i<size; i++) {
+		char c;
+		int r = read(0, &c, 1);
+		if(r <= 0) {
+			return -1;
+		}
+
+		// Handle backspace
+		if(c == 127 || c == '\b') {
+			if(i > 0) {
+				i--;
+				// Clear the character in the buffer
+				prompt[i] = 0;
+				i--;
+				// Send backspace, space, backspace to erase the character on screen
+				write(1, "\b \b", 3);
+			}
+			continue;
+		}
+
+		prompt[i] = c;
+		write(1, &c, 1);
+		if(c == '\n' || c == '\r') {
+			prompt[i] = 0;
+			break;
+		}
+	}
+	return i;
 }
 
 int main(int argc, char **argv) {
@@ -300,48 +318,34 @@ int main(int argc, char **argv) {
 
 	while(true) {
 		printf(": ");
-		static char prompt[BUFFER_SIZE+1];
-		int i=0;
-		for(i=0; i<BUFFER_SIZE; i++) {
-			char c;
-			int r = read(0, &c, 1);
-			if(r <= 0) {
-				return -1;
-			}
-
-			// Handle backspace
-			if(c == 127 || c == '\b') {
-				if(i > 0) {
-					i--;
-					// Clear the character in the buffer
-					prompt[i] = 0;
-					i--;
-					// Send backspace, space, backspace to erase the character on screen
-					write(1, "\b \b", 3);
-				}
-				continue;
-			}
-
-			prompt[i] = c;
-			write(1, &c, 1);
-			if(c == '\n' || c == '\r') {
-				prompt[i] = 0;
-				break;
-			}
-		}
-
-		if(prompt[0] == 0)
-			continue;
-
-		if(strcmp(prompt, "exit") == 0) {
+		static char prompt[BUFFER_SIZE+1] = {0};
+		int r = read_prompt(prompt, BUFFER_SIZE);
+		if(r < 0)
 			return -1;
-		}
-		else if(strcmp(prompt, "clear") == 0) {
+
+		if(prompt[0] == 0 || strcmp(prompt, "exit") == 0)
+			return -1;
+
+		if(strcmp(prompt, "clear") == 0) {
 			message_count = 0;
 			continue;
 		}
 
-		chat(prompt);
+		printf("doubao: %s", THINKING);
+		char* content = chat(prompt);
+
+		uint32_t len = strlen(THINKING);
+		for(uint32_t i=0; i<len; i++) {
+			write(1, "\b \b", 3);
+		}
+
+		// Print Doubao's response
+		if(content != NULL) {
+			printf("%s\n", content);
+			free(content);
+		}
+		else
+			printf("\n");
 	}
 	return 0;
 }
