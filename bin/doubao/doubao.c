@@ -22,7 +22,7 @@
 #include "tinyhttpsc/tinyhttpsc.h"
 
 #define EWOK_HTTPS_PREVIEW_LIMIT -1
-#define BUFFER_SIZE 8192
+#define BUFFER_SIZE 1024
 #define MAX_MESSAGES 100
 
 // Message structure for conversation history
@@ -55,7 +55,7 @@ static void print_usage(const char *prog) {
 	printf("example: %s 863058a9-7b40-40e8-affc-f86b1496981e '你好，我是嵌入式开发者'\n", prog);
 }
 
-const char* chat(const char* prompt) {
+const char* chat(Message* messages, int message_count) {
 	const char *api_key = "863058a9-7b40-40e8-affc-f86b1496981e";
 	const char *body;
 	TinyHttpsRequest *request;
@@ -63,9 +63,21 @@ const char* chat(const char* prompt) {
 	int timeout_ms = 5000;
 	int body_size;
 
-	// Create request body in JSON format
-	char request_body[BUFFER_SIZE];
-	snprintf(request_body, sizeof(request_body), "{\"model\":\"ep-20260318183410-gzgr5\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":false}", prompt);
+	// Create request body in JSON format with conversation history
+	char request_body[BUFFER_SIZE * 2]; // Increased size for longer messages
+	snprintf(request_body, sizeof(request_body), "{\"model\":\"ep-20260318183410-gzgr5\",\"messages\":[");
+	
+	// Add all messages to the request body
+	for (int i = 0; i < message_count; i++) {
+		if (i > 0) {
+			strcat(request_body, ",");
+		}
+		char message[BUFFER_SIZE];
+		snprintf(message, sizeof(message), "{\"role\":\"%s\",\"content\":\"%s\"}", messages[i].role, messages[i].content);
+		strcat(request_body, message);
+	}
+	
+	strcat(request_body, "],\"stream\":false}");
 
 	// Create HTTPS request to Doubao API
 	request = NewHttpsRequest("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
@@ -179,6 +191,11 @@ const char* getMessageContent(const char* resp) {
 
 int main(int argc, char **argv) {
 	setbuf(stdout, NULL);
+	
+	// Initialize conversation history
+	Message messages[MAX_MESSAGES];
+	int message_count = 0;
+
 	while(true) {
 		printf(": ");
 		char prompt[BUFFER_SIZE+1];
@@ -214,9 +231,30 @@ int main(int argc, char **argv) {
 		if(strcmp(prompt, "exit") == 0) {
 			return -1;
 		}
-		const char* resp = chat(prompt);
+
+		// Add user message to conversation history
+		if (message_count < MAX_MESSAGES) {
+			messages[message_count].role = "user";
+			strncpy(messages[message_count].content, prompt, BUFFER_SIZE - 1);
+			messages[message_count].content[BUFFER_SIZE - 1] = '\0';
+			message_count++;
+		}
+
+		// Get response from Doubao
+		const char* resp = chat(messages, message_count);
+		const char* content = getMessageContent(resp);
+
+		// Print Doubao's response
 		printf("doubao: ");
-		printf("%s\n", getMessageContent(resp));
+		printf("%s\n", content);
+
+		// Add Doubao's response to conversation history
+		if (message_count < MAX_MESSAGES) {
+			messages[message_count].role = "assistant";
+			strncpy(messages[message_count].content, content, BUFFER_SIZE - 1);
+			messages[message_count].content[BUFFER_SIZE - 1] = '\0';
+			message_count++;
+		}
 	}
 	return 0;
 }
