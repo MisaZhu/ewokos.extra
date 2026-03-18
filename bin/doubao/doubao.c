@@ -55,7 +55,7 @@ static void print_usage(const char *prog) {
 	printf("example: %s 863058a9-7b40-40e8-affc-f86b1496981e '你好，我是嵌入式开发者'\n", prog);
 }
 
-const char* chat(Message* messages, int message_count) {
+char* chat(Message* messages, int message_count) {
 	const char *api_key = "863058a9-7b40-40e8-affc-f86b1496981e";
 	const char *body;
 	TinyHttpsRequest *request;
@@ -88,7 +88,7 @@ const char* chat(Message* messages, int message_count) {
 	request = NewHttpsRequest("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
 	if (request == NULL) {
 		printf("error: cannot allocate request\n");
-		return "";
+		return NULL;
 	}
 
 	HttpsRequestSetMethod(request, "POST");
@@ -108,7 +108,7 @@ const char* chat(Message* messages, int message_count) {
 	if (response == NULL) {
 		printf("error: fetch returned null response\n");
 		HttpsRequestFree(request);
-		return "";
+		return NULL;
 	}
 
 	if (HttpsResponseError(response)) {
@@ -119,29 +119,31 @@ const char* chat(Message* messages, int message_count) {
 			ssl_error);
 		HttpsResponseFree(response);
 		HttpsRequestFree(request);
-		return "";
+		return NULL;
 	}
 
-	static char response_body[BUFFER_SIZE * 8] = {0};
+	char *response_body = NULL;
 	body = HttpsResponseReadBodyStr(response, &body_size);
 	if (body != NULL && body_size > 0) {
-		int copy_size = body_size < sizeof(response_body) - 1 ? body_size : sizeof(response_body) - 1;
-		memcpy(response_body, body, copy_size);
-		response_body[copy_size] = 0;
-	} else {
-		response_body[0] = 0;
-	}
+		response_body = (char*)malloc(body_size+1);
+		memcpy(response_body, body, body_size);
+		response_body[body_size] = 0;
+	} 
 
 	HttpsResponseFree(response);
 	HttpsRequestFree(request);
 	return response_body;
 }
 
-const char* getMessageContent(const char* resp) {
-	static char content[BUFFER_SIZE] = {0};
+char* getMessageContent(const char* resp) {
+	if(resp == NULL)
+		return NULL;
+	uint32_t len = strlen(resp);
+	if(len == 0)
+		return NULL;
 	const char* p = strstr(resp, "\"content\":\"");
 	if(p == NULL)
-		return "";
+		return NULL;
 	p += strlen("\"content\":\"");
 	const char* e = p;
 	int escape = 0;
@@ -158,12 +160,15 @@ const char* getMessageContent(const char* resp) {
 		e++;
 	}
 	if(e == NULL || *e != '\"')
-		return "";
-	
+		return NULL;
+
+	char* content = (char*)malloc(len+1);
+	if(content == NULL)
+		return NULL;
 	// Process the content, converting escape sequences
 	int i = 0;
 	const char* src = p;
-	while(src < e && i < BUFFER_SIZE - 1) {
+	while(src < e && i < len) {
 		if(*src == '\\' && src + 1 < e) {
 			src++;
 			switch(*src) {
@@ -195,6 +200,8 @@ const char* getMessageContent(const char* resp) {
 	content[i] = '\0';
 	return content;
 }
+
+#define THINKING "thinking ... "
 
 int main(int argc, char **argv) {
 	setbuf(stdout, NULL);
@@ -235,6 +242,9 @@ int main(int argc, char **argv) {
 			}
 		}
 
+		if(prompt[0] == 0)
+			continue;
+
 		if(strcmp(prompt, "exit") == 0) {
 			return -1;
 		}
@@ -247,20 +257,38 @@ int main(int argc, char **argv) {
 			message_count++;
 		}
 
+		printf("doubao: %s", THINKING);
+
 		// Get response from Doubao
-		const char* resp = chat(messages, message_count);
-		const char* content = getMessageContent(resp);
+		char* content = NULL;
+		char* resp = chat(messages, message_count);
+		if(resp != NULL) {
+			content = getMessageContent(resp);
+			free(resp);
+		}
+
+		uint32_t len = strlen(THINKING);
+		for(uint32_t i=0; i<len; i++) {
+			write(1, "\b \b", 3);
+		}
 
 		// Print Doubao's response
-		printf("doubao: ");
-		printf("%s\n", content);
+		if(content != NULL) {
+			printf("%s\n", content);
+		}
+		else
+			printf("\n");
 
 		// Add Doubao's response to conversation history
-		if (message_count < MAX_MESSAGES) {
+		if (message_count < MAX_MESSAGES && content != NULL && content[0] != 0) {
 			messages[message_count].role = "assistant";
 			strncpy(messages[message_count].content, content, BUFFER_SIZE - 1);
 			messages[message_count].content[BUFFER_SIZE - 1] = '\0';
 			message_count++;
+		}
+
+		if(content != NULL) {
+			free(content);
 		}
 	}
 	return 0;
