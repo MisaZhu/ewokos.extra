@@ -30,7 +30,17 @@ typedef struct {
     const char* role;
     char content[BUFFER_SIZE];
 } Message;
-#define MAX_MESSAGES 100
+#define MAX_MESSAGES 128
+
+static Message messages[MAX_MESSAGES];
+static int message_count = 0;
+static int message_start = 0;  // Index of the oldest message (for circular buffer)
+
+// Get the actual index in the circular buffer
+// idx: 0 = oldest message, message_count-1 = newest message
+static int get_message_index(int idx) {
+	return (message_start + idx) % MAX_MESSAGES;
+}
 
 static char* chat_with_context(Message* messages, int message_count) {
 	const char *body;
@@ -46,7 +56,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 	snprintf(request_body, sizeof(request_body), "{\"model\":\"%s\",\"messages\":[", MODEL_ID);
 	size_t current_len = strlen(request_body);
 	
-	// Add all messages to the request body
+	// Add all messages to the request body in chronological order (oldest first)
 	// Buffer needs to be large enough for JSON-escaped content
 	static char message[BUFFER_SIZE * 2 + 128];
 	for (int i = 0; i < message_count; i++) {
@@ -54,7 +64,9 @@ static char* chat_with_context(Message* messages, int message_count) {
 			strncat(request_body, ",", sizeof(request_body) - current_len - 1);
 			current_len++;
 		}
-		snprintf(message, sizeof(message), "{\"role\":\"%s\",\"content\":\"%s\"}", messages[i].role, messages[i].content);
+		// Get the actual index in the circular buffer
+		int idx = get_message_index(i);
+		snprintf(message, sizeof(message), "{\"role\":\"%s\",\"content\":\"%s\"}", messages[idx].role, messages[idx].content);
 		strncat(request_body, message, sizeof(request_body) - current_len - 1);
 		current_len = strlen(request_body);
 	}
@@ -113,7 +125,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 	return response_body;
 }
 
-const char* getMessageContent(const char* resp) {
+char* getMessageContent(const char* resp) {
 	if(resp == NULL)
 		return NULL;
 	uint32_t len = strlen(resp);
@@ -146,7 +158,7 @@ const char* getMessageContent(const char* resp) {
 	// Process the content, converting escape sequences
 	int i = 0;
 	const char* src = p;
-	while(src < e && i < len) {
+	while(src < e && i < (int)len) {
 		if(*src == '\\' && src + 1 < e) {
 			src++;
 			switch(*src) {
@@ -180,9 +192,6 @@ const char* getMessageContent(const char* resp) {
 }
 
 #define THINKING "thinking ... "
-
-static Message messages[MAX_MESSAGES];
-static int message_count = 0;
 
 // JSON escape special characters in a string
 // Returns the number of characters written to dest, or -1 if dest is too small
@@ -232,35 +241,35 @@ void add_context(bool user, const char* context) {
 	if(context == NULL || context[0] == 0)
 		return;
 	
-	// Add user message to conversation history
+	int idx;
 	if (message_count < MAX_MESSAGES) {
-		if(user)
-			messages[message_count].role = "user";
-		else
-			messages[message_count].role = "assistant";
-		
-		// JSON escape the context
-		static char escaped[BUFFER_SIZE];
-		int escaped_len = json_escape(context, escaped, BUFFER_SIZE-16);
-		if (escaped_len < 0) {
-			strcpy(messages[message_count].content, "responsed");
-			// Escaped string too long, truncate original
-			/*uint32_t len = strlen(context);
-			if(len >= BUFFER_SIZE)
-				len = BUFFER_SIZE - 1;
-			strncpy(messages[message_count].content, context, len);
-			messages[message_count].content[len] = '\0';
-			*/
-		} else {
-			// Copy escaped string (truncate if needed)
-			if ((size_t)escaped_len >= BUFFER_SIZE) {
-				memcpy(messages[message_count].content, escaped, BUFFER_SIZE - 1);
-				messages[message_count].content[BUFFER_SIZE - 1] = '\0';
-			} else {
-				strcpy(messages[message_count].content, escaped);
-			}
-		}
+		// Buffer not full yet, add at the end
+		idx = message_count;
 		message_count++;
+	} else {
+		// Buffer full, overwrite the oldest message
+		idx = message_start;
+		message_start = (message_start + 1) % MAX_MESSAGES;
+	}
+	
+	if(user)
+		messages[idx].role = "user";
+	else
+		messages[idx].role = "assistant";
+	
+	// JSON escape the context
+	static char escaped[BUFFER_SIZE];
+	int escaped_len = json_escape(context, escaped, BUFFER_SIZE-16);
+	if (escaped_len < 0) {
+		strcpy(messages[idx].content, "responsed");
+	} else {
+		// Copy escaped string (truncate if needed)
+		if ((size_t)escaped_len >= BUFFER_SIZE) {
+			memcpy(messages[idx].content, escaped, BUFFER_SIZE - 1);
+			messages[idx].content[BUFFER_SIZE - 1] = '\0';
+		} else {
+			strcpy(messages[idx].content, escaped);
+		}
 	}
 }
 
@@ -331,6 +340,7 @@ int main(int argc, char **argv) {
 		}
 		else if(strcmp(prompt, "clear") == 0) {
 			message_count = 0;
+			message_start = 0;
 			continue;
 		}
 
