@@ -94278,7 +94278,21 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
             return sockfd;
         }
     }
-    
+
+	// Try gethostbyname first
+	Universal_hostent *he = Universal_gethostbyname(host);
+	if(he != NULL && he->h_addr_list[0] != NULL) {
+		struct in_addr addr;
+		memcpy(&addr, he->h_addr_list[0], sizeof(struct in_addr));
+		char *ip_str = inet_ntoa(addr);
+		if(ip_str != NULL) {
+			int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip_str, port, self->connection_timeout);
+			if(sockfd >= 0) {
+				return sockfd;
+			}
+		}
+	}
+
     BearHttpsClientDnsProvider *chosen_dns_providers  = self->dns_providers ?  self->dns_providers : privateBearHttpsProviders;
     int chosen_dns_providers_size = self->total_dns_providers ? self->total_dns_providers : privateBearHttpsProvidersSize;
 

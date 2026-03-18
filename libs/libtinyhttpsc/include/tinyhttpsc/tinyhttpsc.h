@@ -14,7 +14,7 @@ void HttpsRequestSetTimeout(TinyHttpsRequest* request, int timeout_ms);
 void HttpsRequestSetMaxRedirections(TinyHttpsRequest* request, int max_redirections);
 void HttpsRequestAddHeader(TinyHttpsRequest* request, const char* key, const char* value);
 TinyHttpsResponse* HttpsRequestFetch(TinyHttpsRequest* request);
-bool HttpsResponse_error(TinyHttpsResponse* response);
+bool HttpsResponseError(TinyHttpsResponse* response);
 const char* HttpsResponseGetErrorMsg(TinyHttpsResponse* response);
 int HttpsResponseGetErrorCode(TinyHttpsResponse* response);
 int HttpsResponseGetStatusCode(TinyHttpsResponse* response);

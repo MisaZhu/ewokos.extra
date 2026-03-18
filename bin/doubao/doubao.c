@@ -64,20 +64,25 @@ const char* chat(Message* messages, int message_count) {
 	int body_size;
 
 	// Create request body in JSON format with conversation history
-	char request_body[BUFFER_SIZE * 2]; // Increased size for longer messages
+	// Use static allocation to avoid stack overflow
+	static char request_body[BUFFER_SIZE * 4];
+	request_body[0] = '\0';
 	snprintf(request_body, sizeof(request_body), "{\"model\":\"ep-20260318183410-gzgr5\",\"messages\":[");
+	size_t current_len = strlen(request_body);
 	
 	// Add all messages to the request body
+	static char message[BUFFER_SIZE + 64];
 	for (int i = 0; i < message_count; i++) {
 		if (i > 0) {
-			strcat(request_body, ",");
+			strncat(request_body, ",", sizeof(request_body) - current_len - 1);
+			current_len++;
 		}
-		char message[BUFFER_SIZE];
 		snprintf(message, sizeof(message), "{\"role\":\"%s\",\"content\":\"%s\"}", messages[i].role, messages[i].content);
-		strcat(request_body, message);
+		strncat(request_body, message, sizeof(request_body) - current_len - 1);
+		current_len = strlen(request_body);
 	}
 	
-	strcat(request_body, "],\"stream\":false}");
+	strncat(request_body, "],\"stream\":false}", sizeof(request_body) - current_len - 1);
 
 	// Create HTTPS request to Doubao API
 	request = NewHttpsRequest("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
@@ -90,7 +95,8 @@ const char* chat(Message* messages, int message_count) {
 	HttpsRequestSetTimeout(request, timeout_ms);
 	HttpsRequestSetMaxRedirections(request, 0);
 	// Create authorization header with Bearer prefix
-	char header[256] = {0};
+	static char header[256];
+	header[0] = '\0';
 	snprintf(header, sizeof(header), "Bearer %s", api_key);
 	HttpsRequestAddHeader(request, "Authorization", header);
 	HttpsRequestAddHeader(request, "Content-Type", "application/json");
@@ -116,11 +122,12 @@ const char* chat(Message* messages, int message_count) {
 		return "";
 	}
 
-	static char response_body[BUFFER_SIZE] = {0};
+	static char response_body[BUFFER_SIZE * 8] = {0};
 	body = HttpsResponseReadBodyStr(response, &body_size);
 	if (body != NULL && body_size > 0) {
-		memcpy(response_body, body, body_size);
-		response_body[body_size] = 0;
+		int copy_size = body_size < sizeof(response_body) - 1 ? body_size : sizeof(response_body) - 1;
+		memcpy(response_body, body, copy_size);
+		response_body[copy_size] = 0;
 	} else {
 		response_body[0] = 0;
 	}
@@ -192,13 +199,13 @@ const char* getMessageContent(const char* resp) {
 int main(int argc, char **argv) {
 	setbuf(stdout, NULL);
 	
-	// Initialize conversation history
-	Message messages[MAX_MESSAGES];
+	// Initialize conversation history - use static allocation to avoid stack overflow
+	static Message messages[MAX_MESSAGES];
 	int message_count = 0;
 
 	while(true) {
 		printf(": ");
-		char prompt[BUFFER_SIZE+1];
+		static char prompt[BUFFER_SIZE+1];
 		int i=0;
 		for(i=0; i<BUFFER_SIZE; i++) {
 			char c;
