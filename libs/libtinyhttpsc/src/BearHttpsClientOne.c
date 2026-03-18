@@ -94257,6 +94257,20 @@ BearHttpsResponseNamespace newBearHttpsResponseNamespace(){
 //silver_chain_scope_start
 //mannaged by silver chain: https://github.com/OUIsolutions/SilverChain
 
+static void private_BearHttps_cache_dns(const char* host, const char* ip_str) {
+	long host_size = private_BearsslHttps_strlen(host);
+	long ip_size = private_BearsslHttps_strlen(ip_str);
+	if(privateBearHttpsDnsCache_last_free_point >= BEARSSL_DNS_CACHE_SIZE){
+		privateBearHttpsDnsCache_last_free_point = 0;
+	}
+	if(host_size < BEARSSL_DNS_CACHE_HOST_SIZE && ip_size < BEARSSL_DNS_CACHE_IP_SIZE){
+		privateBearHttpsDnsCache* cache = &privateBearHttpsDnsCache_itens[privateBearHttpsDnsCache_last_free_point];
+		private_BearsslHttps_strcpy( cache->host,host);
+		private_BearsslHttps_strcpy( cache->ip,ip_str);
+		privateBearHttpsDnsCache_last_free_point++; 
+	}				
+}
+
 //silver_chain_scope_end
 #if !defined(__EMSCRIPTEN__)
 
@@ -94269,7 +94283,6 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
 
     for(int i = 0; i < BEARSSL_DNS_CACHE_SIZE;i++){
         privateBearHttpsDnsCache *cache = &privateBearHttpsDnsCache_itens[i];
-
         if(private_BearsslHttp_strcmp(cache->host,host) == 0){
             int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(cache->ip,port,self->connection_timeout);
             if(sockfd < 0){
@@ -94286,6 +94299,7 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
 		memcpy(&addr, he->h_addr_list[0], sizeof(struct in_addr));
 		char *ip_str = inet_ntoa(addr);
 		if(ip_str != NULL) {
+			private_BearHttps_cache_dns(host, ip_str);
 			int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip_str, port, self->connection_timeout);
 			if(sockfd >= 0) {
 				return sockfd;
@@ -94361,22 +94375,8 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
                 if(sockfd < 0){
                     continue;
                 }
-                long host_size = private_BearsslHttps_strlen(host);
-                long ip_size = private_BearsslHttps_strlen(ipv4);
 
-                if(privateBearHttpsDnsCache_last_free_point >= BEARSSL_DNS_CACHE_SIZE){
-                    privateBearHttpsDnsCache_last_free_point = 0;
-                }
-
-                if(host_size < BEARSSL_DNS_CACHE_HOST_SIZE && ip_size < BEARSSL_DNS_CACHE_IP_SIZE){
-                    
-                    
-                    privateBearHttpsDnsCache* cache = &privateBearHttpsDnsCache_itens[privateBearHttpsDnsCache_last_free_point];
-                    private_BearsslHttps_strcpy( cache->host,host);
-                    private_BearsslHttps_strcpy( cache->ip,ipv4);
-                    privateBearHttpsDnsCache_last_free_point++; 
-                }
-
+                private_BearHttps_cache_dns(host, ipv4);
                 BearHttpsRequest_free(dns_request);
                 BearHttpsResponse_free(dns_response);
                 privateBearHttpsStringArray_free(already_testted);
