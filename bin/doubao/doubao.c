@@ -21,7 +21,6 @@
 
 #include "tinyhttpsc/tinyhttpsc.h"
 
-#define EWOK_HTTPS_PREVIEW_LIMIT -1
 #define BUFFER_SIZE  512
 #define MAX_MESSAGES 100
 
