@@ -18,20 +18,21 @@
 
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/proc.h>
-
 #include "tinyhttpsc/tinyhttpsc.h"
 
 #define BUFFER_SIZE  512
-#define MAX_MESSAGES 100
+
+#define API_KEY "863058a9-7b40-40e8-affc-f86b1496981e"
+#define MODEL_ID "ep-20260318183410-gzgr5"
 
 // Message structure for conversation history
 typedef struct {
     const char* role;
     char content[BUFFER_SIZE];
 } Message;
+#define MAX_MESSAGES 100
 
 static char* chat_with_context(Message* messages, int message_count) {
-	const char *api_key = "863058a9-7b40-40e8-affc-f86b1496981e";
 	const char *body;
 	TinyHttpsRequest *request;
 	TinyHttpsResponse *response;
@@ -42,7 +43,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 	// Use static allocation to avoid stack overflow
 	static char request_body[BUFFER_SIZE * 4];
 	request_body[0] = '\0';
-	snprintf(request_body, sizeof(request_body), "{\"model\":\"ep-20260318183410-gzgr5\",\"messages\":[");
+	snprintf(request_body, sizeof(request_body), "{\"model\":\"%s\",\"messages\":[", MODEL_ID);
 	size_t current_len = strlen(request_body);
 	
 	// Add all messages to the request body
@@ -73,13 +74,13 @@ static char* chat_with_context(Message* messages, int message_count) {
 	// Create authorization header with Bearer prefix
 	static char header[256];
 	header[0] = '\0';
-	snprintf(header, sizeof(header), "Bearer %s", api_key);
+	snprintf(header, sizeof(header), "Bearer %s", API_KEY);
 	HttpsRequestAddHeader(request, "Authorization", header);
 	HttpsRequestAddHeader(request, "Content-Type", "application/json");
 
 	// Send POST request with JSON body
 	HttpsRequestSendBodyStr(request, request_body);
-	BearHttpsRequest_represent(request);
+	//BearHttpsRequest_represent(request);
 
 	response = HttpsRequestFetch(request);
 	if (response == NULL) {
@@ -242,7 +243,7 @@ void add_context(bool user, const char* context) {
 		static char escaped[BUFFER_SIZE];
 		int escaped_len = json_escape(context, escaped, BUFFER_SIZE-16);
 		if (escaped_len < 0) {
-			strcpy(messages[message_count].content, "ok");
+			strcpy(messages[message_count].content, "responsed");
 			// Escaped string too long, truncate original
 			/*uint32_t len = strlen(context);
 			if(len >= BUFFER_SIZE)
@@ -283,7 +284,7 @@ static char* chat(const char* prompt) {
 
 static int read_prompt(char* prompt, int32_t size) {
 	int i=0;
-	for(i=0; i<size; i++) {
+	while(i < size) {
 		char c;
 		int r = read(0, &c, 1);
 		if(r <= 0) {
@@ -293,12 +294,9 @@ static int read_prompt(char* prompt, int32_t size) {
 		// Handle backspace
 		if(c == 127 || c == '\b') {
 			if(i > 0) {
+				write(1, "\b \b", 3); // Clear the character in the buffer
 				i--;
-				// Clear the character in the buffer
 				prompt[i] = 0;
-				i--;
-				// Send backspace, space, backspace to erase the character on screen
-				write(1, "\b \b", 3);
 			}
 			continue;
 		}
@@ -309,6 +307,7 @@ static int read_prompt(char* prompt, int32_t size) {
 			prompt[i] = 0;
 			break;
 		}
+		i++;
 	}
 	return i;
 }
@@ -316,22 +315,26 @@ static int read_prompt(char* prompt, int32_t size) {
 int main(int argc, char **argv) {
 	setbuf(stdout, NULL);
 
+	printf("==( doubao chat, 'exit' to quit )==\n");
 	while(true) {
-		printf(": ");
+		printf("$ ");
 		static char prompt[BUFFER_SIZE+1] = {0};
 		int r = read_prompt(prompt, BUFFER_SIZE);
 		if(r < 0)
 			return -1;
 
-		if(prompt[0] == 0 || strcmp(prompt, "exit") == 0)
-			return -1;
+		if(prompt[0] == 0)
+			continue;
 
-		if(strcmp(prompt, "clear") == 0) {
+		if(strcmp(prompt, "exit") == 0) {
+			return -1;
+		}
+		else if(strcmp(prompt, "clear") == 0) {
 			message_count = 0;
 			continue;
 		}
 
-		printf("doubao: %s", THINKING);
+		printf("\033[1m: %s\033[0m", THINKING);
 		char* content = chat(prompt);
 
 		uint32_t len = strlen(THINKING);
@@ -341,7 +344,7 @@ int main(int argc, char **argv) {
 
 		// Print Doubao's response
 		if(content != NULL) {
-			printf("%s\n", content);
+			printf("\033[1m%s\033[0m\n\n", content);
 			free(content);
 		}
 		else
