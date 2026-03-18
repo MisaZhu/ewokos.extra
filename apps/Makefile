@@ -4,9 +4,11 @@ all:
 	cd tetris; make
 	cd Fireworks; make
 	cd clock; make
+	cd kimi_chat; make
 
 clean: 
 	cd 3ddemo;make clean
 	cd tetris; make clean
 	cd Fireworks; make clean
 	cd clock; make clean
+	cd kimi_chat; make clean
