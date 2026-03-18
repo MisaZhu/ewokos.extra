@@ -80,7 +80,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 
 	// Send POST request with JSON body
 	HttpsRequestSendBodyStr(request, request_body);
-	//BearHttpsRequest_represent(request);
+	BearHttpsRequest_represent(request);
 
 	response = HttpsRequestFetch(request);
 	if (response == NULL) {
@@ -240,15 +240,17 @@ void add_context(bool user, const char* context) {
 			messages[message_count].role = "assistant";
 		
 		// JSON escape the context
-		static char escaped[BUFFER_SIZE * 2];
-		int escaped_len = json_escape(context, escaped, sizeof(escaped));
+		static char escaped[BUFFER_SIZE];
+		int escaped_len = json_escape(context, escaped, BUFFER_SIZE-16);
 		if (escaped_len < 0) {
+			strcpy(messages[message_count].content, "ok");
 			// Escaped string too long, truncate original
-			uint32_t len = strlen(context);
+			/*uint32_t len = strlen(context);
 			if(len >= BUFFER_SIZE)
 				len = BUFFER_SIZE - 1;
 			strncpy(messages[message_count].content, context, len);
 			messages[message_count].content[len] = '\0';
+			*/
 		} else {
 			// Copy escaped string (truncate if needed)
 			if ((size_t)escaped_len >= BUFFER_SIZE) {

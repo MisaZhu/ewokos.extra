@@ -94295,9 +94295,9 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
 	// Try gethostbyname first
 	Universal_hostent *he = Universal_gethostbyname(host);
 	if(he != NULL && he->h_addr_list[0] != NULL) {
-		struct in_addr addr;
-		memcpy(&addr, he->h_addr_list[0], sizeof(struct in_addr));
-		char *ip_str = inet_ntoa(addr);
+		Universal_in_addr addr;
+		memcpy(&addr, he->h_addr_list[0], sizeof(Universal_in_addr));
+		const char *ip_str = Universal_inet_ntoa(addr);
 		if(ip_str != NULL) {
 			private_BearHttps_cache_dns(host, ip_str);
 			int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip_str, port, self->connection_timeout);
