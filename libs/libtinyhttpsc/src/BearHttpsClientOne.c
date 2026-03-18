@@ -94720,8 +94720,6 @@ BearHttpsResponse * BearHttpsRequest_fetch(BearHttpsRequest *self){
             private_BearHttpsRequisitionProps_free(requisition_props);
             return response;
         }
-        
-         
          
          private_BearHttpsResponse_write(response, (unsigned char*)start_msg, private_BearsslHttps_strlen(start_msg));
          private_BearHttpsResponse_write(response, (unsigned char*)requisition_props->hostname, private_BearsslHttps_strlen(requisition_props->hostname));

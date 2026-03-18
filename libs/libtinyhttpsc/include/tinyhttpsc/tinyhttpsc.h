@@ -24,5 +24,6 @@ const char* HttpsResponseReadBody(TinyHttpsResponse* response, int* size);
 const char* HttpsResponseReadBodyStr(TinyHttpsResponse* response, int* size);  
 void HttpsRequestSendAny(TinyHttpsRequest *self, unsigned char *content, long size);
 void HttpsRequestSendBodyStr(TinyHttpsRequest *self, char *content);
+void HttpsRequestSetMethod(TinyHttpsRequest *self, const char *method);
 
 #endif

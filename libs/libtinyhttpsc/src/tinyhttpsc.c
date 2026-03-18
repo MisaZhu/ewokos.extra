@@ -64,3 +64,7 @@ void HttpsRequestSendAny(TinyHttpsRequest *self, unsigned char *content, long si
 void HttpsRequestSendBodyStr(TinyHttpsRequest *self, char *content) {
 	BearHttpsRequest_send_body_str(self, content);
 }
+
+void HttpsRequestSetMethod(TinyHttpsRequest *self, const char *method) {
+	BearHttpsRequest_set_method(self, method);
+}
