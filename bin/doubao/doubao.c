@@ -31,31 +31,7 @@ typedef struct {
     char content[BUFFER_SIZE];
 } Message;
 
-static void print_preview(const char *body, int body_size) {
-	int limit = EWOK_HTTPS_PREVIEW_LIMIT;
-	if(limit < 0 || limit > body_size)
-		limit = body_size;
-
-	for (int i = 0; i < limit; ++i) {
-		unsigned char ch = (unsigned char)body[i];
-		if (ch == '\n' || ch == '\r' || ch == '\t' || (ch >= 32 && ch <= 126)) {
-			putchar((int)ch);
-		}
-		else {
-			putchar('.');
-		}
-	}
-	if (limit > 0 && body[limit - 1] != '\n') {
-		putchar('\n');
-	}
-}
-
-static void print_usage(const char *prog) {
-	printf("usage: %s <api_key> <prompt>\n", prog);
-	printf("example: %s 863058a9-7b40-40e8-affc-f86b1496981e '你好，我是嵌入式开发者'\n", prog);
-}
-
-char* chat(Message* messages, int message_count) {
+static char* chat_with_context(Message* messages, int message_count) {
 	const char *api_key = "863058a9-7b40-40e8-affc-f86b1496981e";
 	const char *body;
 	TinyHttpsRequest *request;
@@ -71,7 +47,8 @@ char* chat(Message* messages, int message_count) {
 	size_t current_len = strlen(request_body);
 	
 	// Add all messages to the request body
-	static char message[BUFFER_SIZE + 64];
+	// Buffer needs to be large enough for JSON-escaped content
+	static char message[BUFFER_SIZE * 2 + 128];
 	for (int i = 0; i < message_count; i++) {
 		if (i > 0) {
 			strncat(request_body, ",", sizeof(request_body) - current_len - 1);
@@ -103,6 +80,7 @@ char* chat(Message* messages, int message_count) {
 
 	// Send POST request with JSON body
 	HttpsRequestSendBodyStr(request, request_body);
+	//BearHttpsRequest_represent(request);
 
 	response = HttpsRequestFetch(request);
 	if (response == NULL) {
@@ -135,7 +113,7 @@ char* chat(Message* messages, int message_count) {
 	return response_body;
 }
 
-char* getMessageContent(const char* resp) {
+const char* getMessageContent(const char* resp) {
 	if(resp == NULL)
 		return NULL;
 	uint32_t len = strlen(resp);
@@ -203,12 +181,121 @@ char* getMessageContent(const char* resp) {
 
 #define THINKING "thinking ... "
 
+static Message messages[MAX_MESSAGES];
+static int message_count = 0;
+
+// JSON escape special characters in a string
+// Returns the number of characters written to dest, or -1 if dest is too small
+static int json_escape(const char* src, char* dest, size_t dest_size) {
+	size_t j = 0;
+	for (size_t i = 0; src[i] != '\0'; i++) {
+		char c = src[i];
+		const char* escape = NULL;
+		
+		switch (c) {
+			case '"': escape = "\\\""; break;
+			case '\\': escape = "\\\\"; break;
+			case '\b': escape = "\\b"; break;
+			case '\f': escape = "\\f"; break;
+			case '\n': escape = "\\n"; break;
+			case '\r': escape = "\\r"; break;
+			case '\t': escape = "\\t"; break;
+			default:
+				// Control characters must be escaped as \u00XX
+				if (c < 0x20) {
+					if (j + 6 >= dest_size) return -1;
+					snprintf(&dest[j], 7, "\\u%04x", (unsigned char)c);
+					j += 6;
+					continue;
+				}
+				// Regular character
+				if (j + 1 >= dest_size) return -1;
+				dest[j++] = c;
+				continue;
+		}
+		
+		// Write escaped sequence
+		if (escape) {
+			size_t escape_len = strlen(escape);
+			if (j + escape_len >= dest_size) return -1;
+			strcpy(&dest[j], escape);
+			j += escape_len;
+		}
+	}
+	
+	if (j >= dest_size) return -1;
+	dest[j] = '\0';
+	return (int)j;
+}
+
+void add_context(bool user, const char* context) {
+	if(context == NULL || context[0] == 0)
+		return;
+	
+	// Add user message to conversation history
+	if (message_count < MAX_MESSAGES) {
+		if(user)
+			messages[message_count].role = "user";
+		else
+			messages[message_count].role = "assistant";
+		
+		// JSON escape the context
+		static char escaped[BUFFER_SIZE * 2];
+		int escaped_len = json_escape(context, escaped, sizeof(escaped));
+		if (escaped_len < 0) {
+			// Escaped string too long, truncate original
+			uint32_t len = strlen(context);
+			if(len >= BUFFER_SIZE)
+				len = BUFFER_SIZE - 1;
+			strncpy(messages[message_count].content, context, len);
+			messages[message_count].content[len] = '\0';
+		} else {
+			// Copy escaped string (truncate if needed)
+			if ((size_t)escaped_len >= BUFFER_SIZE) {
+				memcpy(messages[message_count].content, escaped, BUFFER_SIZE - 1);
+				messages[message_count].content[BUFFER_SIZE - 1] = '\0';
+			} else {
+				strcpy(messages[message_count].content, escaped);
+			}
+		}
+		message_count++;
+	}
+}
+
+static int  chat(const char* prompt) {
+	add_context(true, prompt);
+	printf("doubao: %s", THINKING);
+
+	// Get response from Doubao
+	char* content = NULL;
+	char* resp = chat_with_context(messages, message_count);
+	if(resp != NULL) {
+		content = getMessageContent(resp);
+		free(resp);
+	}
+
+	uint32_t len = strlen(THINKING);
+	for(uint32_t i=0; i<len; i++) {
+		write(1, "\b \b", 3);
+	}
+
+	// Print Doubao's response
+	if(content != NULL) {
+		printf("%s\n", content);
+	}
+	else
+		printf("\n");
+
+	if(content != NULL) {
+		if (content[0] != 0)
+			add_context(false, content);
+		free(content);
+	}
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	setbuf(stdout, NULL);
-	
-	// Initialize conversation history - use static allocation to avoid stack overflow
-	static Message messages[MAX_MESSAGES];
-	int message_count = 0;
 
 	while(true) {
 		printf(": ");
@@ -248,48 +335,12 @@ int main(int argc, char **argv) {
 		if(strcmp(prompt, "exit") == 0) {
 			return -1;
 		}
-
-		// Add user message to conversation history
-		if (message_count < MAX_MESSAGES) {
-			messages[message_count].role = "user";
-			strncpy(messages[message_count].content, prompt, BUFFER_SIZE - 1);
-			messages[message_count].content[BUFFER_SIZE - 1] = '\0';
-			message_count++;
+		else if(strcmp(prompt, "clear") == 0) {
+			message_count = 0;
+			continue;
 		}
 
-		printf("doubao: %s", THINKING);
-
-		// Get response from Doubao
-		char* content = NULL;
-		char* resp = chat(messages, message_count);
-		if(resp != NULL) {
-			content = getMessageContent(resp);
-			free(resp);
-		}
-
-		uint32_t len = strlen(THINKING);
-		for(uint32_t i=0; i<len; i++) {
-			write(1, "\b \b", 3);
-		}
-
-		// Print Doubao's response
-		if(content != NULL) {
-			printf("%s\n", content);
-		}
-		else
-			printf("\n");
-
-		// Add Doubao's response to conversation history
-		if (message_count < MAX_MESSAGES && content != NULL && content[0] != 0) {
-			messages[message_count].role = "assistant";
-			strncpy(messages[message_count].content, content, BUFFER_SIZE - 1);
-			messages[message_count].content[BUFFER_SIZE - 1] = '\0';
-			message_count++;
-		}
-
-		if(content != NULL) {
-			free(content);
-		}
+		chat(prompt);
 	}
 	return 0;
 }
