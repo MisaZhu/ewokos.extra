@@ -94276,57 +94276,42 @@ static void private_BearHttps_cache_dns(const char* host, const char* ip_str) {
 #if  (!defined(BEARSSL_USSE_GET_ADDRINFO) && !defined(BEARSSL_HTTPS_MOCK_CJSON))
 static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsResponse *response, const char *host, int port){
     if(strcmp(host,"localhost")==0){
-		slog("connecting localhost ... ");
         int sockfd = private_BearHttpsRequest_connect_ipv4(response,"0.0.0.0",port,self->connection_timeout);
         if(sockfd > 0){
-			slog("ok.\n");
 			return sockfd;
 		}
-		else
-			slog("failed!\n");
     }
 
     for(int i = 0; i < BEARSSL_DNS_CACHE_SIZE;i++){
         privateBearHttpsDnsCache *cache = &privateBearHttpsDnsCache_itens[i];
         if(private_BearsslHttp_strcmp(cache->host,host) == 0){
-			slog("connecting %s ... ", cache->ip);
             int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(cache->ip,port,self->connection_timeout);
             if(sockfd < 0){
-				slog("failed!\n");
                 break;
             }
-			else {
-				slog("ok.\n");
-			}
             return sockfd;
         }
     }
 
 	// Try gethostbyname first
-	slog("dns resolving %s ... \n", host);
 	Universal_hostent *he = Universal_gethostbyname(host);
 	if(he != NULL) {
 		for(int i = 0; he->h_addr_list[i] != NULL; i++) {
 			Universal_in_addr addr;
 			memcpy(&addr, he->h_addr_list[i], sizeof(Universal_in_addr));
 			const char *ip_str = Universal_inet_ntoa(addr);
-			slog("%s -> %s\n", host, ip_str);
 
 			if(ip_str != NULL) {
-				slog("connecting %s ... ", ip_str);
 				int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip_str, port, self->connection_timeout);
 				if(sockfd >= 0) {
-					slog("ok.\n");
 					private_BearHttps_cache_dns(host, ip_str);
 					return sockfd;
 				}
 			}
 		}
-		slog("failed!\n");
 		BearHttpsResponse_set_error(response,"failed to connect",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
 	}
 	else {
-		slog("failed!\n");
 	    BearHttpsResponse_set_error(response,"failed to dns resolv",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
 	}
 	return -1;

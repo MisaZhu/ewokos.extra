@@ -77,7 +77,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 	// Create HTTPS request to Doubao API
 	request = NewHttpsRequest(API_URL);
 	if (request == NULL) {
-		printf("error: cannot allocate request\n");
+		slog("error: cannot allocate request\n");
 		return NULL;
 	}
 
@@ -97,14 +97,14 @@ static char* chat_with_context(Message* messages, int message_count) {
 
 	response = HttpsRequestFetch(request);
 	if (response == NULL) {
-		printf("error: fetch returned null response\n");
+		slog("error: fetch returned null response\n");
 		HttpsRequestFree(request);
 		return NULL;
 	}
 
 	if (HttpsResponseError(response)) {
 		int ssl_error = 0;
-		printf("error: %s (code=%d, ssl=%d)\n",
+		slog("error: %s (code=%d, ssl=%d)\n",
 			HttpsResponseGetErrorMsg(response),
 			HttpsResponseGetErrorCode(response),
 			ssl_error);
@@ -259,7 +259,7 @@ static char* chat_with_stream(Message* messages, int message_count) {
 
 	request = NewHttpsRequest(API_URL);
 	if (request == NULL) {
-		printf("error: cannot allocate request\n");
+		slog("error: cannot allocate request\n");
 		return NULL;
 	}
 
@@ -277,13 +277,13 @@ static char* chat_with_stream(Message* messages, int message_count) {
 
 	response = HttpsRequestFetch(request);
 	if (response == NULL) {
-		printf("error: fetch returned null response\n");
+		slog("error: fetch returned null response\n");
 		HttpsRequestFree(request);
 		return NULL;
 	}
 
 	if (HttpsResponseError(response)) {
-		printf("error: %s\n", HttpsResponseGetErrorMsg(response));
+		slog("error: %s\n", HttpsResponseGetErrorMsg(response));
 		HttpsResponseFree(response);
 		HttpsRequestFree(request);
 		return NULL;
@@ -406,8 +406,10 @@ static bool chat(const char* prompt, bool stream) {
 		}
 	}
 
-	if(content == NULL)
+	if(content == NULL) {
+		printf("\033[1m%s\033[0m", "-- busy :( --");
 		return false;
+	}
 
 	if (content[0] != 0)
 		add_context(false, content);
