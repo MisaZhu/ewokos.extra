@@ -43,16 +43,13 @@ static int get_message_index(int idx) {
 	return (message_start + idx) % MAX_MESSAGES;
 }
 
-static char* chat_with_context(Message* messages, int message_count) {
-	const char *body;
+static TinyHttpsRequest * req_with_context(Message* messages, int message_count, bool stream) {
 	TinyHttpsRequest *request;
-	TinyHttpsResponse *response;
 	int timeout_ms = 5000;
-	int body_size;
 
 	// Create request body in JSON format with conversation history
 	// Use static allocation to avoid stack overflow
-	static char request_body[BUFFER_SIZE * 4];
+	static char request_body[BUFFER_SIZE * 16];
 	request_body[0] = '\0';
 	snprintf(request_body, sizeof(request_body), "{\"model\":\"%s\",\"messages\":[", MODEL_ID);
 	size_t current_len = strlen(request_body);
@@ -72,7 +69,10 @@ static char* chat_with_context(Message* messages, int message_count) {
 		current_len = strlen(request_body);
 	}
 	
-	strncat(request_body, "],\"stream\":false}", sizeof(request_body) - current_len - 1);
+	if(stream)
+		strncat(request_body, "],\"stream\":true}", sizeof(request_body) - current_len - 1);
+	else
+		strncat(request_body, "],\"stream\":false}", sizeof(request_body) - current_len - 1);
 
 	// Create HTTPS request to Doubao API
 	request = NewHttpsRequest(API_URL);
@@ -93,37 +93,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 
 	// Send POST request with JSON body
 	HttpsRequestSendBodyStr(request, request_body);
-	//BearHttpsRequest_represent(request);
-
-	response = HttpsRequestFetch(request);
-	if (response == NULL) {
-		slog("error: fetch returned null response\n");
-		HttpsRequestFree(request);
-		return NULL;
-	}
-
-	if (HttpsResponseError(response)) {
-		int ssl_error = 0;
-		slog("error: %s (code=%d, ssl=%d)\n",
-			HttpsResponseGetErrorMsg(response),
-			HttpsResponseGetErrorCode(response),
-			ssl_error);
-		HttpsResponseFree(response);
-		HttpsRequestFree(request);
-		return NULL;
-	}
-
-	char *response_body = NULL;
-	body = HttpsResponseReadBodyStr(response, &body_size);
-	if (body != NULL && body_size > 0) {
-		response_body = (char*)malloc(body_size+1);
-		memcpy(response_body, body, body_size);
-		response_body[body_size] = 0;
-	} 
-
-	HttpsResponseFree(response);
-	HttpsRequestFree(request);
-	return response_body;
+	return request;
 }
 
 char* getMessageContent(const char* resp) {
@@ -192,6 +162,45 @@ char* getMessageContent(const char* resp) {
 	return content;
 }
 
+static char* chat_with_context(Message* messages, int message_count) {
+	const char *body;
+	TinyHttpsRequest *request;
+	TinyHttpsResponse *response;
+	int body_size;
+
+	// Create HTTPS request to Doubao API
+	request = req_with_context(messages, message_count, false);
+	if (request == NULL) {
+		slog("error: cannot allocate request\n");
+		return NULL;
+	}
+	response = HttpsRequestFetch(request);
+	HttpsRequestFree(request);
+
+	if (response == NULL) {
+		slog("error: fetch returned null response\n");
+		return NULL;
+	}
+
+	if (HttpsResponseError(response)) {
+		int ssl_error = 0;
+		slog("error: %s (code=%d, ssl=%d)\n",
+			HttpsResponseGetErrorMsg(response),
+			HttpsResponseGetErrorCode(response),
+			ssl_error);
+		HttpsResponseFree(response);
+		return NULL;
+	}
+
+	char *content = NULL;
+	body = HttpsResponseReadBodyStr(response, &body_size);
+	if (body != NULL && body_size > 0) {
+		content = getMessageContent(body);
+	} 
+	HttpsResponseFree(response);
+	return content;
+}
+
 #define THINKING "thinking ... "
 
 static bool think_removed = false;
@@ -235,57 +244,23 @@ static int stream_callback(const char* data, int size, void* user_data) {
 static char* chat_with_stream(Message* messages, int message_count) {
 	TinyHttpsRequest *request;
 	TinyHttpsResponse *response;
-	int timeout_ms = 60000; // Longer timeout for streaming
 
-	// Create request body with stream=true
-	static char request_body[BUFFER_SIZE * 4];
-	request_body[0] = '\0';
-	snprintf(request_body, sizeof(request_body), "{\"model\":\"%s\",\"messages\":[", MODEL_ID);
-	size_t current_len = strlen(request_body);
-	
-	static char message[BUFFER_SIZE * 2 + 128];
-	for (int i = 0; i < message_count; i++) {
-		if (i > 0) {
-			strncat(request_body, ",", sizeof(request_body) - current_len - 1);
-			current_len++;
-		}
-		int idx = get_message_index(i);
-		snprintf(message, sizeof(message), "{\"role\":\"%s\",\"content\":\"%s\"}", messages[idx].role, messages[idx].content);
-		strncat(request_body, message, sizeof(request_body) - current_len - 1);
-		current_len = strlen(request_body);
-	}
-	
-	strncat(request_body, "],\"stream\":true}", sizeof(request_body) - current_len - 1);
-
-	request = NewHttpsRequest(API_URL);
+	request = req_with_context(messages, message_count, true);
 	if (request == NULL) {
 		slog("error: cannot allocate request\n");
 		return NULL;
 	}
 
-	HttpsRequestSetMethod(request, "POST");
-	HttpsRequestSetTimeout(request, timeout_ms);
-	HttpsRequestSetMaxRedirections(request, 0);
-	
-	static char header[256];
-	header[0] = '\0';
-	snprintf(header, sizeof(header), "Bearer %s", API_KEY);
-	HttpsRequestAddHeader(request, "Authorization", header);
-	HttpsRequestAddHeader(request, "Content-Type", "application/json");
-
-	HttpsRequestSendBodyStr(request, request_body);
-
 	response = HttpsRequestFetch(request);
+	HttpsRequestFree(request);
 	if (response == NULL) {
 		slog("error: fetch returned null response\n");
-		HttpsRequestFree(request);
 		return NULL;
 	}
 
 	if (HttpsResponseError(response)) {
 		slog("error: %s\n", HttpsResponseGetErrorMsg(response));
 		HttpsResponseFree(response);
-		HttpsRequestFree(request);
 		return NULL;
 	}
 
@@ -297,9 +272,7 @@ static char* chat_with_stream(Message* messages, int message_count) {
 	
 	// Read response in streaming mode
 	HttpsResponseReadBodyStream(response, stream_callback, ret);
-
 	HttpsResponseFree(response);
-	HttpsRequestFree(request);
 	return ret;
 }
 
@@ -383,7 +356,6 @@ void add_context(bool user, const char* context) {
 	}
 }
 
-
 static bool chat(const char* prompt, bool stream) {
 	printf("\033[1m: %s\033[0m", THINKING);
 	think_removed = false;
@@ -397,11 +369,9 @@ static bool chat(const char* prompt, bool stream) {
 		content = chat_with_stream(messages, message_count);
 	}
 	else {
-		char* resp = chat_with_context(messages, message_count);
+		content = chat_with_context(messages, message_count);
 		remove_thinking();
-		if(resp != NULL) {
-			content = getMessageContent(resp);
-			free(resp);
+		if(content != NULL) {
 			printf("\033[1m%s\033[0m", content);
 		}
 	}
