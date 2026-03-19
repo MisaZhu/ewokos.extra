@@ -44,7 +44,7 @@ const char* HttpsResponseGetHeaderValueByKey(TinyHttpsResponse* response, const 
 }
 
 const char* HttpsResponseReadBody(TinyHttpsResponse* response, int* size) {
-	const char* ret = BearHttpsResponse_read_body(response);
+	const char* ret = (const char*)BearHttpsResponse_read_body(response);
 	if(size != NULL)
 		*size = BearHttpsResponse_get_body_size(response);
 	return ret;
@@ -67,4 +67,66 @@ void HttpsRequestSendBodyStr(TinyHttpsRequest *self, char *content) {
 
 void HttpsRequestSetMethod(TinyHttpsRequest *self, const char *method) {
 	BearHttpsRequest_set_method(self, method);
+}
+
+int HttpsResponseReadBodyChunk(TinyHttpsResponse* response, unsigned char* buffer, int size) {
+	if (response == NULL || buffer == NULL || size <= 0) {
+		return -1;
+	}
+	return BearHttpsResponse_read_body_chunck(response, buffer, size);
+}
+
+int HttpsResponseReadBodyStream(TinyHttpsResponse* response, StreamReadCallback callback, void* user_data) {
+	if (response == NULL || callback == NULL) {
+		return -1;
+	}
+	
+	// Check if there's an error
+	if (BearHttpsResponse_error(response)) {
+		return -1;
+	}
+	
+	unsigned char buffer[4096];
+	int total_read = 0;
+	
+	while (1) {
+		int bytes_read = BearHttpsResponse_read_body_chunck(response, buffer, sizeof(buffer));
+		
+		if (bytes_read < 0) {
+			// Error occurred
+			return -1;
+		}
+		
+		if (bytes_read == 0) {
+			// End of stream
+			break;
+		}
+		
+		total_read += bytes_read;
+		
+		// Call the callback with the received data
+		int result = callback((const char*)buffer, bytes_read, user_data);
+		if (result != 0) {
+			// Callback requested to abort
+			return result;
+		}
+	}
+	
+	return 0;
+}
+
+bool HttpsResponseHasMoreData(TinyHttpsResponse* response) {
+	if (response == NULL) {
+		return false;
+	}
+	
+	if (BearHttpsResponse_error(response)) {
+		return false;
+	}
+	
+	// Get current read size and total content length
+	int body_size = BearHttpsResponse_get_body_size(response);
+	// This is a simplified check - in practice, you might need to track
+	// the actual bytes read vs expected
+	return body_size >= 0;
 }

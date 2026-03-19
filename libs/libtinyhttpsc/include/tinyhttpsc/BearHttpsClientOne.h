@@ -30,6 +30,7 @@ SOFTWARE.
 #include <stdarg.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/socket.h>
 
 /* Forward declarations */
 typedef struct BearHttpsRequest BearHttpsRequest;

@@ -193,6 +193,115 @@ char* getMessageContent(const char* resp) {
 
 #define THINKING "thinking ... "
 
+static bool think_removed = false;
+static void remove_thinking(void) {
+	uint32_t len = strlen(THINKING);
+	for(uint32_t i=0; i<len; i++) {
+		write(1, "\b \b", 3);
+	}
+}
+
+// Example callback for stream reading
+// This callback receives data chunks as they arrive from the server
+// user_data is a pointer to a buffer that accumulates all content
+static int stream_callback(const char* data, int size, void* user_data) {
+	if(!think_removed) {
+		remove_thinking();
+		think_removed = true;
+	}
+
+	// Print the received chunk
+	// Note: data may not be null-terminated, so use size
+	char* full_content = (char*)user_data;
+	char* content = getMessageContent(data);
+	if(content != NULL) {
+		printf("\033[1m%s\033[0m", content);
+		// Append content to full_content with a space
+		if(full_content != NULL) {
+			if((strlen(full_content) + strlen(content) + 1) < BUFFER_SIZE) {
+				strcat(full_content, content);
+				strcat(full_content, " ");
+			}
+		}
+		free(content);
+	}
+	// Return 0 to continue reading, non-zero to abort
+	return 0;
+}
+
+// Example: chat with stream mode (for SSE - Server-Sent Events)
+// This function demonstrates how to use the new stream API
+static char* chat_with_stream(Message* messages, int message_count) {
+	TinyHttpsRequest *request;
+	TinyHttpsResponse *response;
+	int timeout_ms = 60000; // Longer timeout for streaming
+
+	// Create request body with stream=true
+	static char request_body[BUFFER_SIZE * 4];
+	request_body[0] = '\0';
+	snprintf(request_body, sizeof(request_body), "{\"model\":\"%s\",\"messages\":[", MODEL_ID);
+	size_t current_len = strlen(request_body);
+	
+	static char message[BUFFER_SIZE * 2 + 128];
+	for (int i = 0; i < message_count; i++) {
+		if (i > 0) {
+			strncat(request_body, ",", sizeof(request_body) - current_len - 1);
+			current_len++;
+		}
+		int idx = get_message_index(i);
+		snprintf(message, sizeof(message), "{\"role\":\"%s\",\"content\":\"%s\"}", messages[idx].role, messages[idx].content);
+		strncat(request_body, message, sizeof(request_body) - current_len - 1);
+		current_len = strlen(request_body);
+	}
+	
+	strncat(request_body, "],\"stream\":true}", sizeof(request_body) - current_len - 1);
+
+	request = NewHttpsRequest("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+	if (request == NULL) {
+		printf("error: cannot allocate request\n");
+		return NULL;
+	}
+
+	HttpsRequestSetMethod(request, "POST");
+	HttpsRequestSetTimeout(request, timeout_ms);
+	HttpsRequestSetMaxRedirections(request, 0);
+	
+	static char header[256];
+	header[0] = '\0';
+	snprintf(header, sizeof(header), "Bearer %s", API_KEY);
+	HttpsRequestAddHeader(request, "Authorization", header);
+	HttpsRequestAddHeader(request, "Content-Type", "application/json");
+
+	HttpsRequestSendBodyStr(request, request_body);
+
+	response = HttpsRequestFetch(request);
+	if (response == NULL) {
+		printf("error: fetch returned null response\n");
+		HttpsRequestFree(request);
+		return NULL;
+	}
+
+	if (HttpsResponseError(response)) {
+		printf("error: %s\n", HttpsResponseGetErrorMsg(response));
+		HttpsResponseFree(response);
+		HttpsRequestFree(request);
+		return NULL;
+	}
+
+	// Allocate a larger buffer to accumulate all stream content
+	char* ret = (char*)malloc(BUFFER_SIZE+1);
+	if(ret != NULL) {
+		ret[0] = '\0';  // Initialize empty string
+	}
+	
+	// Read response in streaming mode
+	HttpsResponseReadBodyStream(response, stream_callback, ret);
+
+	HttpsResponseFree(response);
+	HttpsRequestFree(request);
+	return ret;
+}
+
 // JSON escape special characters in a string
 // Returns the number of characters written to dest, or -1 if dest is too small
 static int json_escape(const char* src, char* dest, size_t dest_size) {
@@ -273,22 +382,36 @@ void add_context(bool user, const char* context) {
 	}
 }
 
-static char* chat(const char* prompt) {
+
+static bool chat(const char* prompt, bool stream) {
+	printf("\033[1m: %s\033[0m", THINKING);
+	think_removed = false;
+
 	add_context(true, prompt);
 
 	// Get response from Doubao
 	char* content = NULL;
-	char* resp = chat_with_context(messages, message_count);
-	if(resp != NULL) {
-		content = getMessageContent(resp);
-		free(resp);
+	if(stream) {
+		// Use stream mode - output is printed in real-time via callback
+		content = chat_with_stream(messages, message_count);
+	}
+	else {
+		char* resp = chat_with_context(messages, message_count);
+		remove_thinking();
+		if(resp != NULL) {
+			content = getMessageContent(resp);
+			free(resp);
+			printf("\033[1m%s\033[0m", content);
+		}
 	}
 
-	if(content != NULL) {
-		if (content[0] != 0)
-			add_context(false, content);
-	}
-	return content;
+	if(content == NULL)
+		return false;
+
+	if (content[0] != 0)
+		add_context(false, content);
+	free(content);
+	return true;  // Stream mode doesn't return accumulated content
 }
 
 static int read_prompt(char* prompt, int32_t size) {
@@ -344,21 +467,9 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
-		printf("\033[1m: %s\033[0m", THINKING);
-		char* content = chat(prompt);
-
-		uint32_t len = strlen(THINKING);
-		for(uint32_t i=0; i<len; i++) {
-			write(1, "\b \b", 3);
-		}
-
-		// Print Doubao's response
-		if(content != NULL) {
-			printf("\033[1m%s\033[0m\n\n", content);
-			free(content);
-		}
-		else
-			printf("\n");
+		// Call chat - in stream mode, output is printed in real-time
+		chat(prompt, true);
+		printf("\n\n");
 	}
 	return 0;
 }
