@@ -94305,25 +94305,25 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
 	// Try gethostbyname first
 	slog("dns resolving %s ... \n", host);
 	Universal_hostent *he = Universal_gethostbyname(host);
-	if(he != NULL && he->h_addr_list[0] != NULL) {
-		Universal_in_addr addr;
-		memcpy(&addr, he->h_addr_list[0], sizeof(Universal_in_addr));
-		const char *ip_str = Universal_inet_ntoa(addr);
-		slog("%s -> %s\n", host, ip_str);
+	if(he != NULL) {
+		for(int i = 0; he->h_addr_list[i] != NULL; i++) {
+			Universal_in_addr addr;
+			memcpy(&addr, he->h_addr_list[i], sizeof(Universal_in_addr));
+			const char *ip_str = Universal_inet_ntoa(addr);
+			slog("%s -> %s\n", host, ip_str);
 
-		if(ip_str != NULL) {
-			slog("connecting %s ... ", ip_str);
-			int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip_str, port, self->connection_timeout);
-			if(sockfd >= 0) {
-				slog("ok.\n");
-				private_BearHttps_cache_dns(host, ip_str);
-				return sockfd;
-			}
-			else  {
-				slog("failed!\n");
-	 	 	  	BearHttpsResponse_set_error(response,"failed to connect",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
+			if(ip_str != NULL) {
+				slog("connecting %s ... ", ip_str);
+				int sockfd = private_BearHttpsRequest_connect_ipv4_no_error_raise(ip_str, port, self->connection_timeout);
+				if(sockfd >= 0) {
+					slog("ok.\n");
+					private_BearHttps_cache_dns(host, ip_str);
+					return sockfd;
+				}
 			}
 		}
+		slog("failed!\n");
+		BearHttpsResponse_set_error(response,"failed to connect",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
 	}
 	else {
 		slog("failed!\n");
