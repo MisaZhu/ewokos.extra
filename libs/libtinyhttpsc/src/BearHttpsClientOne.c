@@ -94304,9 +94304,15 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
 			if(sockfd >= 0) {
 				return sockfd;
 			}
+	    	BearHttpsResponse_set_error(response,"failed to connect",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
 		}
 	}
+	else {
+	    BearHttpsResponse_set_error(response,"failed to dns resolv",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
+	}
+	return -1;
 
+	/*
     BearHttpsClientDnsProvider *chosen_dns_providers  = self->dns_providers ?  self->dns_providers : privateBearHttpsProviders;
     int chosen_dns_providers_size = self->total_dns_providers ? self->total_dns_providers : privateBearHttpsProvidersSize;
 
@@ -94389,6 +94395,7 @@ static int private_BearHttps_connect_host(BearHttpsRequest *self, BearHttpsRespo
      BearHttpsResponse_set_error(response,"ERROR: failed to create dns request",BEARSSL_HTTPS_FAILT_TO_CREATE_DNS_REQUEST);
      privateBearHttpsStringArray_free(already_testted);
      return -1;
+	 */
 }
 
 
