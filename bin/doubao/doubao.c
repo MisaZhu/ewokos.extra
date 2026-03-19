@@ -22,8 +22,9 @@
 
 #define BUFFER_SIZE  512
 
-#define API_KEY "863058a9-7b40-40e8-affc-f86b1496981e"
+#define API_KEY  "863058a9-7b40-40e8-affc-f86b1496981e"
 #define MODEL_ID "ep-20260318183410-gzgr5"
+#define API_URL  "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 
 // Message structure for conversation history
 typedef struct {
@@ -74,7 +75,7 @@ static char* chat_with_context(Message* messages, int message_count) {
 	strncat(request_body, "],\"stream\":false}", sizeof(request_body) - current_len - 1);
 
 	// Create HTTPS request to Doubao API
-	request = NewHttpsRequest("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+	request = NewHttpsRequest(API_URL);
 	if (request == NULL) {
 		printf("error: cannot allocate request\n");
 		return NULL;
@@ -256,7 +257,7 @@ static char* chat_with_stream(Message* messages, int message_count) {
 	
 	strncat(request_body, "],\"stream\":true}", sizeof(request_body) - current_len - 1);
 
-	request = NewHttpsRequest("https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+	request = NewHttpsRequest(API_URL);
 	if (request == NULL) {
 		printf("error: cannot allocate request\n");
 		return NULL;
