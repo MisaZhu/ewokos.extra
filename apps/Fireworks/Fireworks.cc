@@ -223,21 +223,13 @@ protected:
     void onTimer(uint32_t timerFPS, uint32_t timerStep) {
         if (timerStep % (timerFPS) == 0) {
             launchFirework();
-
-            struct tm time_info;
-            proto_t out;
-            PF->init(&out);
-            if(dev_cntl("/dev/localtime", 0, NULL, &out) == 0) {
-                int res = proto_read_int(&out);
-                if(res == 0) {
-                    proto_read_to(&out, &time_info, sizeof(time_info));
-                    strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &time_info);
-                }
-                PF->clear(&out);
-                if (timerStep % (timerFPS*3) == 0) {
-                    xOffset = rand();
-                    yOffset = rand();
-                }
+            time_t now = time(NULL);
+			struct tm time_info;
+            localtime_r(&now, &time_info);
+            strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &time_info);
+            if (timerStep % (timerFPS*3) == 0) {
+                xOffset = rand();
+                yOffset = rand();
             }
         }
         update();
@@ -266,9 +258,9 @@ int main(int argc, char** argv) {
     FireworksWidget* fireworks = new FireworksWidget();
     root->add(fireworks);
 
-    //win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
-    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NO_TITLE);
-    win.max();
+    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
+    //win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NO_TITLE);
+    //win.max();
     win.setTimer(30);
 
     widgetXRun(&x, &win);
