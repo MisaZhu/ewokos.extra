@@ -258,9 +258,9 @@ int main(int argc, char** argv) {
     FireworksWidget* fireworks = new FireworksWidget();
     root->add(fireworks);
 
-    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
-    //win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NO_TITLE);
-    //win.max();
+    //win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
+    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NO_TITLE);
+    win.max();
     win.setTimer(30);
 
     widgetXRun(&x, &win);
