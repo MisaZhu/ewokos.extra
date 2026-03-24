@@ -35,7 +35,7 @@ graph_t* graph;
 
 extern "C"{
 void draw_pixel(int x, int y, uint32_t color){
-	graph_pixel_safe(graph, x, y, color);
+	graph_pixel(graph, x, y, color);
 }
 
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color){
