@@ -97,7 +97,9 @@ public:
         TOOL_RECT,
         TOOL_ROUND_RECT,
         TOOL_CIRCLE,
-        TOOL_FILL
+        TOOL_FILL_CIRCLE,
+        TOOL_FILL_RECT,
+        TOOL_FILL_ROUND_RECT
     };
 
 private:
@@ -106,6 +108,7 @@ private:
     uint32_t color;
     int penSize;
     graph_t* canvas;
+    graph_t* backupCanvas;
     ToolType toolType;
 
 public:
@@ -114,12 +117,15 @@ public:
         color = 0xff000000; // 黑色
         penSize = 2;
         canvas = NULL;
+        backupCanvas = NULL;
         toolType = TOOL_PEN;
     }
 
     ~DrawArea() {
         if(canvas != NULL)
             graph_free(canvas);
+        if(backupCanvas != NULL)
+            graph_free(backupCanvas);
     }
 
     void setColor(uint32_t c) {
@@ -142,6 +148,10 @@ public:
         if(canvas != NULL) {
             graph_free(canvas);
         }
+        if(backupCanvas != NULL) {
+            graph_free(backupCanvas);
+            backupCanvas = NULL;
+        }
         canvas = graph_new(NULL, area.w, area.h);
         graph_fill(canvas, 0, 0, area.w, area.h, 0xffffffff); // 白色背景
         update();
@@ -151,6 +161,10 @@ protected:
     void onResize() {
         if(canvas != NULL) {
             graph_free(canvas);
+        }
+        if(backupCanvas != NULL) {
+            graph_free(backupCanvas);
+            backupCanvas = NULL;
         }
         canvas = graph_new(NULL, area.w, area.h);
         graph_fill(canvas, 0, 0, area.w, area.h, 0xffffffff); // 白色背景
@@ -169,46 +183,50 @@ protected:
         int x = pos.x;
         int y = pos.y;
 
+        // 边界检查
+        if(canvas != NULL) {
+            if(x < 0) x = 0;
+            if(y < 0) y = 0;
+            if(x >= canvas->w) x = canvas->w - 1;
+            if(y >= canvas->h) y = canvas->h - 1;
+        }
+
         if(ev->state == MOUSE_STATE_DOWN) {
             isDrawing = true;
             lastX = x;
             lastY = y;
+            // 创建备份画布用于预览
+            if(backupCanvas != NULL) {
+                graph_free(backupCanvas);
+                backupCanvas = NULL;
+            }
+            if(canvas != NULL && canvas->w > 0 && canvas->h > 0) {
+                backupCanvas = graph_dup(canvas);
+            }
         }
         else if(ev->state == MOUSE_STATE_DRAG && isDrawing) {
             if(canvas != NULL) {
-                // 根据当前工具类型执行不同的绘图操作
-                switch(toolType) {
-                case TOOL_PEN:
-                    graph_line(canvas, lastX, lastY, x, y, color);
+                // Pen工具直接绘制，不恢复备份
+                if(toolType == TOOL_PEN) {
+                    if(lastX >= 0 && lastY >= 0 && lastX < canvas->w && lastY < canvas->h) {
+                        graph_line(canvas, lastX, lastY, x, y, color);
+                    }
                     lastX = x;
                     lastY = y;
-                    break;
-                case TOOL_LINE:
-                    // 暂时不做任何操作，在鼠标释放时绘制
-                    break;
-                case TOOL_RECT:
-                    // 暂时不做任何操作，在鼠标释放时绘制
-                    break;
-                case TOOL_ROUND_RECT:
-                    // 暂时不做任何操作，在鼠标释放时绘制
-                    break;
-                case TOOL_CIRCLE:
-                    // 暂时不做任何操作，在鼠标释放时绘制
-                    break;
-                case TOOL_FILL:
-                    // 暂时不做任何操作，在鼠标释放时绘制
-                    break;
+                    update();
                 }
-                update();
-            }
-        }
-        else if(ev->state == MOUSE_STATE_UP) {
-            if(canvas != NULL && isDrawing) {
-                // 根据当前工具类型执行不同的绘图操作
-                switch(toolType) {
-                case TOOL_PEN:
-                    break;
-                case TOOL_LINE:
+                // 其他工具需要恢复备份并绘制预览
+                else if(backupCanvas != NULL && 
+                        canvas->w == backupCanvas->w && canvas->h == backupCanvas->h) {
+                    // 恢复备份
+                    graph_blt(backupCanvas, 0, 0, backupCanvas->w, backupCanvas->h, canvas, 0, 0, canvas->w, canvas->h);
+                    
+                    // 根据当前工具类型执行预览绘制
+                    switch(toolType) {
+                    case TOOL_PEN:
+                        // Pen工具已在外面处理
+                        break;
+                    case TOOL_LINE:
                     graph_line(canvas, lastX, lastY, x, y, color);
                     break;
                 case TOOL_RECT:
@@ -222,13 +240,76 @@ protected:
                     graph_circle(canvas, lastX, lastY, radius, penSize, color);
                     break;
                 }
-                case TOOL_FILL:
-                    graph_fill(canvas, x, y, 1, 1, color);
+                case TOOL_FILL_CIRCLE: {
+                    int radius = sqrt(pow(x - lastX, 2) + pow(y - lastY, 2));
+                    graph_fill_circle(canvas, lastX, lastY, radius, color);
                     break;
                 }
-                update();
+                case TOOL_FILL_RECT:
+                    graph_fill(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
+                    break;
+                case TOOL_FILL_ROUND_RECT:
+                    graph_fill_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, color);
+                    break;
+                    }
+                    update();
+                }
+            }
+        }
+        else if(ev->state == MOUSE_STATE_UP) {
+            if(canvas != NULL && isDrawing) {
+                // Pen工具不需要恢复备份，直接保留绘制内容
+                // 其他工具需要恢复备份并执行最终绘制
+                if(toolType != TOOL_PEN) {
+                    // 恢复备份，确保最终绘制在原始画布上
+                    if(backupCanvas != NULL && 
+                       canvas->w == backupCanvas->w && canvas->h == backupCanvas->h) {
+                        graph_blt(backupCanvas, 0, 0, backupCanvas->w, backupCanvas->h, canvas, 0, 0, canvas->w, canvas->h);
+                    }
+                    
+                    // 根据当前工具类型执行最终的绘图操作
+                    switch(toolType) {
+                    case TOOL_PEN:
+                        break;
+                    case TOOL_LINE:
+                    graph_line(canvas, lastX, lastY, x, y, color);
+                    break;
+                case TOOL_RECT:
+                    graph_box(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
+                    break;
+                case TOOL_ROUND_RECT:
+                    graph_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, penSize, color);
+                    break;
+                case TOOL_CIRCLE: {
+                    int radius = sqrt(pow(x - lastX, 2) + pow(y - lastY, 2));
+                    graph_circle(canvas, lastX, lastY, radius, penSize, color);
+                    break;
+                }
+                case TOOL_FILL_CIRCLE: {
+                    int radius = sqrt(pow(x - lastX, 2) + pow(y - lastY, 2));
+                    graph_fill_circle(canvas, lastX, lastY, radius, color);
+                    break;
+                }
+                case TOOL_FILL_RECT:
+                    graph_fill(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
+                    break;
+                case TOOL_FILL_ROUND_RECT:
+                    graph_fill_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, color);
+                    break;
+                    }
+                    update();
+                }
+                // Pen工具也需要更新显示
+                else if(toolType == TOOL_PEN) {
+                    update();
+                }
             }
             isDrawing = false;
+            // 清理备份画布
+            if(backupCanvas != NULL) {
+                graph_free(backupCanvas);
+                backupCanvas = NULL;
+            }
         }
         return true;
     }
@@ -242,7 +323,9 @@ private:
     ToolButton* btnRect;
     ToolButton* btnRoundRect;
     ToolButton* btnCircle;
-    ToolButton* btnFill;
+    ToolButton* btnFillCircle;
+    ToolButton* btnFillRect;
+    ToolButton* btnFillRoundRect;
     ToolButton* btnEraser;
     ToolButton* btnColor;
     ToolButton* btnClear;
@@ -297,9 +380,17 @@ public:
         btnCircle->setEventFunc(onToolClick, this);
         toolbar->add(btnCircle);
 
-        btnFill = new ToolButton("Fill");
-        btnFill->setEventFunc(onToolClick, this);
-        toolbar->add(btnFill);
+        btnFillCircle = new ToolButton("FCircle");
+        btnFillCircle->setEventFunc(onToolClick, this);
+        toolbar->add(btnFillCircle);
+
+        btnFillRect = new ToolButton("FRect");
+        btnFillRect->setEventFunc(onToolClick, this);
+        toolbar->add(btnFillRect);
+
+        btnFillRoundRect = new ToolButton("FRound");
+        btnFillRoundRect->setEventFunc(onToolClick, this);
+        toolbar->add(btnFillRoundRect);
 
         // 添加分隔线
         Blank* separator2 = new Blank();
@@ -374,8 +465,12 @@ public:
                 self->drawArea->setToolType(DrawArea::TOOL_ROUND_RECT);
             else if(btn == self->btnCircle)
                 self->drawArea->setToolType(DrawArea::TOOL_CIRCLE);
-            else if(btn == self->btnFill)
-                self->drawArea->setToolType(DrawArea::TOOL_FILL);
+            else if(btn == self->btnFillCircle)
+                self->drawArea->setToolType(DrawArea::TOOL_FILL_CIRCLE);
+            else if(btn == self->btnFillRect)
+                self->drawArea->setToolType(DrawArea::TOOL_FILL_RECT);
+            else if(btn == self->btnFillRoundRect)
+                self->drawArea->setToolType(DrawArea::TOOL_FILL_ROUND_RECT);
 
             self->drawArea->setPenSize(2); // 重置笔刷大小
         }
