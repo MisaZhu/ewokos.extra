@@ -233,7 +233,7 @@ protected:
                     graph_box(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
                     break;
                 case TOOL_ROUND_RECT:
-                    graph_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, penSize, color);
+                    graph_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 18, penSize, color);
                     break;
                 case TOOL_CIRCLE: {
                     int radius = sqrt(pow(x - lastX, 2) + pow(y - lastY, 2));
@@ -249,7 +249,7 @@ protected:
                     graph_fill(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
                     break;
                 case TOOL_FILL_ROUND_RECT:
-                    graph_fill_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, color);
+                    graph_fill_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 18, color);
                     break;
                     }
                     update();
@@ -278,7 +278,7 @@ protected:
                     graph_box(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
                     break;
                 case TOOL_ROUND_RECT:
-                    graph_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, penSize, color);
+                    graph_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 18, penSize, color);
                     break;
                 case TOOL_CIRCLE: {
                     int radius = sqrt(pow(x - lastX, 2) + pow(y - lastY, 2));
@@ -294,7 +294,7 @@ protected:
                     graph_fill(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
                     break;
                 case TOOL_FILL_ROUND_RECT:
-                    graph_fill_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 10, color);
+                    graph_fill_round(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), 18, color);
                     break;
                     }
                     update();
