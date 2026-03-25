@@ -22,10 +22,9 @@ class CircularClock : public Widget {
 
         graph_set(g, r.x, r.y, r.w, r.h, 0x0);
         // 绘制白色圆底
-        graph_fill_circle(g, centerX, centerY, radius, 0xff000000);
-        radius -= 2;
         graph_fill_circle(g, centerX, centerY, radius, 0xffffffff);
-        radius -= 2;
+        graph_circle(g, centerX, centerY, radius, 2, 0xff000000);
+        radius -= 4;
 
         // 绘制数字
         font_t* font = theme->getFont();
