@@ -66,7 +66,7 @@ class CircularClock : public Widget {
         int radius = (r.w < r.h ? r.w : r.h) / 2 - 10;
     
         // 定义时针、分针和秒针的宽度
-        int hourHandWidth = 4; // 时针最粗
+        int hourHandWidth = 5; // 时针最粗
         int minHandWidth = 3;  // 分针比秒针粗
         int secHandWidth = 2;  // 秒针最细
     
