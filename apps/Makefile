@@ -5,6 +5,7 @@ all:
 	cd Fireworks; make
 	cd clock; make
 	cd kimi_chat; make
+	cd xDraw; make
 
 clean: 
 	cd 3ddemo;make clean
@@ -12,3 +13,4 @@ clean:
 	cd Fireworks; make clean
 	cd clock; make clean
 	cd kimi_chat; make clean
+	cd xDraw; make clean
