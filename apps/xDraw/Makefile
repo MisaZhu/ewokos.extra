@@ -18,6 +18,7 @@ all: $(TASK)
 $(TASK): $(TASK_OBJS) 
 	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
+	cp -r res $(BUILD_DIR)
 
 clean:
 	rm -f $(TASK_OBJS)
