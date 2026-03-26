@@ -1,4 +1,5 @@
 #include <Widget/SpriteWin.h>
+#include <Widget/SpriteAnim.h>
 #include <Widget/WidgetX.h>
 #include <x++/X.h>
 #include <unistd.h>
@@ -9,66 +10,28 @@
 
 using namespace Ewok;
 
-class AnimWidget : public Widget {
-	int fighter_step;
-	graph_t* img_fighter;
-
-	void drawFitgher(graph_t* g) {
-		graph_t* img = img_fighter;
-		if(img == NULL)
-			return;
-		graph_blt(img, fighter_step*(img->w/7), 0, img->w/7, img->h,
-				g, g->w-img->w/7, g->h-img->h, img->w, img->h);
-	}
-public:
-	inline AnimWidget() {
-		fighter_step = 0;
-		img_fighter = png_image_new(X::getResName("data/fighter.png").c_str());
-	}
-	
-	inline ~AnimWidget() {
-		if(img_fighter != NULL)
-			graph_free(img_fighter);
-	}
-
-	bool getSize(int32_t& w, int32_t& h) {
-		if(img_fighter == NULL)
-			return false;
-		w = img_fighter->w / 7;
-		h = img_fighter->h;
-		return true;
-	}
-
-protected:
-    void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
-		graph_clear(g, 0x0);
-		drawFitgher(g);
-
-		fighter_step++;
-		if (fighter_step >= 7)
-			fighter_step = 0;
-	}
-
-    void onTimer(uint32_t timerFPS, uint32_t timerStep) {
-        update();
-    }
-};
-
 int main(int argc, char** argv) {
     X x;
     SpriteWin win;
 
     RootWidget* root = new RootWidget();
-    win.setRoot(root);
+	root->setAlpha(true);
     root->setType(Container::HORIZONTAL);
+    win.setRoot(root);
 
-    AnimWidget* anim = new AnimWidget();
+    SpriteAnim* anim = new SpriteAnim();
     root->add(anim);
 
-    int32_t w=120, h=120;
-    anim->getSize(w, h);
-    win.open(&x, -1, -1, -1, w, h, "Anim", XWIN_STYLE_NO_FRAME);
-    win.setTimer(7);
+	std::string script = X::getResName("data/fighter.spr").c_str();
+	if(argc > 1)
+		script = argv[1];
+
+	if(!anim->setSpriteByScript(script))
+		return 1;
+
+    gsize_t size = anim->getSpriteSize();
+    win.open(&x, -1, -1, -1, size.w, size.h, "Anim", XWIN_STYLE_SPRITE);	
+    win.setTimer(anim->getFPS());
     win.setAlpha(true);
     widgetXRun(&x, &win);
     return 0;
