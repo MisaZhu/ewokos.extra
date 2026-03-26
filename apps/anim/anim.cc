@@ -1,4 +1,4 @@
-#include <Widget/Sprite.h>
+#include <Widget/SpriteWin.h>
 #include <Widget/WidgetX.h>
 #include <x++/X.h>
 #include <unistd.h>
@@ -56,7 +56,7 @@ protected:
 
 int main(int argc, char** argv) {
     X x;
-    Sprite win;
+    SpriteWin win;
 
     RootWidget* root = new RootWidget();
     win.setRoot(root);
