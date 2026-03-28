@@ -3,7 +3,7 @@ include $(SW_ROOT_DIR)/make.inc
 
 TASK = kimi_chat
 TASK_OBJS = kimi_chat.o kimi_client.o
-BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/apps/$(TASK)
+BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 LIBTINYHTTPSC = $(SDK_DIR)/lib/libtinyhttpsc.a
 
 CFLAGS += -I $(SW_ROOT_DIR)/libs/libtinyhttpsc/include

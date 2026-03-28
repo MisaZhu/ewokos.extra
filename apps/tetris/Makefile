@@ -14,7 +14,7 @@ CXXFLAGS += -I $(BUILD_DIR)/include
 TASK_OBJS = graphics.o input.o game.o main.o
 
 TASK = tetris
-TASK_DIR = $(SW_ROOT_DIR)/build/$(HW)/apps/$(TASK)
+TASK_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
 all: $(TASK)
 

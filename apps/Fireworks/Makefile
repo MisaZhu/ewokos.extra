@@ -9,7 +9,7 @@ LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
 TASK_OBJS = Fireworks.o
 
 TASK = Fireworks
-BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/apps/$(TASK)
+BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
 all: $(TASK)
 

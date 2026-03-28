@@ -1,22 +1,23 @@
 TASK_OBJS = xwm.o MacWM.o
 
 SW_ROOT_DIR=../../..
-SYS_DIR=$(SW_ROOT_DIR)/../system
+EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-LIB_DIR = $(SYS_DIR)/build/$(HW)
+LIB_DIR = $(SYS_ROOT_DIR)/build/$(HW)/lib
 
 TASK = xwm_mac1984
-BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/sbin/x
+BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/sbin/x
 
 all: $(TASK)
 
 $(TASK): $(TASK_OBJS) \
-		$(LIB_DIR)/lib/libx++.a \
-		$(LIB_DIR)/lib/libx.a \
-		$(LIB_DIR)/lib/libfont.a \
-		$(LIB_DIR)/lib/libgraph.a \
-		$(LIB_DIR)/lib/libcxx.a 
+		$(LIB_DIR)/libx++.a \
+		$(LIB_DIR)/libx.a \
+		$(LIB_DIR)/libfont.a \
+		$(LIB_DIR)/libgraph.a \
+		$(LIB_DIR)/libcxx.a 
 	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) -lopenlibm $(EWOK_LIBC)  -lcxx
 

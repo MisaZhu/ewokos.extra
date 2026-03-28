@@ -12,7 +12,7 @@ CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include
 LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
 
 TASK = 3ddemo
-BUILD_DIR = $(SW_ROOT_DIR)/build/$(HW)/apps/$(TASK)
+BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
 all: $(TASK)
 
