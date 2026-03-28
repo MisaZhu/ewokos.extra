@@ -74,7 +74,7 @@ public:
 	Anim(EditLine* editLine) {
 		this->editLine = editLine;
 		step = 0;
-		img = png_image_new(X::getResName("data/walk.png").c_str());
+		img = png_image_new(X::getResFullName("data/walk.png").c_str());
 		steps = 8;
 		pos = 0;
 	}
