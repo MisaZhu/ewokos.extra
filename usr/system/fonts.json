@@ -1,5 +1,7 @@
 [
     {"name": "system", "file": "/usr/system/fonts/system.ttf"},
+    {"name": "oppo-cn", "file": "/usr/system/fonts/oppo-cn.ttf"},
+    {"name": "system-cn", "file": "/usr/system/fonts/system-cn.ttf"},
     {"name": "Sono-Regular", "file": "/usr/system/fonts/Sono-Regular.ttf"},
     {"name": "Salsa-Regular", "file": "/usr/system/fonts/Salsa-Regular.ttf"},
     {"name": "KodeMono-Medium", "file": "/usr/system/fonts/KodeMono-Medium.ttf"},
@@ -33,6 +35,5 @@
     {"name": "RoundButterfly", "file": "/usr/system/fonts/RoundButterfly.ttf"},
     {"name": "RoundRope-JRqGB", "file": "/usr/system/fonts/RoundRope-JRqGB.ttf"},
     {"name": "SplineSansMono", "file": "/usr/system/fonts/SplineSansMono.ttf"},
-    {"name": "VarelaRound-Regular", "file": "/usr/system/fonts/VarelaRound-Regular.ttf"},
-    {"name": "system-cn", "file": "/usr/system/fonts/system-cn.ttf"}
+    {"name": "VarelaRound-Regular", "file": "/usr/system/fonts/VarelaRound-Regular.ttf"}
 ]
