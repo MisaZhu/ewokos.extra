@@ -227,7 +227,7 @@ protected:
                     // Pen工具已在外面处理
                     break;
                 case TOOL_LINE:
-                    graph_wline(canvas, lastX, lastY, x, y, color, 5);
+                    graph_wline(canvas, lastX, lastY, x, y, 5, color);
                     break;
                 case TOOL_RECT:
                     graph_box(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
@@ -272,7 +272,7 @@ protected:
                 case TOOL_PEN:
                     break;
                 case TOOL_LINE:
-                    graph_wline(canvas, lastX, lastY, x, y, color, 5);
+                    graph_wline(canvas, lastX, lastY, x, y, 5, color);
                     break;
                 case TOOL_RECT:
                     graph_box(canvas, std::min(lastX, x), std::min(lastY, y), std::abs(x - lastX), std::abs(y - lastY), color);
