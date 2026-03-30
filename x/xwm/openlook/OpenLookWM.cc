@@ -33,8 +33,11 @@ void OpenLookWM::drawClose(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
 }
 
 void OpenLookWM::drawDragFrame(graph_t* g, grect_t* r) {
-	graph_frame(g, r->x-xwm.theme.frameW, r->y-xwm.theme.frameW, 
-			r->w+xwm.theme.frameW*2, r->h+xwm.theme.frameW*2, xwm.theme.frameW, 0x88ffffff, false);
+	int wd = xwm.theme.frameW;
+	if(wd <= 0)
+		wd = 2;
+	graph_frame(g, r->x-wd, r->y-wd, 
+			r->w+wd*2, r->h+wd*2, wd, 0x88ffffff, false);
 }
 
 void OpenLookWM::drawResize(graph_t* g, xinfo_t* info, grect_t* r, bool top) {
