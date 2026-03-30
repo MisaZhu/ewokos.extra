@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
     grect_t wr;
     wr.x = 200;
     wr.y = 100;
-    wr.w = 320;
+    wr.w = 260;
     wr.h = 320;
 
     win.open(&x, -1, wr, "Calculator", XWIN_STYLE_NO_RESIZE);
