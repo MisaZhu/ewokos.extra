@@ -705,8 +705,8 @@ int main(int argc, char *argv[])
 	x.getScreenInfo(scr, 0);
 
 	scale = 1.0;
-	/*
-#ifdef BSP_BOOST
+	
+/*#ifdef BSP_BOOST
 	if(scr.size.h > 240)
 		scale = scr.size.h / 240.0;
 #endif
@@ -714,12 +714,6 @@ int main(int argc, char *argv[])
 
 	emu.open(&x, -1, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
 	//emu.max();
-	/*_xwin = &emu;
-	uint32_t tid = timer_set(10000, loop);
-	x.run(NULL, &emu);
-	timer_remove(tid);
-	*/
-
 	x.run(loop, &emu);
 
 	InfoNES_Fin();
