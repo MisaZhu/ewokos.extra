@@ -7,6 +7,7 @@ all:
 	cd calculator; make
 	cd calendar; make
 	cd sdl_tetris; make
+	cd emu; make
 
 clean:
 	cd 3ddemo;make clean
@@ -16,3 +17,4 @@ clean:
 	cd calculator; make clean
 	cd calendar; make clean
 	cd sdl_tetris; make clean
+	cd emu; make clean
