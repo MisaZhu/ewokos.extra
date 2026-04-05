@@ -2020,7 +2020,7 @@ LOCALPROC RunEmulatedTicksToTrueTime(void)
 #endif
 			)
 		{
-			CheckMouseState();
+			/* CheckMouseState disabled - using xrel/yrel accumulation in SDL_MOUSEMOTION */
 		}
 
 #if EnableMouseMotion && MayFullScreen
@@ -2082,8 +2082,10 @@ LOCALPROC CheckForSystemEvents(void)
 	SDL_Event event;
 	int i = 10;
 
+	SDL_zero(event);
 	while ((--i >= 0) && SDL_PollEvent(&event)) {
 		HandleTheEvent(&event);
+		SDL_zero(event);
 	}
 }
 

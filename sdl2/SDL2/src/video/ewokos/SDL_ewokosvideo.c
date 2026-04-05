@@ -91,8 +91,11 @@ static int sdl_key(int v) {
 static void on_event(xwin_t* xw, xevent_t* ev) {
 	if(xw == NULL)
 		return;
+    
 
     SDL_Event sdlEvent;
+    SDL_zero(sdlEvent);
+
     if(ev->type == XEVT_IM) {
         if(ev->state == XIM_STATE_PRESS)
             sdlEvent.type = SDL_KEYDOWN;
@@ -104,9 +107,8 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
     else if(ev->type == XEVT_MOUSE) {
         int mousex =  ev->value.mouse.x - xw->xinfo->wsr.x;
         int mousey =  ev->value.mouse.y - xw->xinfo->wsr.y;
-
+        
         if(ev->state == MOUSE_STATE_MOVE || ev->state == MOUSE_STATE_DRAG) {
-            SDL_zero(sdlEvent);
             sdlEvent.type = SDL_MOUSEMOTION;
             sdlEvent.motion.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
             sdlEvent.motion.x = mousex;
@@ -117,7 +119,6 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
             SDL_PushEvent(&sdlEvent);
         }
         else if(ev->state == MOUSE_STATE_DOWN) {
-            SDL_zero(sdlEvent);
             sdlEvent.type = SDL_MOUSEBUTTONDOWN;
             sdlEvent.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
             sdlEvent.button.x = mousex;
@@ -129,7 +130,6 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
             SDL_PushEvent(&sdlEvent);
         }
         else if(ev->state == MOUSE_STATE_UP) {
-            SDL_zero(sdlEvent);
             sdlEvent.type = SDL_MOUSEBUTTONUP;
             sdlEvent.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
             sdlEvent.button.x = mousex;
