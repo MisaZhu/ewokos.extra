@@ -20,7 +20,7 @@ include $(SW_ROOT_DIR)/make.inc
 #ASFLAGS = --warn 
 #CFLAGS = -O3 -I. -I../SDL2/include -I../libogg/include -I../libvorbis/include -ffreestanding  -D_REENTRANT -D__EWOKOS__ -DOGG_MUSIC=1 -DWAV_MUSIC=1
 ASFLAGS = --warn
-CFLAGS += -O3 -I. -I../SDL2/include -ffreestanding -D_REENTRANT -D__EWOKOS__ -DOGG_MUSIC=1 -DWAV_MUSIC=1
+CFLAGS += -O3 -I. -I../SDL2/include -I$(SYS_ROOT_DIR)/gui/libs/minimp3/include -ffreestanding -D_REENTRANT -D__EWOKOS__ -DOGG_MUSIC=1 -DWAV_MUSIC=1 -DMP3_MUSIC=1
 CPPFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
 all: deps libSDL2_mixer.a
@@ -29,6 +29,7 @@ all: deps libSDL2_mixer.a
 
 OBJS = \
 	dynamic_ogg.o \
+	dynamic_mp3.o \
 	effect_position.o \
 	effect_stereoreverse.o \
 	effects_internal.o \
@@ -37,6 +38,7 @@ OBJS = \
 	load_voc.o \
 	mixer.o \
 	music_ogg.o \
+	music_mp3.o \
 	music.o \
 	wavestream.o
 

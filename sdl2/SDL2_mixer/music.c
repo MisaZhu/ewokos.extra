@@ -14,8 +14,8 @@
      claim that you wrote the original software. If you use this software
      in a product, an acknowledgment in the product documentation would be
      appreciated but is not required.
-  2. Altered source versions must be plainly marked as such, and must not be
-     misrepresented as being the original software.
+  2. Altered source versions must be plainly marked as such, and must not
+     be misrepresented as being the original software.
   3. This notice may not be removed or altered from any source distribution.
 */
 
@@ -58,7 +58,7 @@
 #include "music_ogg.h"
 #endif
 #ifdef MP3_MUSIC
-#include "dynamic_mp3.h"
+#include "music_mp3.h"
 #endif
 #ifdef MP3_MAD_MUSIC
 #include "music_mad.h"
@@ -109,7 +109,7 @@ struct _Mix_Music {
         OGG_music *ogg;
 #endif
 #ifdef MP3_MUSIC
-        SMPEG *mp3;
+        MP3_music *mp3;
 #endif
 #ifdef MP3_MAD_MUSIC
         mad_data *mp3_mad;
@@ -313,7 +313,6 @@ void music_mixer(void *udata, Uint8 *stream, int len)
 #endif
 #ifdef OGG_MUSIC
             case MUS_OGG:
-
                 left = OGG_playAudio(music_playing->data.ogg, stream, len);
                 break;
 #endif
@@ -323,9 +322,9 @@ void music_mixer(void *udata, Uint8 *stream, int len)
                 break;
 #endif
 #ifdef MP3_MUSIC
-            case MUS_MP3:
-                left = (len - smpeg.SMPEG_playAudio(music_playing->data.mp3, stream, len));
-                break;
+        case MUS_MP3:
+            left = MP3_playAudio(music_playing->data.mp3, stream, len);
+            break;
 #endif
 #ifdef MP3_MAD_MUSIC
             case MUS_MP3_MAD:
@@ -411,10 +410,15 @@ int open_music(SDL_AudioSpec *mixer)
         add_music_decoder("FLAC");
     }
 #endif
-#if defined(MP3_MUSIC) || defined(MP3_MAD_MUSIC)
-    /* Keep a copy of the mixer */
-    used_mixer = *mixer;
-    add_music_decoder("MP3");
+#ifdef MP3_MUSIC
+	if (MP3_init(mixer) == 0) {
+		add_music_decoder("MP3");
+	}
+#endif
+#ifdef MP3_MAD_MUSIC
+	/* Keep a copy of the mixer */
+	used_mixer = *mixer;
+	add_music_decoder("MP3_MAD");
 #endif
 
     music_playing = NULL;
@@ -652,19 +656,12 @@ Mix_Music *Mix_LoadMUSType_RW(SDL_RWops *src, Mix_MusicType type, int freesrc)
 #endif
 #ifdef MP3_MUSIC
     case MUS_MP3:
-        if (Mix_Init(MIX_INIT_MP3)) {
-            SMPEG_Info info;
-            music->type = MUS_MP3;
-            music->data.mp3 = smpeg.SMPEG_new_rwops(src, &info, freesrc, 0);
-            if (!info.has_audio) {
-                Mix_SetError("MPEG file does not have any audio stream.");
-                smpeg.SMPEG_delete(music->data.mp3);
-                /* Deleting the MP3 closed the source if desired */
-                freesrc = SDL_FALSE;
-            } else {
-                smpeg.SMPEG_actualSpec(music->data.mp3, &used_mixer);
-                music->error = 0;
-            }
+        music->type = MUS_MP3;
+        music->data.mp3 = MP3_new_RW(src, freesrc);
+        if (music->data.mp3) {
+            music->error = 0;
+        } else {
+            Mix_SetError("Could not initialize MP3 stream.");
         }
         break;
 #elif defined(MP3_MAD_MUSIC)
@@ -833,7 +830,7 @@ void Mix_FreeMusic(Mix_Music *music)
 #endif
 #ifdef MP3_MUSIC
             case MUS_MP3:
-                smpeg.SMPEG_delete(music->data.mp3);
+                MP3_delete(music->data.mp3);
                 break;
 #endif
 #ifdef MP3_MAD_MUSIC
@@ -958,9 +955,7 @@ static int music_internal_play(Mix_Music *music, double position)
 #endif
 #ifdef MP3_MUSIC
         case MUS_MP3:
-        smpeg.SMPEG_enableaudio(music->data.mp3,1);
-        smpeg.SMPEG_enablevideo(music->data.mp3,0);
-        smpeg.SMPEG_play(music_playing->data.mp3);
+        MP3_play(music_playing->data.mp3);
         break;
 #endif
 #ifdef MP3_MAD_MUSIC
@@ -1073,11 +1068,8 @@ int music_internal_position(double position)
 #endif
 #ifdef MP3_MUSIC
         case MUS_MP3:
-        smpeg.SMPEG_rewind(music_playing->data.mp3);
-        smpeg.SMPEG_play(music_playing->data.mp3);
-        if ( position > 0.0 ) {
-            smpeg.SMPEG_skip(music_playing->data.mp3, (float)position);
-        }
+        MP3_jump_to_time(music_playing->data.mp3, position);
+        MP3_play(music_playing->data.mp3);
         break;
 #endif
 #ifdef MP3_MAD_MUSIC
@@ -1179,7 +1171,7 @@ static void music_internal_volume(int volume)
 #endif
 #ifdef MP3_MUSIC
         case MUS_MP3:
-        smpeg.SMPEG_setvolume(music_playing->data.mp3,(int)(((float)volume/(float)MIX_MAX_VOLUME)*100.0));
+        MP3_setvolume(music_playing->data.mp3, volume);
         break;
 #endif
 #ifdef MP3_MAD_MUSIC
@@ -1270,7 +1262,7 @@ static void music_internal_halt(void)
 #endif
 #ifdef MP3_MUSIC
         case MUS_MP3:
-        smpeg.SMPEG_stop(music_playing->data.mp3);
+        MP3_stop(music_playing->data.mp3);
         break;
 #endif
 #ifdef MP3_MAD_MUSIC
@@ -1455,7 +1447,7 @@ static int music_internal_playing()
 #endif
 #ifdef MP3_MUSIC
         case MUS_MP3:
-        if ( smpeg.SMPEG_status(music_playing->data.mp3) != SMPEG_PLAYING )
+        if ( !MP3_playing(music_playing->data.mp3) )
             playing = 0;
         break;
 #endif

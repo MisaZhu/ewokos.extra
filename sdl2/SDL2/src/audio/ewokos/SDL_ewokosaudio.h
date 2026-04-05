@@ -28,12 +28,13 @@
 /* Hidden "this" pointer for the audio functions */
 #define _THIS   SDL_AudioDevice *this
 
+/* Forward declaration for PCM structure */
+struct pcm;
+
 struct SDL_PrivateAudioData {
-    /* The file descriptor for the audio device */
+    struct pcm *pcm;
     Uint8 *mixbuf;
-    Uint32 mixlen;
-    Uint32 write_delay;
-    Uint32 initial_calls;
+    int mixlen;
 };
 
 #endif /* _SDL_ewokosaudio_h */

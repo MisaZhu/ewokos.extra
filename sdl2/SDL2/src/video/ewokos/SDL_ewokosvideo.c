@@ -32,6 +32,7 @@
 #include "../SDL_sysvideo.h"
 #include "../SDL_pixels_c.h"
 #include "../../events/SDL_events_c.h"
+#include "../../events/SDL_mouse_c.h"
 
 #include "SDL_ewokosvideo.h"
 #include "SDL_ewokosevents_c.h"
@@ -39,6 +40,9 @@
 #include "ewoksys/keydef.h"
 #include "x/xwin.h"
 #include "x/x.h"
+#include "x/xcntl.h"
+#include <ewoksys/vdevice.h>
+#include <ewoksys/proto.h>
 #include <pthread.h>
 
 static x_t _x_;
@@ -98,30 +102,46 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
         SDL_PushEvent(&sdlEvent);
     }
     else if(ev->type == XEVT_MOUSE) {
-        int mousex =  ev->value.mouse.x - xw->xinfo->wsr.x; 
-        int mousey =  ev->value.mouse.y - xw->xinfo->wsr.y; 
+        int mousex =  ev->value.mouse.x - xw->xinfo->wsr.x;
+        int mousey =  ev->value.mouse.y - xw->xinfo->wsr.y;
 
         if(ev->state == MOUSE_STATE_MOVE || ev->state == MOUSE_STATE_DRAG) {
+            SDL_zero(sdlEvent);
             sdlEvent.type = SDL_MOUSEMOTION;
+            sdlEvent.motion.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
             sdlEvent.motion.x = mousex;
             sdlEvent.motion.y = mousey;
+            sdlEvent.motion.xrel = ev->value.mouse.rx;
+            sdlEvent.motion.yrel = ev->value.mouse.ry;
+            sdlEvent.motion.state = (ev->state == MOUSE_STATE_DRAG) ? SDL_PRESSED : SDL_RELEASED;
             SDL_PushEvent(&sdlEvent);
         }
         else if(ev->state == MOUSE_STATE_DOWN) {
+            SDL_zero(sdlEvent);
             sdlEvent.type = SDL_MOUSEBUTTONDOWN;
+            sdlEvent.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
             sdlEvent.button.x = mousex;
             sdlEvent.button.y = mousey;
+            sdlEvent.motion.xrel = ev->value.mouse.rx;
+            sdlEvent.motion.yrel = ev->value.mouse.ry;
+            sdlEvent.button.button = SDL_BUTTON_LEFT;
+            sdlEvent.button.state = SDL_PRESSED;
             SDL_PushEvent(&sdlEvent);
         }
         else if(ev->state == MOUSE_STATE_UP) {
+            SDL_zero(sdlEvent);
             sdlEvent.type = SDL_MOUSEBUTTONUP;
+            sdlEvent.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
             sdlEvent.button.x = mousex;
             sdlEvent.button.y = mousey;
+            sdlEvent.motion.xrel = ev->value.mouse.rx;
+            sdlEvent.motion.yrel = ev->value.mouse.ry;
+            sdlEvent.button.button = SDL_BUTTON_LEFT;
+            sdlEvent.button.state = SDL_RELEASED;
             SDL_PushEvent(&sdlEvent);
         }
     }
 }
-
 
 static int
 EWOKOS_CreateWindow(_THIS, SDL_Window * window)
@@ -360,6 +380,7 @@ EWOKOS_VideoInit(_THIS)
 
     pthread_t tid;
     pthread_create(&tid, NULL, x_thread, _this);
+
     return 0;
 }
 

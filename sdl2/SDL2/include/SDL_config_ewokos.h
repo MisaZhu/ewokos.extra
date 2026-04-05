@@ -153,7 +153,7 @@
 
 /* Allow disabling of core subsystems */
 #define SDL_ATOMIC_DISABLED 1
-#define SDL_AUDIO_DISABLED 1
+/* #undef SDL_AUDIO_DISABLED */
 #define SDL_JOYSTICK_DISABLED 1
 #define SDL_CPUINFO_DISABLED 1
 /* #undef SDL_EVENTS_DISABLED */
@@ -176,7 +176,7 @@
 /*#define SDL_JOYSTICK_EWOKOS      1*/
 
 /* Enable various audio drivers */
-/*#define SDL_AUDIO_DRIVER_EWOKOS  1*/
+#define SDL_AUDIO_DRIVER_EWOKOS  1
 
 /* Enable various video drivers */
 #define SDL_VIDEO_DRIVER_EWOKOS  1

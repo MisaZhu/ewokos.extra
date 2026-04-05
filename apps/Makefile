@@ -6,8 +6,9 @@ all:
 	cd xDraw; make
 	cd calculator; make
 	cd calendar; make
-	cd sdl_tetris; make
-	cd emu; make
+#	cd sdl_tetris; make
+#	cd emu; make
+	cd minivmac; make
 
 clean:
 	cd 3ddemo;make clean
@@ -16,5 +17,6 @@ clean:
 	cd xDraw; make clean
 	cd calculator; make clean
 	cd calendar; make clean
-	cd sdl_tetris; make clean
-	cd emu; make clean
+#	cd sdl_tetris; make clean
+#	cd emu; make clean
+	cd minivmac; make clean
