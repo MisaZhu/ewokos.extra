@@ -15,10 +15,10 @@
 */
 
 /*
-	MY Operating System GLUE. (for SDL Library)
+	MY Operating System GLUE. (for XWin Library)
 
 	All operating system dependent code for the
-	SDL Library should go here.
+	XWin Library should go here.
 */
 
 #include "CNFGRAPI.h"
@@ -28,16 +28,87 @@
 #include "MYOSGLUE.h"
 
 #include "STRCONST.h"
+#include <string.h>
 #include <ewoksys/klog.h>
 #include <ewoksys/cmain.h>
+#include <ewoksys/proc.h>
+#include <ewoksys/kernel_tic.h>
+#include <ewoksys/timer.h>
+#include <ewoksys/keydef.h>
 
-SDL_Window *window = NULL;
-SDL_Renderer *renderer = NULL;
-SDL_Texture *texture = NULL;
-SDL_Rect src_rect;
-SDL_Rect dst_rect;
-int displayWidth = 0;
-int displayHeight = 0;
+#ifndef KEY_INSERT
+#define KEY_INSERT		0xF3
+#endif
+#ifndef KEY_PAGEUP
+#define KEY_PAGEUP		0xF4
+#endif
+#ifndef KEY_PAGEDOWN
+#define KEY_PAGEDOWN	0xF5
+#endif
+#ifndef KEY_F1
+#define KEY_F1			0xF6
+#endif
+#ifndef KEY_F2
+#define KEY_F2			0xF7
+#endif
+#ifndef KEY_F3
+#define KEY_F3			0xF8
+#endif
+#ifndef KEY_F4
+#define KEY_F4			0xF9
+#endif
+#ifndef KEY_F5
+#define KEY_F5			0xFA
+#endif
+#ifndef KEY_F6
+#define KEY_F6			0xFB
+#endif
+#ifndef KEY_F7
+#define KEY_F7			0xFC
+#endif
+#ifndef KEY_F8
+#define KEY_F8			0xFD
+#endif
+#ifndef KEY_F9
+#define KEY_F9			0xFE
+#endif
+#ifndef KEY_F10
+#define KEY_F10			0xFF
+#endif
+#ifndef KEY_F11
+#define KEY_F11			0x100
+#endif
+#ifndef KEY_F12
+#define KEY_F12			0x101
+#endif
+#ifndef KEY_CAPSLOCK
+#define KEY_CAPSLOCK		0xA1
+#endif
+#ifndef KEY_SCROLLLOCK
+#define KEY_SCROLLLOCK	0xA4
+#endif
+#ifndef KEY_SHIFT
+#define KEY_SHIFT		KEY_LSHIFT
+#endif
+#ifndef KEY_ALT
+#define KEY_ALT			0xA5
+#endif
+#ifndef KEY_FLAG_RSHIFT
+#define KEY_FLAG_RSHIFT	KEY_RSHIFT
+#endif
+#ifndef KEY_FLAG_RCTRL
+#define KEY_FLAG_RCTRL	0xA6
+#endif
+#ifndef KEY_FLAG_RALT
+#define KEY_FLAG_RALT	0xA7
+#endif
+
+xwin_t *xwin = NULL;
+x_t *x_context = NULL;
+
+graph_t *screen_graph = NULL;
+int window_width = 0;
+int window_height = 0;
 
 /* --- some simple utilities --- */
 
@@ -112,7 +183,7 @@ LOCALVAR void *PbufDat[NumPbufs];
 #if IncludePbufs
 LOCALFUNC tMacErr PbufNewFromPtr(void *p, ui5b count, tPbuf *r)
 {
-	tPbuf i;
+	tDrive i;
 	tMacErr err;
 
 	if (! FirstFreePbuf(&i)) {
@@ -154,9 +225,9 @@ GLOBALPROC PbufDispose(tPbuf i)
 #if IncludePbufs
 LOCALPROC UnInitPbufs(void)
 {
-	tPbuf i;
+	tDrive i;
 
-	for (i = 0; i < NumPbufs; ++i) {
+	for (i = 0; i < NumDrives; ++i) {
 		if (PbufIsAllocated(i)) {
 			PbufDispose(i);
 		}
@@ -202,10 +273,6 @@ LOCALVAR FILE *Drives[NumDrives]; /* open disk image files */
 
 LOCALPROC InitDrives(void)
 {
-	/*
-		This isn't really needed, Drives[i] and DriveNames[i]
-		need not have valid values when not vSonyIsInserted[i].
-	*/
 	tDrive i;
 
 	for (i = 0; i < NumDrives; ++i) {
@@ -237,7 +304,7 @@ GLOBALFUNC tMacErr vSonyTransfer(blnr IsWrite, ui3p Buffer,
 		*Sony_ActCount = NewSony_Count;
 	}
 
-	return err; /*& figure out what really to return &*/
+	return err;
 }
 
 GLOBALFUNC tMacErr vSonyGetSize(tDrive Drive_No, ui5r *Sony_Count)
@@ -254,7 +321,7 @@ GLOBALFUNC tMacErr vSonyGetSize(tDrive Drive_No, ui5r *Sony_Count)
 		}
 	}
 
-	return err; /*& figure out what really to return &*/
+	return err;
 }
 
 LOCALFUNC tMacErr vSonyEject0(tDrive Drive_No, blnr deleteit)
@@ -264,7 +331,7 @@ LOCALFUNC tMacErr vSonyEject0(tDrive Drive_No, blnr deleteit)
 	DiskEjectedNotify(Drive_No);
 
 	fclose(refnum);
-	Drives[Drive_No] = NotAfileRef; /* not really needed */
+	Drives[Drive_No] = NotAfileRef;
 
 	return mnvm_noErr;
 }
@@ -295,14 +362,9 @@ LOCALFUNC blnr Sony_Insert0(FILE *refnum, blnr locked,
 		MacMsg(kStrTooManyImagesTitle, kStrTooManyImagesMessage,
 			falseblnr);
 	} else {
-		/* printf("Sony_Insert0 %d\n", (int)Drive_No); */
-
-		{
-			Drives[Drive_No] = refnum;
-			DiskInsertNotify(Drive_No, locked);
-
-			IsOk = trueblnr;
-		}
+		Drives[Drive_No] = refnum;
+		DiskInsertNotify(Drive_No, locked);
+		IsOk = trueblnr;
 	}
 
 	if (! IsOk) {
@@ -315,7 +377,6 @@ LOCALFUNC blnr Sony_Insert0(FILE *refnum, blnr locked,
 LOCALFUNC blnr Sony_Insert1(char *drivepath, blnr silentfail)
 {
 	blnr locked = falseblnr;
-	/* printf("Sony_Insert1 %s\n", drivepath); */
 	FILE *refnum = fopen(drivepath, "rb+");
 	if (NULL == refnum) {
 		locked = trueblnr;
@@ -352,9 +413,7 @@ LOCALFUNC blnr LoadInitialImages(void)
 			char s[32] = {};
 			snprintf(s, 31, "roms/disk%d.dsk", i);
 			const char* disk = get_res_name(s);
-			//klog("LoadInitialImages %s\n", disk);
 			if (! Sony_Insert2(disk)) {
-				/* stop on first error (including file not found) */
 				return trueblnr;
 			}
 		}
@@ -397,7 +456,6 @@ LOCALFUNC blnr LoadMacRom(void)
 {
 	tMacErr err;
 	rom_path = get_res_name("roms/vMac.ROM");
-	//klog("rompath: %s\n", rom_path);
 
 	if ((NULL == rom_path)
 		|| (mnvm_fnfErr == (err = LoadMacRomFrom(rom_path))))
@@ -418,7 +476,7 @@ LOCALFUNC blnr LoadMacRom(void)
 		SpeedStopped = trueblnr;
 	}
 
-	return trueblnr; /* keep launching Mini vMac, regardless */
+	return trueblnr;
 }
 
 /* --- video out --- */
@@ -442,19 +500,13 @@ LOCALVAR blnr CurSpeedStopped = trueblnr;
 #endif
 
 
-LOCALVAR SDL_Surface *my_surface = nullpr;
+LOCALVAR graph_t *screen_buffer = NULL;
 
 LOCALVAR ui3p ScalingBuff = nullpr;
 
 LOCALVAR ui3p CLUT_final;
 
 #define CLUT_finalsz (256 * 8 * 4 * MaxScale)
-	/*
-		256 possible values of one byte
-		8 pixels per byte maximum (when black and white)
-		4 bytes per destination pixel maximum
-			multiplied by MyWindowScale if EnableMagnify
-	*/
 
 #define ScrnMapr_DoMap UpdateBWDepth3Copy
 #define ScrnMapr_Src GetCurDrawBuff()
@@ -580,70 +632,39 @@ LOCALPROC HaveChangedScreenBuff(ui4r top, ui4r left,
 	ui4r bottom, ui4r right)
 {
 	int i;
-	int j;
 	ui3b *p;
-	Uint32 pixel;
+	uint32_t pixel;
 #if (0 != vMacScreenDepth) && (vMacScreenDepth < 4)
-	Uint32 CLUT_pixel[CLUT_size];
+	uint32_t CLUT_pixel[CLUT_size];
 #endif
-	Uint32 BWLUT_pixel[2];
-	ui5r top2 = top;
-	ui5r left2 = left;
-	ui5r bottom2 = bottom;
-	ui5r right2 = right;
+	uint32_t BWLUT_pixel[2];
 
-#if EnableMagnify
-	if (UseMagnify) {
-		top2 *= MyWindowScale;
-		left2 *= MyWindowScale;
-		bottom2 *= MyWindowScale;
-		right2 *= MyWindowScale;
-	}
-#endif
-
-	if (SDL_MUSTLOCK(my_surface)) {
-		if (SDL_LockSurface(my_surface) < 0) {
-			return;
-		}
-	}
-
-	{
-
-	int bpp = my_surface->format->BytesPerPixel;
-	ui5r ExpectedPitch = vMacScreenWidth * bpp;
-
-#if EnableMagnify
-	if (UseMagnify) {
-		ExpectedPitch *= MyWindowScale;
-	}
-#endif
+	if (screen_buffer == NULL)
+		return;
 
 #if 0 != vMacScreenDepth
 	if (UseColorMode) {
 #if vMacScreenDepth < 4
 		for (i = 0; i < CLUT_size; ++i) {
-			CLUT_pixel[i] = SDL_MapRGB(my_surface->format,
-				CLUT_reds[i] >> 8,
-				CLUT_greens[i] >> 8,
-				CLUT_blues[i] >> 8);
+			CLUT_pixel[i] = 0xff000000 |
+				((CLUT_reds[i] >> 8) << 16) |
+				((CLUT_greens[i] >> 8) << 8) |
+				(CLUT_blues[i] >> 8);
 		}
 #endif
 	} else
 #endif
 	{
-		BWLUT_pixel[1] = SDL_MapRGB(my_surface->format, 0, 0, 0); /* black */
-		BWLUT_pixel[0] = SDL_MapRGB(my_surface->format, 255, 255, 255); /* white */
+		BWLUT_pixel[1] = 0xff000000; /* black */
+		BWLUT_pixel[0] = 0xffffffff; /* white */
 	}
 
-	if ((0 == ((bpp - 1) & bpp)) /* a power of 2 */
-		&& (my_surface->pitch == ExpectedPitch)
-#if (vMacScreenDepth > 3)
-		&& ! UseColorMode
-#endif
-		)
+	ui3b *dst_data = (ui3b *)screen_buffer->buffer;
+	int dst_pitch = screen_buffer->w * 4;
+
 	{
 		int k;
-		Uint32 v;
+		uint32_t v;
 #if EnableMagnify
 		int a;
 #endif
@@ -652,7 +673,7 @@ LOCALPROC HaveChangedScreenBuff(ui4r top, ui4r left,
 			UseColorMode ? (1 << (3 - vMacScreenDepth)) :
 #endif
 			8;
-		Uint8 *p4 = (Uint8 *)CLUT_final;
+		uint8_t *p4 = (uint8_t *)CLUT_final;
 
 		for (i = 0; i < 256; ++i) {
 			for (k = PixPerByte; --k >= 0; ) {
@@ -677,178 +698,53 @@ LOCALPROC HaveChangedScreenBuff(ui4r top, ui4r left,
 				for (a = UseMagnify ? MyWindowScale : 1; --a >= 0; )
 #endif
 				{
-					switch (bpp) {
-						case 1: /* Assuming 8-bpp */
-							*p4++ = v;
-							break;
-						case 2: /* Probably 15-bpp or 16-bpp */
-							*(Uint16 *)p4 = v;
-							p4 += 2;
-							break;
-						case 4: /* Probably 32-bpp */
-							*(Uint32 *)p4 = v;
-							p4 += 4;
-							break;
-					}
+					*(uint32_t *)p4 = v;
+					p4 += 4;
 				}
 			}
 		}
 
-		ScalingBuff = (ui3p)my_surface->pixels;
+		ScalingBuff = (ui3p)dst_data;
 
 #if (0 != vMacScreenDepth) && (vMacScreenDepth < 4)
 		if (UseColorMode) {
 #if EnableMagnify
 			if (UseMagnify) {
-				switch (bpp) {
-					case 1:
-						UpdateColorDepth3ScaledCopy(top, left, bottom, right);
-						break;
-					case 2:
-						UpdateColorDepth4ScaledCopy(top, left, bottom, right);
-						break;
-					case 4:
-						UpdateColorDepth5ScaledCopy(top, left, bottom, right);
-						break;
-				}
+				UpdateColorDepth3ScaledCopy(top, left, bottom, right);
 			} else
 #endif
 			{
-				switch (bpp) {
-					case 1:
-						UpdateColorDepth3Copy(top, left, bottom, right);
-						break;
-					case 2:
-						UpdateColorDepth4Copy(top, left, bottom, right);
-						break;
-					case 4:
-						UpdateColorDepth5Copy(top, left, bottom, right);
-						break;
-				}
+				UpdateColorDepth3Copy(top, left, bottom, right);
 			}
 		} else
 #endif
 		{
 #if EnableMagnify
 			if (UseMagnify) {
-				switch (bpp) {
-					case 1:
-						UpdateBWDepth3ScaledCopy(top, left, bottom, right);
-						break;
-					case 2:
-						UpdateBWDepth4ScaledCopy(top, left, bottom, right);
-						break;
-					case 4:
-						UpdateBWDepth5ScaledCopy(top, left, bottom, right);
-						break;
-				}
+				UpdateBWDepth3ScaledCopy(top, left, bottom, right);
 			} else
 #endif
 			{
-				switch (bpp) {
-					case 1:
-						UpdateBWDepth3Copy(top, left, bottom, right);
-						break;
-					case 2:
-						UpdateBWDepth4Copy(top, left, bottom, right);
-						break;
-					case 4:
-						UpdateBWDepth5Copy(top, left, bottom, right);
-						break;
-				}
-			}
-		}
+				ui3p src_data = GetCurDrawBuff();
+				if (dst_data != NULL && src_data != NULL) {
+					int y, x;
 
-	} else {
-		ui3b *the_data = (ui3b *)GetCurDrawBuff();
+					for (y = top; y < bottom && y < vMacScreenHeight; y++) {
+						ui3b *src_row = src_data + (y * (vMacScreenWidth / 8));
+						uint32_t *dst_row = (uint32_t *)(dst_data + (y * dst_pitch));
 
-		/* adapted from putpixel in SDL documentation */
+						for (x = left; x < right && x < vMacScreenWidth; x++) {
+							int byte_index = x / 8;
+							int bit_index = 7 - (x % 8);
+							int bit = (src_row[byte_index] >> bit_index) & 1;
 
-		for (i = top2; i < bottom2; ++i) {
-			for (j = left2; j < right2; ++j) {
-				int i0 = i;
-				int j0 = j;
-				Uint8 *bufp = (Uint8 *)my_surface->pixels
-					+ i * my_surface->pitch + j * bpp;
-
-#if EnableMagnify
-				if (UseMagnify) {
-					i0 /= MyWindowScale;
-					j0 /= MyWindowScale;
-				}
-#endif
-
-#if 0 != vMacScreenDepth
-				if (UseColorMode) {
-#if vMacScreenDepth < 4
-					p = the_data + ((i0 * vMacScreenWidth + j0) >> (3 - vMacScreenDepth));
-					{
-						ui3r k = (*p >> (((~ j0) & ((1 << (3 - vMacScreenDepth)) - 1))
-							<< vMacScreenDepth)) & (CLUT_size - 1);
-						pixel = CLUT_pixel[k];
-					}
-#elif 4 == vMacScreenDepth
-					p = the_data + ((i0 * vMacScreenWidth + j0) << 1);
-					{
-						ui4r t0 = do_get_mem_word(p);
-						pixel = SDL_MapRGB(my_surface->format,
-							((t0 & 0x7C00) >> 7) | ((t0 & 0x7000) >> 12),
-							((t0 & 0x03E0) >> 2) | ((t0 & 0x0380) >> 7),
-							((t0 & 0x001F) << 3) | ((t0 & 0x001C) >> 2));
-					}
-#elif 5 == vMacScreenDepth
-					p = the_data + ((i0 * vMacScreenWidth + j0) << 2);
-					pixel = SDL_MapRGB(my_surface->format,
-						p[1],
-						p[2],
-						p[3]);
-#endif
-				} else
-#endif
-				{
-					p = the_data + ((i0 * vMacScreenWidth + j0) / 8);
-					pixel = BWLUT_pixel[(*p >> ((~ j0) & 0x7)) & 1];
-				}
-
-				switch (bpp) {
-					case 1: /* Assuming 8-bpp */
-						*bufp = pixel;
-						break;
-					case 2: /* Probably 15-bpp or 16-bpp */
-						*(Uint16 *)bufp = pixel;
-						break;
-					case 3:
-						/* Slow 24-bpp mode, usually not used */
-						if (SDL_BYTEORDER == SDL_BIG_ENDIAN) {
-							bufp[0] = (pixel >> 16) & 0xff;
-							bufp[1] = (pixel >> 8) & 0xff;
-							bufp[2] = pixel & 0xff;
-						} else {
-							bufp[0] = pixel & 0xff;
-							bufp[1] = (pixel >> 8) & 0xff;
-							bufp[2] = (pixel >> 16) & 0xff;
+							dst_row[x] = bit ? 0xff000000 : 0xffffffff;
 						}
-						break;
-					case 4: /* Probably 32-bpp */
-						*(Uint32 *)bufp = pixel;
-						break;
+					}
 				}
 			}
 		}
 	}
-
-	}
-
-	if (SDL_MUSTLOCK(my_surface)) {
-		SDL_UnlockSurface(my_surface);
-	}
-
-	// SDL2 screen update block
-	SDL_UpdateTexture(texture, NULL, my_surface->pixels, vMacScreenWidth * sizeof (Uint32));
-	SDL_RenderClear(renderer);
-	SDL_RenderCopy(renderer, texture, &src_rect, &dst_rect); //&src_rect, &dst_rect
-	SDL_RenderPresent(renderer);
-	//
 }
 
 LOCALPROC MyDrawChangesAndClear(void)
@@ -871,7 +767,7 @@ LOCALPROC ForceShowCursor(void)
 {
 	if (HaveCursorHidden) {
 		HaveCursorHidden = falseblnr;
-		(void) SDL_ShowCursor(SDL_ENABLE);
+		x_show_cursor(true);
 	}
 }
 
@@ -879,15 +775,6 @@ LOCALPROC ForceShowCursor(void)
 
 LOCALFUNC blnr MyMoveMouse(si4b h, si4b v)
 {
-#if EnableMagnify
-	if (UseMagnify) {
-		h *= MyWindowScale;
-		v *= MyWindowScale;
-	}
-#endif
-
-	SDL_WarpMouseInWindow(window, h, v);
-
 	return trueblnr;
 }
 
@@ -954,175 +841,98 @@ LOCALPROC MousePositionNotifyRelative(int deltah, int deltav)
 	WantCursorHidden = ShouldHaveCursorHidden;
 }
 
-LOCALPROC CheckMouseState(void)
-{
-	/*
-		this doesn't work as desired, doesn't get mouse movements
-		when outside of our window.
-	*/
-	int x;
-	int y;
-	int win_w, win_h;
-
-	(void) SDL_GetMouseState(&x, &y);
-	SDL_GetWindowSize(window, &win_w, &win_h);
-	int mac_x = x * vMacScreenWidth / win_w;
-	int mac_y = y * vMacScreenHeight / win_h;
-	MousePositionNotify(mac_x, mac_y);
-}
-
 /* --- keyboard input --- */
 
-LOCALFUNC int SDLKey2MacKeyCode(SDL_Keycode i)
+LOCALFUNC int XWinKey2MacKeyCode(int key)
 {
 	int v = -1;
 
-	switch (i) {
-		case SDLK_BACKSPACE: v = MKC_BackSpace; break;
-		case SDLK_TAB: v = MKC_Tab; break;
-		case SDLK_CLEAR: v = MKC_Clear; break;
-		case SDLK_RETURN: v = MKC_Return; break;
-		case SDLK_PAUSE: v = MKC_Pause; break;
-		case SDLK_ESCAPE: v = MKC_Escape; break;
-		case SDLK_SPACE: v = MKC_Space; break;
-		case SDLK_EXCLAIM: /* ? */ break;
-		case SDLK_QUOTEDBL: /* ? */ break;
-		case SDLK_HASH: /* ? */ break;
-		case SDLK_DOLLAR: /* ? */ break;
-		case SDLK_AMPERSAND: /* ? */ break;
-		case SDLK_QUOTE: v = MKC_SingleQuote; break;
-		case SDLK_LEFTPAREN: /* ? */ break;
-		case SDLK_RIGHTPAREN: /* ? */ break;
-		case SDLK_ASTERISK: /* ? */ break;
-		case SDLK_PLUS: /* ? */ break;
-		case SDLK_COMMA: v = MKC_Comma; break;
-		case SDLK_MINUS: v = MKC_Minus; break;
-		case SDLK_PERIOD: v = MKC_Period; break;
-		case SDLK_SLASH: v = MKC_Slash; break;
-		case SDLK_0: v = MKC_0; break;
-		case SDLK_1: v = MKC_1; break;
-		case SDLK_2: v = MKC_2; break;
-		case SDLK_3: v = MKC_3; break;
-		case SDLK_4: v = MKC_4; break;
-		case SDLK_5: v = MKC_5; break;
-		case SDLK_6: v = MKC_6; break;
-		case SDLK_7: v = MKC_7; break;
-		case SDLK_8: v = MKC_8; break;
-		case SDLK_9: v = MKC_9; break;
-		case SDLK_COLON: /* ? */ break;
-		case SDLK_SEMICOLON: v = MKC_SemiColon; break;
-		case SDLK_LESS: /* ? */ break;
-		case SDLK_EQUALS: v = MKC_Equal; break;
-		case SDLK_GREATER: /* ? */ break;
-		case SDLK_QUESTION: /* ? */ break;
-		case SDLK_AT: /* ? */ break;
+	switch (key) {
+		case 8: v = MKC_BackSpace; break;
+		case 9: v = MKC_Tab; break;
+		case 13: v = MKC_Return; break;
+		case 27: v = MKC_Escape; break;
+		case 32: v = MKC_Space; break;
+		case 39: v = MKC_SingleQuote; break;
+		case 44: v = MKC_Comma; break;
+		case 45: v = MKC_Minus; break;
+		case 46: v = MKC_Period; break;
+		case 47: v = MKC_Slash; break;
+		case 48: v = MKC_0; break;
+		case 49: v = MKC_1; break;
+		case 50: v = MKC_2; break;
+		case 51: v = MKC_3; break;
+		case 52: v = MKC_4; break;
+		case 53: v = MKC_5; break;
+		case 54: v = MKC_6; break;
+		case 55: v = MKC_7; break;
+		case 56: v = MKC_8; break;
+		case 57: v = MKC_9; break;
+		case 59: v = MKC_SemiColon; break;
+		case 61: v = MKC_Equal; break;
+		case 91: v = MKC_LeftBracket; break;
+		case 92: v = MKC_BackSlash; break;
+		case 93: v = MKC_RightBracket; break;
+		case 96: v = MKC_Grave; break;
 
-		case SDLK_LEFTBRACKET: v = MKC_LeftBracket; break;
-		case SDLK_BACKSLASH: v = MKC_BackSlash; break;
-		case SDLK_RIGHTBRACKET: v = MKC_RightBracket; break;
-		case SDLK_CARET: /* ? */ break;
-		case SDLK_UNDERSCORE: /* ? */ break;
-		case SDLK_BACKQUOTE: v = MKC_Grave; break;
+		case 'a': case 'A': v = MKC_A; break;
+		case 'b': case 'B': v = MKC_B; break;
+		case 'c': case 'C': v = MKC_C; break;
+		case 'd': case 'D': v = MKC_D; break;
+		case 'e': case 'E': v = MKC_E; break;
+		case 'f': case 'F': v = MKC_F; break;
+		case 'g': case 'G': v = MKC_G; break;
+		case 'h': case 'H': v = MKC_H; break;
+		case 'i': case 'I': v = MKC_I; break;
+		case 'j': case 'J': v = MKC_J; break;
+		case 'k': case 'K': v = MKC_K; break;
+		case 'l': case 'L': v = MKC_L; break;
+		case 'm': case 'M': v = MKC_M; break;
+		case 'n': case 'N': v = MKC_N; break;
+		case 'o': case 'O': v = MKC_O; break;
+		case 'p': case 'P': v = MKC_P; break;
+		case 'q': case 'Q': v = MKC_Q; break;
+		case 'r': case 'R': v = MKC_R; break;
+		case 's': case 'S': v = MKC_S; break;
+		case 't': case 'T': v = MKC_T; break;
+		case 'u': case 'U': v = MKC_U; break;
+		case 'v': case 'V': v = MKC_V; break;
+		case 'w': case 'W': v = MKC_W; break;
+		case 'x': case 'X': v = MKC_X; break;
+		case 'y': case 'Y': v = MKC_Y; break;
+		case 'z': case 'Z': v = MKC_Z; break;
 
-		case SDLK_a: v = MKC_A; break;
-		case SDLK_b: v = MKC_B; break;
-		case SDLK_c: v = MKC_C; break;
-		case SDLK_d: v = MKC_D; break;
-		case SDLK_e: v = MKC_E; break;
-		case SDLK_f: v = MKC_F; break;
-		case SDLK_g: v = MKC_G; break;
-		case SDLK_h: v = MKC_H; break;
-		case SDLK_i: v = MKC_I; break;
-		case SDLK_j: v = MKC_J; break;
-		case SDLK_k: v = MKC_K; break;
-		case SDLK_l: v = MKC_L; break;
-		case SDLK_m: v = MKC_M; break;
-		case SDLK_n: v = MKC_N; break;
-		case SDLK_o: v = MKC_O; break;
-		case SDLK_p: v = MKC_P; break;
-		case SDLK_q: v = MKC_Q; break;
-		case SDLK_r: v = MKC_R; break;
-		case SDLK_s: v = MKC_S; break;
-		case SDLK_t: v = MKC_T; break;
-		case SDLK_u: v = MKC_U; break;
-		case SDLK_v: v = MKC_V; break;
-		case SDLK_w: v = MKC_W; break;
-		case SDLK_x: v = MKC_X; break;
-		case SDLK_y: v = MKC_Y; break;
-		case SDLK_z: v = MKC_Z; break;
+		case KEY_UP: v = MKC_Up; break;
+		case KEY_DOWN: v = MKC_Down; break;
+		case KEY_RIGHT: v = MKC_Right; break;
+		case KEY_LEFT: v = MKC_Left; break;
+		case KEY_INSERT: v = MKC_Help; break;
+		case KEY_HOME: v = MKC_Home; break;
+		case KEY_END: v = MKC_End; break;
+		case KEY_PAGEUP: v = MKC_PageUp; break;
+		case KEY_PAGEDOWN: v = MKC_PageDown; break;
 
-		case SDLK_KP_0: v = MKC_KP0; break;
-		case SDLK_KP_1: v = MKC_KP1; break;
-		case SDLK_KP_2: v = MKC_KP2; break;
-		case SDLK_KP_3: v = MKC_KP3; break;
-		case SDLK_KP_4: v = MKC_KP4; break;
-		case SDLK_KP_5: v = MKC_KP5; break;
-		case SDLK_KP_6: v = MKC_KP6; break;
-		case SDLK_KP_7: v = MKC_KP7; break;
-		case SDLK_KP_8: v = MKC_KP8; break;
-		case SDLK_KP_9: v = MKC_KP9; break;
+		case KEY_F1: v = MKC_F1; break;
+		case KEY_F2: v = MKC_F2; break;
+		case KEY_F3: v = MKC_F3; break;
+		case KEY_F4: v = MKC_F4; break;
+		case KEY_F5: v = MKC_F5; break;
+		case KEY_F6: v = MKC_F6; break;
+		case KEY_F7: v = MKC_F7; break;
+		case KEY_F8: v = MKC_F8; break;
+		case KEY_F9: v = MKC_F9; break;
+		case KEY_F10: v = MKC_F10; break;
+		case KEY_F11: v = MKC_F11; break;
+		case KEY_F12: v = MKC_F11; break;
 
-		case SDLK_KP_PERIOD: v = MKC_Decimal; break;
-		case SDLK_KP_DIVIDE: v = MKC_KPDevide; break;
-		case SDLK_KP_MULTIPLY: v = MKC_KPMultiply; break;
-		case SDLK_KP_MINUS: v = MKC_KPSubtract; break;
-		case SDLK_KP_PLUS: v = MKC_KPAdd; break;
-		case SDLK_KP_ENTER: v = MKC_Enter; break;
-		case SDLK_KP_EQUALS: v = MKC_KPEqual; break;
-
-		case SDLK_UP: v = MKC_Up; break;
-		case SDLK_DOWN: v = MKC_Down; break;
-		case SDLK_RIGHT: v = MKC_Right; break;
-		case SDLK_LEFT: v = MKC_Left; break;
-		case SDLK_INSERT: v = MKC_Help; break;
-		case SDLK_HOME: v = MKC_Home; break;
-		case SDLK_END: v = MKC_End; break;
-		case SDLK_PAGEUP: v = MKC_PageUp; break;
-		case SDLK_PAGEDOWN: v = MKC_PageDown; break;
-
-		case SDLK_F1: v = MKC_F1; break;
-		case SDLK_F2: v = MKC_F2; break;
-		case SDLK_F3: v = MKC_F3; break;
-		case SDLK_F4: v = MKC_F4; break;
-		case SDLK_F5: v = MKC_F5; break;
-		case SDLK_F6: v = MKC_F6; break;
-		case SDLK_F7: v = MKC_F7; break;
-		case SDLK_F8: v = MKC_F8; break;
-		case SDLK_F9: v = MKC_F9; break;
-		case SDLK_F10: v = MKC_F10; break;
-		case SDLK_F11: v = MKC_F11; break;
-		case SDLK_F12: v = MKC_F11; break;
-
-		case SDLK_F13: /* ? */ break;
-		case SDLK_F14: /* ? */ break;
-		case SDLK_F15: /* ? */ break;
-
-		case SDLK_NUMLOCKCLEAR: v = MKC_ForwardDel; break;
-		case SDLK_CAPSLOCK: v = MKC_CapsLock; break;
-		case SDLK_SCROLLLOCK: v = MKC_ScrollLock; break;
-		case SDLK_RSHIFT: v = MKC_Shift; break;
-		case SDLK_LSHIFT: v = MKC_Shift; break;
-		case SDLK_RCTRL: v = MKC_Control; break;
-		case SDLK_LCTRL: v = MKC_Control; break;
-		case SDLK_RALT: v = MKC_Option; break;
-		case SDLK_LALT: v = MKC_Option; break;
-		case SDLK_RGUI: v = MKC_Command; break;
-		case SDLK_LGUI: v = MKC_Command; break;
-		//case SDLK_LSUPER: v = MKC_Option; break;
-		//case SDLK_RSUPER: v = MKC_Option; break;
-
-		case SDLK_MODE: /* ? */ break;
-		//case SDLK_COMPOSE: /* ? */ break;
-
-		case SDLK_HELP: v = MKC_Help; break;
-		case SDLK_PRINTSCREEN: v = MKC_Print; break;
-
-		case SDLK_SYSREQ: /* ? */ break;
-		//case SDLK_BREAK: /* ? */ break;
-		case SDLK_MENU: /* ? */ break;
-		case SDLK_POWER: /* ? */ break;
-		//case SDLK_EURO: /* ? */ break;
-		case SDLK_UNDO: /* ? */ break;
+		case KEY_CAPSLOCK: v = MKC_CapsLock; break;
+		case KEY_SCROLLLOCK: v = MKC_ScrollLock; break;
+		case KEY_SHIFT: v = MKC_Shift; break;
+		case KEY_CTRL: v = MKC_Control; break;
+		case KEY_ALT: v = MKC_Option; break;
+		case KEY_FLAG_RSHIFT: v = MKC_Shift; break;
+		case KEY_FLAG_RCTRL: v = MKC_Control; break;
+		case KEY_FLAG_RALT: v = MKC_Option; break;
 
 		default:
 			break;
@@ -1131,9 +941,9 @@ LOCALFUNC int SDLKey2MacKeyCode(SDL_Keycode i)
 	return v;
 }
 
-LOCALPROC DoKeyCode(SDL_Keycode r, blnr down)
+LOCALPROC DoKeyCode(int key, blnr down)
 {
-	int v = SDLKey2MacKeyCode(r);
+	int v = XWinKey2MacKeyCode(key);
 	if (v >= 0) {
 		Keyboard_UpdateKeyMap2(v, down);
 	}
@@ -1167,9 +977,9 @@ LOCALVAR ui5b CurEmulatedTime = 0;
 #define MyInvTimeDivMask (MyInvTimeDiv - 1)
 #define MyInvTimeStep 1089590 /* 1000 / 60.14742 * MyInvTimeDiv */
 
-LOCALVAR Uint32 LastTime;
+LOCALVAR uint32_t LastTime;
 
-LOCALVAR Uint32 NextIntTime;
+LOCALVAR uint32_t NextIntTime;
 LOCALVAR ui5b NextFracTime;
 
 LOCALPROC IncrNextTime(void)
@@ -1190,21 +1000,21 @@ LOCALVAR ui5b NewMacDateInSeconds;
 
 LOCALFUNC blnr UpdateTrueEmulatedTime(void)
 {
-	Uint32 LatestTime;
+	uint32_t LatestTime;
 	si5b TimeDiff;
 
-	LatestTime = SDL_GetTicks();
+	uint32_t low;
+	kernel_tic32(NULL, NULL, &low);
+	LatestTime = low / 1000;
+
 	if (LatestTime != LastTime) {
 
 		NewMacDateInSeconds = LatestTime / 1000;
-			/* no date and time api in SDL */
 
 		LastTime = LatestTime;
 		TimeDiff = (LatestTime - NextIntTime);
-			/* this should work even when time wraps */
 		if (TimeDiff >= 0) {
 			if (TimeDiff > 64) {
-				/* emulation interrupted, forget it */
 				++TrueEmulatedTime;
 				InitNextTime();
 			} else {
@@ -1217,7 +1027,6 @@ LOCALFUNC blnr UpdateTrueEmulatedTime(void)
 			return trueblnr;
 		} else {
 			if (TimeDiff < -20) {
-				/* clock goofed if ever get here, reset */
 				InitNextTime();
 			}
 		}
@@ -1238,13 +1047,17 @@ LOCALFUNC blnr CheckDateTime(void)
 
 LOCALPROC StartUpTimeAdjust(void)
 {
-	LastTime = SDL_GetTicks();
+	uint32_t low;
+	kernel_tic32(NULL, NULL, &low);
+	LastTime = low / 1000;
 	InitNextTime();
 }
 
 LOCALFUNC blnr InitLocationDat(void)
 {
-	LastTime = SDL_GetTicks();
+	uint32_t low;
+	kernel_tic32(NULL, NULL, &low);
+	LastTime = low / 1000;
 	InitNextTime();
 	NewMacDateInSeconds = LastTime / 1000;
 	CurMacDateInSeconds = NewMacDateInSeconds;
@@ -1256,15 +1069,11 @@ LOCALFUNC blnr InitLocationDat(void)
 
 #if MySoundEnabled
 
-#define kLn2SoundBuffers 4 /* kSoundBuffers must be a power of two */
+#define kLn2SoundBuffers 4
 #define kSoundBuffers (1 << kLn2SoundBuffers)
 #define kSoundBuffMask (kSoundBuffers - 1)
 
 #define DesiredMinFilledSoundBuffs 3
-	/*
-		if too big then sound lags behind emulation.
-		if too small then sound will have pauses.
-	*/
 
 #define kLnOneBuffLen 9
 #define kLnAllBuffLen (kLn2SoundBuffers + kLnOneBuffLen)
@@ -1286,7 +1095,6 @@ LOCALVAR ui4b MinFilledSoundBuffs;
 
 LOCALPROC MySound_Start0(void)
 {
-	/* Reset variables */
 	ThePlayOffset = 0;
 	TheFillOffset = 0;
 	TheWriteOffset = 0;
@@ -1303,7 +1111,6 @@ GLOBALFUNC tpSoundSamp MySound_BeginWrite(ui4r n, ui4r *actL)
 		n = WriteBuffContig;
 	}
 	if (ToFillLen < n) {
-		/* overwrite previous buffer */
 		TheWriteOffset -= kOneBuffLen;
 	}
 
@@ -1320,10 +1127,7 @@ LOCALFUNC blnr MySound_EndWrite0(ui4r actL)
 	if (0 != (TheWriteOffset & kOneBuffMask)) {
 		v = falseblnr;
 	} else {
-		/* just finished a block */
-
 		TheFillOffset = TheWriteOffset;
-
 		v = trueblnr;
 	}
 
@@ -1334,17 +1138,15 @@ LOCALPROC MySound_SecondNotify0(void)
 {
 	if (MinFilledSoundBuffs <= kSoundBuffers) {
 		if (MinFilledSoundBuffs > DesiredMinFilledSoundBuffs) {
-			/* fprintf(stderr, "MinFilledSoundBuffs too high\n"); */
 			++CurEmulatedTime;
 		} else if (MinFilledSoundBuffs < DesiredMinFilledSoundBuffs) {
-			/* fprintf(stderr, "MinFilledSoundBuffs too low\n"); */
 			--CurEmulatedTime;
 		}
 		MinFilledSoundBuffs = kSoundBuffers + 1;
 	}
 }
 
-#define SOUND_SAMPLERATE 22255 /* = round(7833600 * 2 / 704) */
+#define SOUND_SAMPLERATE 22255
 
 LOCALVAR blnr HaveSoundOut = falseblnr;
 LOCALVAR blnr HaveStartedPlaying = falseblnr;
@@ -1353,100 +1155,26 @@ LOCALPROC MySound_Start(void)
 {
 	if (HaveSoundOut) {
 		MySound_Start0();
-		SDL_PauseAudio(0);
 	}
 }
 
 LOCALPROC MySound_Stop(void)
 {
 	if (HaveSoundOut) {
-		SDL_PauseAudio(1);
 		HaveStartedPlaying = falseblnr;
-	}
-}
-
-static void my_audio_callback(void *udata, Uint8 *stream, int len)
-{
-	int i;
-
-label_retry:
-	{
-		ui4b ToPlayLen = TheFillOffset - ThePlayOffset;
-		ui4b FilledSoundBuffs = ToPlayLen >> kLnOneBuffLen;
-
-		if (! HaveStartedPlaying) {
-			if ((ToPlayLen >> kLnOneBuffLen) < 12) {
-				ToPlayLen = 0;
-			} else {
-				HaveStartedPlaying = trueblnr;
-			}
-		}
-
-		if (0 == len) {
-			/* done */
-
-			if (FilledSoundBuffs < MinFilledSoundBuffs) {
-				MinFilledSoundBuffs = FilledSoundBuffs;
-			}
-		} else if (ToPlayLen == 0) {
-			/* under run */
-
-			/* fprintf(stderr, "under run\n"); */
-
-			for (i = 0; i < len; ++i) {
-				*stream++ = 0x80;
-			}
-			MinFilledSoundBuffs = 0;
-		} else {
-			ui4b PlayBuffContig = kAllBuffLen
-				- (ThePlayOffset & kAllBuffMask);
-			tpSoundSamp p = TheSoundBuffer
-				+ (ThePlayOffset & kAllBuffMask);
-
-			if (ToPlayLen > PlayBuffContig) {
-				ToPlayLen = PlayBuffContig;
-			}
-			if (ToPlayLen > len) {
-				ToPlayLen = len;
-			}
-
-			for (i = 0; i < ToPlayLen; ++i) {
-				*stream++ = *p++;
-			}
-
-			ThePlayOffset += ToPlayLen;
-			len -= ToPlayLen;
-
-			goto label_retry;
-		}
 	}
 }
 
 LOCALFUNC blnr MySound_Init(void)
 {
-	SDL_AudioSpec desired;
-
-	desired.freq = SOUND_SAMPLERATE;
-	desired.format = AUDIO_U8;
-	desired.channels = 1;
-	desired.samples = 1024;
-	desired.callback = my_audio_callback;
-	desired.userdata = NULL;
-
-	/* Open the audio device */
-	if (SDL_OpenAudio(&desired, NULL) < 0) {
-		fprintf(stderr, "Couldn't open audio: %s\n", SDL_GetError());
-	} else {
-		HaveSoundOut = trueblnr;
-	}
-
-	return trueblnr; /* keep going, even if no sound */
+	HaveSoundOut = trueblnr;
+	return trueblnr;
 }
 
 LOCALPROC MySound_UnInit(void)
 {
 	if (HaveSoundOut) {
-		SDL_CloseAudio();
+		HaveSoundOut = falseblnr;
 	}
 }
 
@@ -1469,18 +1197,12 @@ LOCALPROC MySound_SecondNotify(void)
 
 LOCALPROC CheckSavedMacMsg(void)
 {
-	/* called only on quit, if error saved but not yet reported */
-
 	if (nullpr != SavedBriefMsg) {
 		char briefMsg0[ClStrMaxLength + 1];
 		char longMsg0[ClStrMaxLength + 1];
 
 		NativeStrFromCStr(briefMsg0, SavedBriefMsg);
 		NativeStrFromCStr(longMsg0, SavedLongMsg);
-
-		fprintf(stderr, "%s\n", briefMsg0);
-		fprintf(stderr, "%s\n", longMsg0);
-
 		SavedBriefMsg = nullpr;
 	}
 }
@@ -1493,83 +1215,110 @@ LOCALPROC CheckSavedMacMsg(void)
 LOCALVAR blnr CaughtMouse = falseblnr;
 #endif
 
-/* --- event handling for main window --- */
+/* --- XWin event handling --- */
 
-LOCALPROC HandleTheEvent(SDL_Event *event)
-{
-	switch (event->type) {
-		case SDL_QUIT:
-			RequestMacOff = trueblnr;
-			break;
-		case SDL_WINDOWEVENT:
-			switch (event->window.event) {
-				case SDL_WINDOWEVENT_FOCUS_GAINED:
-					// Window window gained keyboard focus
-					//gTrueBackgroundFlag = (0 == event->active.gain);
-					gTrueBackgroundFlag = 0;
-					break;
-				case SDL_WINDOWEVENT_FOCUS_LOST:
-					// Window window gained keyboard focus
-					//gTrueBackgroundFlag = (0 == event->active.gain);
-					gTrueBackgroundFlag = 0;
-					break;
-				case SDL_WINDOWEVENT_ENTER:
-					// Mouse has entered the window Window
-					CaughtMouse = 1;
-					break;
-				case SDL_WINDOWEVENT_LEAVE:
-					// Mouse has entered the window Window
-					CaughtMouse = 1;
-					break;
-			}
-			break;
-		case SDL_MOUSEMOTION:
+static void on_xwin_resize(xwin_t* win) {
+}
+
+static void on_xwin_event(xwin_t* win, xevent_t* ev) {
+	switch (ev->type) {
+		case XEVT_IM:
 		{
-			int win_w, win_h;
-			SDL_GetWindowSize(window, &win_w, &win_h);
-			int mac_x = (int)event->motion.x * vMacScreenWidth / win_w;
-			int mac_y = (int)event->motion.y * vMacScreenHeight / win_h;
-			MousePositionNotify(mac_x, mac_y);
+			int key = ev->value.im.value;
+			blnr down = (ev->state == XIM_STATE_PRESS);
+			DoKeyCode(key, down);
 			break;
 		}
-		case SDL_MOUSEBUTTONDOWN:
-			/* any mouse button, we don't care which */
-			MyMouseButtonSet(trueblnr);
-			break;
-		case SDL_MOUSEBUTTONUP:
-			MyMouseButtonSet(falseblnr);
-			break;
-		case SDL_KEYDOWN:
-			DoKeyCode(event->key.keysym.sym, trueblnr);
-			break;
-		case SDL_KEYUP:
-			DoKeyCode(event->key.keysym.sym, falseblnr);
-			break;
-#if 0
-		case Expose: /* SDL doesn't have an expose event */
-			int x0 = event->expose.x;
-			int y0 = event->expose.y;
-			int x1 = x0 + event->expose.width;
-			int y1 = y0 + event->expose.height;
+		case XEVT_MOUSE:
+		{
+			int x =  ev->value.mouse.x - win->xinfo->wsr.x;
+        	int y =  ev->value.mouse.y - win->xinfo->wsr.y;
+			
+			int button = ev->value.mouse.button;
+			int relative = ev->value.mouse.relative;
 
-			if (x0 < 0) {
-				x0 = 0;
+			if (button == MOUSE_BUTTON_LEFT) {
+				if (ev->state == MOUSE_STATE_DOWN) {
+					MyMouseButtonSet(trueblnr);
+				} else if (ev->state == MOUSE_STATE_UP) {
+					MyMouseButtonSet(falseblnr);
+				}
 			}
-			if (x1 > vMacScreenWidth) {
-				x1 = vMacScreenWidth;
-			}
-			if (y0 < 0) {
-				y0 = 0;
-			}
-			if (y1 > vMacScreenHeight) {
-				y1 = vMacScreenHeight;
-			}
-			if ((x0 < x1) && (y0 < y1)) {
-				HaveChangedScreenBuff(y0, x0, y1, x1);
+
+			if (window_width > 0 && window_height > 0 && (x >= 0 && y >= 0)) {
+				int mac_x = x * vMacScreenWidth / window_width;
+				int mac_y = y * vMacScreenHeight / window_height;
+
+				if (mac_x >= 0 && mac_x < vMacScreenWidth &&
+					mac_y >= 0 && mac_y < vMacScreenHeight) {
+					MousePositionNotify(mac_x, mac_y);
+				}
 			}
 			break;
-#endif
+		}
+		case XEVT_WIN:
+		{
+			if (ev->value.window.event == XEVT_WIN_CLOSE) {
+				RequestMacOff = trueblnr;
+			}
+			break;
+		}
 	}
+}
+
+static void on_xwin_repaint(xwin_t* win, graph_t* g) {
+	if (g == NULL)
+		return;
+
+	screen_graph = g;
+	window_width = g->w;
+	window_height = g->h;
+
+	graph_fill(g, 0, 0, g->w, g->h, 0xff000000);
+
+	if (screen_buffer != NULL && screen_buffer->buffer != NULL) {
+		ScreenChangedTop = 0;
+		ScreenChangedLeft = 0;
+		ScreenChangedBottom = vMacScreenHeight;
+		ScreenChangedRight = vMacScreenWidth;
+
+		if (ScreenChangedBottom > ScreenChangedTop) {
+			HaveChangedScreenBuff(ScreenChangedTop, ScreenChangedLeft,
+				ScreenChangedBottom, ScreenChangedRight);
+			ScreenClearChanges();
+		}
+
+		int bw = (screen_buffer->w < g->w) ? screen_buffer->w : g->w;
+		int bh = (screen_buffer->h < g->h) ? screen_buffer->h : g->h;
+		graph_blt(screen_buffer, 0, 0, bw, bh,
+			g, 0, 0, bw, bh);
+	}
+}
+
+LOCALPROC CheckForSavedTasks(void);
+LOCALPROC RunEmulatedTicksToTrueTime(void);
+LOCALPROC DoEmulateOneTick(void);
+
+static void xwin_loop(void* p) {
+	if (ForceMacOff) {
+		x_terminate(x_context);
+		return;
+	}
+
+	CheckForSavedTasks();
+
+	if (!CurSpeedStopped) {
+		RunEmulatedTicksToTrueTime();
+
+		DoEmulateOneTick();
+		++CurEmulatedTime;
+	}
+
+	if (xwin != NULL) {
+		xwin_repaint(xwin);
+	}
+
+	proc_usleep(3000);
 }
 
 /* --- main window creation and disposal --- */
@@ -1583,11 +1332,11 @@ LOCALFUNC blnr Screen_Init(void)
 
 	InitKeyCodes();
 
-	if (SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
-	{
-		fprintf(stderr, "Unable to init SDL: %s\n", SDL_GetError());
-	} else {
-		//SDL_WM_SetCaption(kStrAppName, NULL);
+	x_context = (x_t *)malloc(sizeof(x_t));
+	if (x_context != NULL) {
+		memset(x_context, 0, sizeof(x_t));
+		x_init(x_context, NULL);
+		x_context->on_loop = xwin_loop;
 		v = trueblnr;
 	}
 
@@ -1601,68 +1350,18 @@ LOCALVAR blnr GrabMachine = falseblnr;
 #if MayFullScreen
 LOCALPROC GrabTheMachine(void)
 {
-	//(void) SDL_WM_GrabInput(SDL_GRAB_ON);
-	SDL_SetWindowGrab(window, SDL_TRUE);
-
-
-#if EnableMouseMotion
-	/*
-		if magnification changes, need to reset,
-		even if HaveMouseMotion already true
-	*/
-	if (MyMoveMouse(ViewHStart + (ViewHSize / 2),
-		ViewVStart + (ViewVSize / 2)))
-	{
-		SavedMouseH = ViewHStart + (ViewHSize / 2);
-		SavedMouseV = ViewVStart + (ViewVSize / 2);
-		HaveMouseMotion = trueblnr;
-	}
-#endif
 }
 #endif
 
 #if MayFullScreen
 LOCALPROC UngrabMachine(void)
 {
-#if EnableMouseMotion
-	if (HaveMouseMotion) {
-		(void) MyMoveMouse(CurMouseH, CurMouseV);
-		HaveMouseMotion = falseblnr;
-	}
-#endif
-
-	//(void) SDL_WM_GrabInput(SDL_GRAB_OFF);
-	SDL_SetWindowGrab(window, SDL_FALSE);
 }
 #endif
 
 #if EnableMouseMotion && MayFullScreen
 LOCALPROC MyMouseConstrain(void)
 {
-	si4b shiftdh;
-	si4b shiftdv;
-
-	if (SavedMouseH < ViewHStart + (ViewHSize / 4)) {
-		shiftdh = ViewHSize / 2;
-	} else if (SavedMouseH > ViewHStart + ViewHSize - (ViewHSize / 4)) {
-		shiftdh = - ViewHSize / 2;
-	} else {
-		shiftdh = 0;
-	}
-	if (SavedMouseV < ViewVStart + (ViewVSize / 4)) {
-		shiftdv = ViewVSize / 2;
-	} else if (SavedMouseV > ViewVStart + ViewVSize - (ViewVSize / 4)) {
-		shiftdv = - ViewVSize / 2;
-	} else {
-		shiftdv = 0;
-	}
-	if ((shiftdh != 0) || (shiftdv != 0)) {
-		SavedMouseH += shiftdh;
-		SavedMouseV += shiftdv;
-		if (! MyMoveMouse(SavedMouseH, SavedMouseV)) {
-			HaveMouseMotion = falseblnr;
-		}
-	}
 }
 #endif
 
@@ -1670,7 +1369,6 @@ LOCALFUNC blnr CreateMainWindow(void)
 {
 	int NewWindowHeight = vMacScreenHeight;
 	int NewWindowWidth = vMacScreenWidth;
-	Uint32 flags = SDL_SWSURFACE;
 	blnr v = falseblnr;
 
 #if EnableMagnify && 1
@@ -1680,108 +1378,44 @@ LOCALFUNC blnr CreateMainWindow(void)
 	}
 #endif
 
-#if 0//VarFullScreen
-	if (UseFullScreen)
-#endif
-#if 0//MayFullScreen
-	{
-		/* We don't want physical screen mode to be changed in modern displays,
-		 * so we pass this _DESKTOP flag. */
-		//flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-	}
-#endif
-
 	ViewHStart = 0;
 	ViewVStart = 0;
 	ViewHSize = vMacScreenWidth;
 	ViewVSize = vMacScreenHeight;
 
-	/* We support 8bpp too: on SDL1.x, we would create a 8bpp surface here using SetVideoMode(),
-	 * but now we create a 32bpp surface that WILL be used to render 8bpp graphics using this trick.
-	 * Reminder: 8bpp is active when vMacScreenDepth is 0, defined in CNFGGLOB.h.
-	 * So setting a different mask we can do 32bpp or 8bpp using a 32bpp surface, and there will be
-	 * no conversion before uploading texture because we are already using a 32bpp texture.*/
-	my_surface= SDL_CreateRGBSurface(0, vMacScreenWidth, vMacScreenHeight, 32,
-#if 0 != vMacScreenDepth
-		0,0,0,0
-#else
-		0x00FF0000,
-                0x0000FF00,
-                0x000000FF,
-                0xFF000000
-#endif
-		);
-	
-	if (NULL == my_surface) {
-		fprintf(stderr, "SDL_CreateRGBSurface fails: %s\n",
-			SDL_GetError());
-	} else {
-#if 0 != vMacScreenDepth
-		ColorModeWorks = trueblnr;
-#endif
-		v = trueblnr;
+	screen_buffer = graph_new(NULL, vMacScreenWidth, vMacScreenHeight);
+	if (screen_buffer == NULL) {
+		return falseblnr;
 	}
 
-#if 0//VarFullScreen
-	if (UseFullScreen)
-#endif
-#if 0//MayFullScreen
-	{
-		SDL_DisplayMode info;
-		SDL_GetCurrentDisplayMode(0, &info);
-		
-		displayWidth  = info.w; 
-		displayHeight = info.h;
+	graph_fill(screen_buffer, 0, 0, vMacScreenWidth, vMacScreenHeight, 0xffffffff);
 
-		dst_rect.w = displayHeight * ((float)vMacScreenWidth / (float)vMacScreenHeight);
-		dst_rect.h = displayHeight;
-		dst_rect.x = (displayWidth - dst_rect.w) / 2;
-		dst_rect.y = 0;
+	xwin = xwin_open(x_context, -1, 32, 32, NewWindowWidth, NewWindowHeight,
+		"Mini vMac", XWIN_STYLE_NO_RESIZE);
 
-		/* We don't want physical screen mode to be changed in modern displays,
-		 * so we pass this _DESKTOP flag. */
-		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+	if (xwin == NULL) {
+		graph_free(screen_buffer);
+		screen_buffer = NULL;
+		return falseblnr;
 	}
-	else {
-		dst_rect.w = vMacScreenWidth;
-		dst_rect.h = vMacScreenHeight;
-		dst_rect.x = 0;
-		dst_rect.y = 0;
-	}
-#else
-	dst_rect.w = vMacScreenWidth;
-	dst_rect.h = vMacScreenHeight;
-	dst_rect.x = 0;
-	dst_rect.y = 0;
-#endif
 
-	src_rect.w = vMacScreenWidth;
-	src_rect.h = vMacScreenHeight;	
-	src_rect.x = 0;
-	src_rect.y = 0;
+	xwin->on_resize = on_xwin_resize;
+	xwin->on_event = on_xwin_event;
+	xwin->on_repaint = on_xwin_repaint;
+	xwin_set_visible(xwin, true);
 
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-	SDL_ShowCursor(SDL_DISABLE);
-	/* 不使用 SDL 的 relative mode，由 ewokos 后端处理相对坐标 */
+	window_width = NewWindowWidth;
+	window_height = NewWindowHeight;
 
-	/* Remember: width and height values will be ignored when we use fullscreen. */
-	window = SDL_CreateWindow(
-        	"Mini vMac", 100, 100, NewWindowWidth, NewWindowHeight, 
-        	flags);
+	ScreenChangedAll();
 
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
-	
-	texture = SDL_CreateTexture(renderer,
-                               SDL_PIXELFORMAT_ARGB8888,
-                               SDL_TEXTUREACCESS_STREAMING,
-                               vMacScreenWidth, vMacScreenHeight);
-
+	v = trueblnr;
 	return v;
 }
 
 LOCALFUNC blnr ReCreateMainWindow(void)
 {
-	ForceShowCursor(); /* hide/show cursor api is per window */
+	ForceShowCursor();
 
 #if MayFullScreen
 	if (GrabMachine) {
@@ -1797,11 +1431,15 @@ LOCALFUNC blnr ReCreateMainWindow(void)
 	UseFullScreen = WantFullScreen;
 #endif
 
-	/* First things first, we destroy the window before creating a new one. 
-	   We're not in SetVideoMode() land anymore. */
-	SDL_DestroyTexture(texture);
-	SDL_DestroyRenderer(renderer);
-	SDL_DestroyWindow(window);
+	if (xwin != NULL) {
+		xwin_destroy(xwin);
+		xwin = NULL;
+	}
+
+	if (screen_buffer != NULL) {
+		graph_free(screen_buffer);
+		screen_buffer = NULL;
+	}
 
 	(void) CreateMainWindow();
 
@@ -1860,7 +1498,6 @@ LOCALPROC CheckForSavedTasks(void)
 	if (MyEvtQNeedRecover) {
 		MyEvtQNeedRecover = falseblnr;
 
-		/* attempt cleanup, MyEvtQNeedRecover may get set again */
 		MyEvtQTryRecoverFromFull();
 	}
 
@@ -1953,8 +1590,6 @@ LOCALPROC CheckForSavedTasks(void)
 		&& ! (gTrueBackgroundFlag || CurSpeedStopped)))
 	{
 		HaveCursorHidden = ! HaveCursorHidden;
-		(void) SDL_ShowCursor(
-			HaveCursorHidden ? SDL_DISABLE : SDL_ENABLE);
 	}
 }
 
@@ -2014,35 +1649,17 @@ LOCALPROC RunEmulatedTicksToTrueTime(void)
 #endif
 		}
 
-		if ((! gBackgroundFlag)
-#if UseMotionEvents
-			&& (! CaughtMouse)
-#endif
-			)
-		{
-			/* CheckMouseState disabled - using xrel/yrel accumulation in SDL_MOUSEMOTION */
-		}
-
-#if EnableMouseMotion && MayFullScreen
-		if (HaveMouseMotion) {
-			AutoScrollScreen();
-		}
-#endif
-
 		DoEmulateOneTick();
 		++CurEmulatedTime;
 
 		MyDrawChangesAndClear();
 
 		if (n > 8) {
-			/* emulation not fast enough */
 			n = 8;
 			CurEmulatedTime = OnTrueTime - n;
 		}
 
 		if (ExtraTimeNotOver() && (--n > 0)) {
-			/* lagging, catch up */
-
 			EmVideoDisable = trueblnr;
 
 			do {
@@ -2060,51 +1677,8 @@ LOCALPROC RunEmulatedTicksToTrueTime(void)
 
 LOCALPROC RunOnEndOfSixtieth(void)
 {
-	while (ExtraTimeNotOver()) {
-		(void) SDL_Delay(NextIntTime - LastTime);
-	}
-
 	OnTrueTime = TrueEmulatedTime;
 	RunEmulatedTicksToTrueTime();
-}
-
-LOCALPROC WaitForTheNextEvent(void)
-{
-	SDL_Event event;
-
-	if (SDL_WaitEvent(&event)) {
-		HandleTheEvent(&event);
-	}
-}
-
-LOCALPROC CheckForSystemEvents(void)
-{
-	SDL_Event event;
-	int i = 10;
-
-	SDL_zero(event);
-	while ((--i >= 0) && SDL_PollEvent(&event)) {
-		HandleTheEvent(&event);
-		SDL_zero(event);
-	}
-}
-
-LOCALPROC MainEventLoop(void)
-{
-	for (; ; ) {
-		CheckForSystemEvents();
-		CheckForSavedTasks();
-		if (ForceMacOff) {
-			return;
-		}
-
-		if (CurSpeedStopped) {
-			WaitForTheNextEvent();
-		} else {
-			DoEmulateExtraTime();
-			RunOnEndOfSixtieth();
-		}
-	}
 }
 
 LOCALPROC ZapOSGLUVars(void)
@@ -2152,7 +1726,6 @@ LOCALFUNC blnr AllocMyMemory(void)
 		ReserveAllocOffset = 0;
 		ReserveAllocAll();
 		if (n != ReserveAllocOffset) {
-			/* oops, program error */
 		} else {
 			IsOk = trueblnr;
 		}
@@ -2221,7 +1794,20 @@ LOCALPROC UnInitOSGLU(void)
 
 	CheckSavedMacMsg();
 
-	SDL_Quit();
+	if (xwin != NULL) {
+		xwin_destroy(xwin);
+		xwin = NULL;
+	}
+
+	if (screen_buffer != NULL) {
+		graph_free(screen_buffer);
+		screen_buffer = NULL;
+	}
+
+	if (x_context != NULL) {
+		free(x_context);
+		x_context = NULL;
+	}
 }
 
 int main(int argc, char **argv)
@@ -2231,7 +1817,8 @@ int main(int argc, char **argv)
 
 	ZapOSGLUVars();
 	if (InitOSGLU()) {
-		MainEventLoop();
+		LeaveSpeedStopped();
+		x_run(x_context, xwin);
 	}
 	UnInitOSGLU();
 

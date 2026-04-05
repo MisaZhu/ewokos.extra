@@ -399,23 +399,12 @@ EXPORTPROC MyEvtQOutDone(void);
 #define MKC_ScrollLock 0x6B
 #define MKC_Pause 0x71
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_keycode.h>
+#include <x/x.h>
+#include <x/xwin.h>
+#include <graph/graph.h>
 
-/* SDL2 window */
-EXPORTVAR(SDL_Window *, window)
+/* XWin window */
+EXPORTVAR(xwin_t *, xwin)
 
-/* SDL2 renderer */
-EXPORTVAR(SDL_Renderer *, renderer)
-
-/* SDL2 texture */
-EXPORTVAR(SDL_Texture *, texture)
-
-/* SDL2 blitting rects for hw scaling
- * ratio correction using SDL_RenderCopy() */
-EXPORTVAR(SDL_Rect, src_rect)
-EXPORTVAR(SDL_Rect, dst_rect)
-
-/* SDL2 physical screen dimensions */
-EXPORTVAR(int, displayWidth)
-EXPORTVAR(int, displayHeight)
+/* XWin system context */
+EXPORTVAR(x_t *, x_context)

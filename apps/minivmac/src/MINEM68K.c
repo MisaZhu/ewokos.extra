@@ -3375,14 +3375,14 @@ LOCALPROCUSEDONCE DoCodeMMU(void)
 		ui4b ew = (int)nextiword();
 		if (ew == 0x4200) {
 			/* PMOVE TC, (A0) */
-			/* fprintf(stderr, "0xF010 0x4200\n"); */
+			/* klog("0xF010 0x4200\n"); */
 			regs.opsize = 4;
 			DecodeModeRegister(mode, reg);
 			SetArgValue(0);
 			return;
 		} else if ((ew == 0x4E00) || (ew == 0x4A00)) {
 			/* PMOVE CRP, (A0) and PMOVE SRP, (A0) */
-			/* fprintf(stderr, "0xF010 %x\n", ew); */
+			/* klog("0xF010 %x\n", ew); */
 			regs.opsize = 4;
 			DecodeModeRegister(mode, reg);
 			SetArgValue(0x7FFF0001);
@@ -3391,16 +3391,16 @@ LOCALPROCUSEDONCE DoCodeMMU(void)
 			return;
 		} else if (ew == 0x6200) {
 			/* PMOVE MMUSR, (A0) */
-			/* fprintf(stderr, "0xF010 %x\n", ew); */
+			/* klog("0xF010 %x\n", ew); */
 			regs.opsize = 2;
 			DecodeModeRegister(mode, reg);
 			SetArgValue(0);
 			return;
 		}
-		/* fprintf(stderr, "extensions %x\n", ew); */
+		/* klog("extensions %x\n", ew); */
 		BackupPC();
 	}
-	/* fprintf(stderr, "opcode %x\n", (int)regs.opcode); */
+	/* klog("opcode %x\n", (int)regs.opcode); */
 	ReportAbnormal("MMU op");
 	DoCodeFdefault();
 }
