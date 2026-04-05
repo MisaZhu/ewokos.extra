@@ -1593,37 +1593,6 @@ LOCALPROC CheckForSavedTasks(void)
 	}
 }
 
-/* --- command line parsing --- */
-
-LOCALFUNC blnr ScanCommandLine(void)
-{
-	char *pa;
-	int i = 1;
-
-label_retry:
-	if (i < my_argc) {
-		pa = my_argv[i++];
-		if ('-' == pa[0]) {
-			if ((0 == strcmp(pa, "--rom"))
-				|| (0 == strcmp(pa, "-r")))
-			{
-				if (i < my_argc) {
-					rom_path = my_argv[i++];
-					goto label_retry;
-				}
-			} else
-			{
-				MacMsg(kStrBadArgTitle, kStrBadArgMessage, falseblnr);
-			}
-		} else {
-			(void) Sony_Insert1(pa, falseblnr);
-			goto label_retry;
-		}
-	}
-
-	return trueblnr;
-}
-
 /* --- main program flow --- */
 
 LOCALVAR ui5b OnTrueTime = 0;
@@ -1744,18 +1713,20 @@ LOCALPROC UnallocMyMemory(void)
 LOCALFUNC blnr InitOSGLU(void)
 {
 	if (AllocMyMemory())
+
 #if dbglog_HAVE
 	if (dbglog_open())
 #endif
-	if (ScanCommandLine())
-	if (LoadInitialImages())
-	if (LoadMacRom())
-	if (InitLocationDat())
+
 #if MySoundEnabled
 	if (MySound_Init())
 #endif
+
 	if (Screen_Init())
 	if (CreateMainWindow())
+	if (LoadMacRom())
+	if (LoadInitialImages())
+	if (InitLocationDat())
 	if (InitEmulation())
 	{
 		return trueblnr;
