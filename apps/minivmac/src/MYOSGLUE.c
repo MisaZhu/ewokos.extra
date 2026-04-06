@@ -109,6 +109,9 @@ x_t *x_context = NULL;
 graph_t *screen_graph = NULL;
 int window_width = 0;
 int window_height = 0;
+int display_scale = 1;
+int display_offset_x = 0;
+int display_offset_y = 0;
 
 /* --- some simple utilities --- */
 
@@ -1218,6 +1221,8 @@ LOCALVAR blnr CaughtMouse = falseblnr;
 /* --- XWin event handling --- */
 
 static void on_xwin_resize(xwin_t* win) {
+	window_width = win->xinfo->wsr.w;
+	window_height = win->xinfo->wsr.h;
 }
 
 static void on_xwin_event(xwin_t* win, xevent_t* ev) {
@@ -1245,9 +1250,22 @@ static void on_xwin_event(xwin_t* win, xevent_t* ev) {
 				}
 			}
 
-			if (window_width > 0 && window_height > 0 && (x >= 0 && y >= 0)) {
-				int mac_x = x * vMacScreenWidth / window_width;
-				int mac_y = y * vMacScreenHeight / window_height;
+			if (window_width > 0 && window_height > 0) {
+				int mac_x, mac_y;
+
+				if (display_scale > 1) {
+					int scaled_x = x - display_offset_x;
+					int scaled_y = y - display_offset_y;
+					mac_x = scaled_x / display_scale;
+					mac_y = scaled_y / display_scale;
+				} else {
+					mac_x = (x - display_offset_x) * vMacScreenWidth / (vMacScreenWidth * display_scale);
+					mac_y = (y - display_offset_y) * vMacScreenHeight / (vMacScreenHeight * display_scale);
+					if (display_offset_x == 0 && display_offset_y == 0) {
+						mac_x = x * vMacScreenWidth / window_width;
+						mac_y = y * vMacScreenHeight / window_height;
+					}
+				}
 
 				if (mac_x >= 0 && mac_x < vMacScreenWidth &&
 					mac_y >= 0 && mac_y < vMacScreenHeight) {
@@ -1288,10 +1306,35 @@ static void on_xwin_repaint(xwin_t* win, graph_t* g) {
 			ScreenClearChanges();
 		}
 
-		int bw = (screen_buffer->w < g->w) ? screen_buffer->w : g->w;
-		int bh = (screen_buffer->h < g->h) ? screen_buffer->h : g->h;
-		graph_blt(screen_buffer, 0, 0, bw, bh,
-			g, 0, 0, bw, bh);
+		int scale_x = g->w / screen_buffer->w;
+		int scale_y = g->h / screen_buffer->h;
+		int scale = (scale_x < scale_y) ? scale_x : scale_y;
+		if (scale < 1) scale = 1;
+
+		int scaled_w = screen_buffer->w * scale;
+		int scaled_h = screen_buffer->h * scale;
+		int offset_x = (g->w - scaled_w) / 2;
+		int offset_y = (g->h - scaled_h) / 2;
+
+		display_scale = scale;
+		display_offset_x = offset_x;
+		display_offset_y = offset_y;
+
+		if (scale > 1) {
+			graph_t* scaled = graph_scale(screen_buffer, scale);
+			if (scaled != NULL) {
+				graph_blt(scaled, 0, 0, scaled_w, scaled_h, g, offset_x, offset_y, scaled_w, scaled_h);
+				graph_free(scaled);
+			}
+		} else {
+			if (offset_x > 0 || offset_y > 0) {
+				graph_blt(screen_buffer, 0, 0, screen_buffer->w, screen_buffer->h,
+					g, offset_x, offset_y, screen_buffer->w, screen_buffer->h);
+			} else {
+				graph_blt(screen_buffer, 0, 0, screen_buffer->w, screen_buffer->h,
+					g, 0, 0, screen_buffer->w, screen_buffer->h);
+			}
+		}
 	}
 }
 
@@ -1391,7 +1434,7 @@ LOCALFUNC blnr CreateMainWindow(void)
 	graph_fill(screen_buffer, 0, 0, vMacScreenWidth, vMacScreenHeight, 0xffffffff);
 
 	xwin = xwin_open(x_context, -1, 32, 32, NewWindowWidth, NewWindowHeight,
-		"Mini vMac", XWIN_STYLE_NO_RESIZE);
+		"Mini vMac", XWIN_STYLE_NORMAL);
 
 	if (xwin == NULL) {
 		graph_free(screen_buffer);
