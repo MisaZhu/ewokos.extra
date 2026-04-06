@@ -109,7 +109,7 @@ x_t *x_context = NULL;
 graph_t *screen_graph = NULL;
 int window_width = 0;
 int window_height = 0;
-int display_scale = 1;
+float display_scale = 1.0;
 int display_offset_x = 0;
 int display_offset_y = 0;
 
@@ -1256,7 +1256,7 @@ static void on_xwin_event(xwin_t* win, xevent_t* ev) {
 			if (window_width > 0 && window_height > 0) {
 				int mac_x, mac_y;
 
-				if (display_scale > 1) {
+				if (display_scale > 1.0) {
 					int scaled_x = x - display_offset_x;
 					int scaled_y = y - display_offset_y;
 					mac_x = scaled_x / display_scale;
@@ -1309,10 +1309,10 @@ static void on_xwin_repaint(xwin_t* win, graph_t* g) {
 			ScreenClearChanges();
 		}
 
-		int scale_x = g->w / screen_buffer->w;
-		int scale_y = g->h / screen_buffer->h;
-		int scale = (scale_x < scale_y) ? scale_x : scale_y;
-		if (scale < 1) scale = 1;
+		float scale_x = (float)g->w / screen_buffer->w;
+		float scale_y = (float)g->h / screen_buffer->h;
+		float scale = (scale_x < scale_y) ? scale_x : scale_y;
+		if (scale < 1.0f) scale = 1.0f;
 
 		int scaled_w = screen_buffer->w * scale;
 		int scaled_h = screen_buffer->h * scale;
@@ -1324,7 +1324,7 @@ static void on_xwin_repaint(xwin_t* win, graph_t* g) {
 		display_offset_y = offset_y;
 
 		if (scale > 1) {
-			graph_t* scaled = graph_scale(screen_buffer, scale);
+			graph_t* scaled = graph_scalef_fast(screen_buffer, scale);
 			if (scaled != NULL) {
 				graph_blt(scaled, 0, 0, scaled_w, scaled_h, g, offset_x, offset_y, scaled_w, scaled_h);
 				graph_free(scaled);
