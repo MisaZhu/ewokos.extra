@@ -1221,6 +1221,8 @@ LOCALVAR blnr CaughtMouse = falseblnr;
 /* --- XWin event handling --- */
 
 static void on_xwin_resize(xwin_t* win) {
+	if(win == NULL || win->xinfo == NULL)
+		return;
 	window_width = win->xinfo->wsr.w;
 	window_height = win->xinfo->wsr.h;
 }
@@ -1236,8 +1238,9 @@ static void on_xwin_event(xwin_t* win, xevent_t* ev) {
 		}
 		case XEVT_MOUSE:
 		{
-			int x =  ev->value.mouse.x - win->xinfo->wsr.x;
-        	int y =  ev->value.mouse.y - win->xinfo->wsr.y;
+			gpos_t pos = xwin_get_inside_pos(win, ev->value.mouse.x, ev->value.mouse.y);
+			int x = pos.x;
+			int y = pos.y;
 			
 			int button = ev->value.mouse.button;
 			int relative = ev->value.mouse.relative;
