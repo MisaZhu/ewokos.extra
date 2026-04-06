@@ -1282,28 +1282,24 @@ static int pcm_prepare(struct pcm *pcm)
 
 static int pcm_try_write(struct pcm *pcm, const void* data, unsigned int count)
 {
-    if (count == 0) {
+    if (count == 0) return 0;
+
+    if (pcm->running == 0) {
+        int err = pcm_prepare(pcm);
+        if (err != 0) {
+            return err;
+        }
+
+        int written = write(pcm->fd, data, count);
+        if (written != (int)count) {
+            return -1;
+        }
+        pcm->running = 1;
         return 0;
     }
 
-    for (;;) {
-        if (pcm->running == 0) {
-            int err = pcm_prepare(pcm);
-            if (err != 0) {
-                return err;
-            }
-
-            int written = write(pcm->fd, data, count);
-            if (written != (int)count) {
-                return -1;
-            }
-            pcm->running = 1;
-            return 0;
-        }
-
-        int ret = write(pcm->fd, data, count);
-        return (ret == (int)count ? 0 : -1);
-    }
+    int ret = write(pcm->fd, data, count);
+    return (ret == (int)count ? 0 : -1);
 }
 
 static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms)
@@ -1352,18 +1348,9 @@ static int pcm_write(struct pcm *pcm, const void* data, unsigned int count) {
     copy_bytes = bytes < period_bytes ? bytes : period_bytes;
     while (bytes > 0) {
         ret = wait_avail(pcm, &avail, 2000); // Wait up to 2 seconds
-        if (ret == -EPIPE) {
-            // XRUN happened, re-prepare and retry
-            copy_bytes = (bytes < period_bytes ? bytes : period_bytes);
-            pcm->prepared = 0;
-            pcm->running = 0;
-            continue;
-        }
-
         if (ret < 0 || (avail == 0 && bytes > 0)) {
             break;
         }
-
         copy_bytes = bytes < avail ? bytes : avail;
 
         ret = pcm_try_write(pcm, (const char*)data + offset, copy_bytes);
@@ -1374,6 +1361,7 @@ static int pcm_write(struct pcm *pcm, const void* data, unsigned int count) {
             copy_bytes = bytes < period_bytes ? bytes : period_bytes;
         }
     }
+
     return (written == (int)count ? 0 : -1);
 }
 
@@ -1475,7 +1463,6 @@ static void *audio_thread(void *arg)
 
             /* Write to PCM device using pcm_write (like emu does) */
             int res = pcm_write(pcm, buffer, play_len * 4);
-            klog("audio_thread: pcm_write res: %d, skipping %d samples\n", res, play_len);
 
             /* Update play offset - always advance to keep buffer flowing */
             ThePlayOffset += play_len;
@@ -1541,16 +1528,16 @@ LOCALFUNC blnr MySound_Init(void)
 	while (sound_devices[i] != NULL) {
 		sound_pcm = pcm_open(sound_devices[i], &config);
 		if (sound_pcm) {
-			klog("MySound_Init: Successfully opened PCM device %s\n", sound_devices[i]);
+			slog("MySound_Init: Successfully opened PCM device %s\n", sound_devices[i]);
 			break;
 		}
-		klog("MySound_Init: Failed to open PCM device %s\n", sound_devices[i]);
+		slog("MySound_Init: Failed to open PCM device %s\n", sound_devices[i]);
 		i++;
 	}
 
 	if (!sound_pcm) {
 		// If all PCM device opens fail, continue without sound
-		klog("MySound_Init: All PCM devices failed to open\n");
+		slog("MySound_Init: All PCM devices failed to open\n");
 		free(TheSoundBuffer);
 		TheSoundBuffer = nullpr;
 		HaveSoundOut = falseblnr;
@@ -1568,12 +1555,12 @@ LOCALFUNC blnr MySound_Init(void)
 		free(TheSoundBuffer);
 		TheSoundBuffer = nullpr;
 		HaveSoundOut = falseblnr;
-		klog("MySound_Init: Failed to create audio thread\n");
+		slog("MySound_Init: Failed to create audio thread\n");
 		return falseblnr;
 	}
 
 	HaveSoundOut = trueblnr;
-	klog("MySound_Init: Success\n");
+	slog("MySound_Init: Success\n");
 	return trueblnr;
 }
 
