@@ -1858,6 +1858,7 @@ LOCALFUNC blnr CreateMainWindow(void)
 	xwin->on_resize = on_xwin_resize;
 	xwin->on_event = on_xwin_event;
 	xwin->on_repaint = on_xwin_repaint;
+	xwin_hide_cursor(xwin, true);
 	xwin_set_visible(xwin, true);
 
 	window_width = NewWindowWidth;
