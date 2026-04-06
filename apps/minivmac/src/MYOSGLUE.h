@@ -242,6 +242,7 @@ EXPORTVAR(ui5r, QuietSubTicks)
 
 #if MySoundEnabled
 
+EXPORTVAR(blnr, HaveSoundOut)
 EXPORTFUNC tpSoundSamp MySound_BeginWrite(ui4r n, ui4r *actL);
 EXPORTPROC MySound_EndWrite(ui4r actL);
 

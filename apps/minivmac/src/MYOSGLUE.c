@@ -1152,7 +1152,7 @@ LOCALPROC MySound_SecondNotify0(void)
 
 #define SOUND_SAMPLERATE 44100
 
-LOCALVAR blnr HaveSoundOut = falseblnr;
+blnr HaveSoundOut = falseblnr;
 LOCALVAR blnr HaveStartedPlaying = falseblnr;
 
 /* PCM device support */
@@ -1434,6 +1434,10 @@ static void *audio_thread(void *arg)
     int buffer_size = kOneBuffLen * 4; /* 2 channels * 2 bytes per sample */
     unsigned char *buffer = NULL;
 
+    if (!pcm) {
+        return NULL;
+    }
+
     /* Allocate buffer */
     buffer = (unsigned char *)malloc(buffer_size);
     if (!buffer) {
@@ -1541,7 +1545,8 @@ LOCALFUNC blnr MySound_Init(void)
 		free(TheSoundBuffer);
 		TheSoundBuffer = nullpr;
 		HaveSoundOut = falseblnr;
-		return falseblnr;
+		//return falseblnr; //sound is optional
+		return trueblnr;
 	}
 
 	/* Start audio thread */
@@ -1653,15 +1658,14 @@ static void on_xwin_event(xwin_t* win, xevent_t* ev) {
 			int y = pos.y;
 			
 			int button = ev->value.mouse.button;
-			int relative = ev->value.mouse.relative;
 
-			if (button == MOUSE_BUTTON_LEFT) {
-				if (ev->state == MOUSE_STATE_DOWN) {
-					MyMouseButtonSet(trueblnr);
-				} else if (ev->state == MOUSE_STATE_UP) {
-					MyMouseButtonSet(falseblnr);
-				}
+			//if (button == MOUSE_BUTTON_LEFT) {
+			if (ev->state == MOUSE_STATE_DOWN) {
+				MyMouseButtonSet(trueblnr);
+			} else if (ev->state == MOUSE_STATE_UP) {
+				MyMouseButtonSet(falseblnr);
 			}
+			//}
 
 			if (window_width > 0 && window_height > 0) {
 				int mac_x, mac_y;
