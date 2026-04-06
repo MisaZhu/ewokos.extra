@@ -35,6 +35,7 @@
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/timer.h>
 #include <ewoksys/keydef.h>
+#include <ewoksys/vfs.h>
 
 #ifndef KEY_INSERT
 #define KEY_INSERT		0xF3
@@ -1149,15 +1150,352 @@ LOCALPROC MySound_SecondNotify0(void)
 	}
 }
 
-#define SOUND_SAMPLERATE 22255
+#define SOUND_SAMPLERATE 44100
 
 LOCALVAR blnr HaveSoundOut = falseblnr;
 LOCALVAR blnr HaveStartedPlaying = falseblnr;
+
+/* PCM device support */
+#include <ewoksys/proto.h>
+#include <ewoksys/vdevice.h>
+#include <pthread.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+#define CTRL_PCM_DEV_HW				(0xF0)
+#define CTRL_PCM_DEV_HW_FREE		(0xF1)
+#define CTRL_PCM_DEV_PRPARE			(0xF2)
+#define CTRL_PCM_BUF_AVAIL			(0xF3)
+
+#define	EPIPE					(32)
+
+struct pcm_config {
+    int bit_depth;
+    int rate;
+    int channels;
+    int period_size;
+    int period_count;
+    int start_threshold;
+    int stop_threshold;
+};
+
+struct pcm {
+    int fd;
+    int prepared;
+    int running;
+    char name[32];
+    int framesize;
+    struct pcm_config config;
+};
+
+static int pcm_buf_avail(struct pcm *pcm)
+{
+    proto_t in, out;
+    PF->init(&in);
+    PF->init(&out);
+    int ret = 0;
+
+    ret = dev_cntl(pcm->name, CTRL_PCM_BUF_AVAIL, &in, &out);
+    if(ret == 0) {
+        ret = proto_read_int(&out);
+    } 
+
+    PF->clear(&in);
+    PF->clear(&out);
+    return ret;
+}
+
+static int support_rate(unsigned int rate) {
+    switch (rate) {
+    case 8000:
+    case 16000:
+    case 32000:
+    case 44100:
+    case 48000:
+    case 96000:
+        return 1;
+    }
+    return 0;
+}
+
+static int support_channels(unsigned int channels) {
+    if (channels != 2) {
+        return 0;
+    }
+    return 1;
+}
+
+static int support_bit_depth(unsigned int bit_depth) {
+    switch (bit_depth) {
+    case 16:
+    case 24:
+    case 32:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int is_valid_config(struct pcm_config *config)
+{
+    if (!support_bit_depth(config->bit_depth) ||
+        !support_channels(config->channels) ||
+        !support_rate(config->rate)) {
+        return 0;
+    }
+
+    if (config->period_size == 0 || config->period_count == 0) {
+        return 0;
+    }
+
+    if (config->start_threshold == 0) {
+        config->start_threshold = config->period_size;
+    }
+
+    if (config->stop_threshold == 0) {
+        config->stop_threshold = config->period_size * config->period_count;
+    }
+    return 1;
+}
+
+static int pcm_prepare(struct pcm *pcm)
+{
+    if (pcm->prepared) {
+        return 0;
+    }
+
+    proto_t in, out;
+    PF->init(&in);
+    PF->init(&out);
+    int ret = dev_cntl(pcm->name, CTRL_PCM_DEV_PRPARE, &in, &out);
+    if(ret == 0) {
+        ret = proto_read_int(&out);
+    }
+    PF->clear(&in);
+    PF->clear(&out);
+
+    if (ret == 0) {
+        pcm->prepared = 1;
+    }
+    return ret;
+}
+
+static int pcm_try_write(struct pcm *pcm, const void* data, unsigned int count)
+{
+    if (count == 0) {
+        return 0;
+    }
+
+    for (;;) {
+        if (pcm->running == 0) {
+            int err = pcm_prepare(pcm);
+            if (err != 0) {
+                return err;
+            }
+
+            int written = write(pcm->fd, data, count);
+            if (written != (int)count) {
+                return -1;
+            }
+            pcm->running = 1;
+            return 0;
+        }
+
+        int ret = write(pcm->fd, data, count);
+        return (ret == (int)count ? 0 : -1);
+    }
+}
+
+static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms)
+{
+    enum { SLEEP_TIME_MS = 5 };
+    *avail = 0;
+    int ret = 0;
+    int period_bytes = pcm->config.period_size * 4;
+    int max_try_count = time_out_ms / SLEEP_TIME_MS;
+    int try_count = 0;
+
+    for(;;) {
+        ret = pcm_buf_avail(pcm);
+        if (ret < 0) {
+            *avail = period_bytes;
+            return 0;
+        }
+
+        if (ret >= period_bytes) {
+            *avail = ret;
+            break;
+        }
+
+        if(try_count++ >= max_try_count) {
+            *avail = ret;
+            break;
+        }
+
+        proc_usleep(SLEEP_TIME_MS * 1000);
+    }
+
+    return ret;
+}
+
+static int pcm_write(struct pcm *pcm, const void* data, unsigned int count) {
+    if (count == 0) return 0;
+
+    int period_bytes = pcm->config.period_size * 4; // 16-bit stereo = 4 bytes per frame
+    int avail = 0;
+    int bytes = (int)count;
+    int written = 0;
+    int offset = 0;
+    int copy_bytes = 0;
+    int ret = 0;
+
+    copy_bytes = bytes < period_bytes ? bytes : period_bytes;
+    while (bytes > 0) {
+        ret = wait_avail(pcm, &avail, 2000); // Wait up to 2 seconds
+        if (ret == -EPIPE) {
+            // XRUN happened, re-prepare and retry
+            copy_bytes = (bytes < period_bytes ? bytes : period_bytes);
+            pcm->prepared = 0;
+            pcm->running = 0;
+            continue;
+        }
+
+        if (ret < 0 || (avail == 0 && bytes > 0)) {
+            break;
+        }
+
+        copy_bytes = bytes < avail ? bytes : avail;
+
+        ret = pcm_try_write(pcm, (const char*)data + offset, copy_bytes);
+        if (ret == 0) {
+            offset += copy_bytes;
+            written += copy_bytes;
+            bytes -= copy_bytes;
+            copy_bytes = bytes < period_bytes ? bytes : period_bytes;
+        }
+    }
+    return (written == (int)count ? 0 : -1);
+}
+
+static struct pcm* pcm_open(const char *name, struct pcm_config *config)
+{
+    struct pcm* pcm;
+
+    if (!is_valid_config(config)) {
+        return NULL;
+    }
+
+    pcm = calloc(1, sizeof(struct pcm));
+    if (pcm == NULL) {
+        return NULL;
+    }
+
+    strncpy(pcm->name, name, 31);
+    memcpy(&pcm->config, config, sizeof(struct pcm_config));
+    pcm->framesize = config->channels * config->bit_depth / 8;
+
+    pcm->fd = open(name, O_RDWR);
+    if (pcm->fd < 0) {
+        free(pcm);
+        return NULL;
+    }
+
+    proto_t in, out;
+    PF->init(&in)->add(&in, config, sizeof(struct pcm_config));
+    PF->init(&out);
+    int temp = dev_cntl(pcm->name, CTRL_PCM_DEV_HW, &in, &out);
+    if(temp == 0) {
+        temp = proto_read_int(&out);
+    }
+    PF->clear(&in);
+    PF->clear(&out);
+
+    if (temp != 0) {
+        close(pcm->fd);
+        free(pcm);
+        return NULL;
+    }
+
+    return pcm;
+}
+
+static int pcm_close(struct pcm *pcm)
+{
+    if (pcm == NULL) {
+        return 0;
+    }
+
+    close(pcm->fd);
+    free(pcm);
+    return 0;
+}
+
+/* Audio thread data */
+static struct audio_thread_data {
+    struct pcm *pcm;
+    int enabled;
+} audio_thread_data;
+
+static pthread_t audio_thread_id = 0;
+
+/* Audio thread */
+static void *audio_thread(void *arg)
+{
+    struct audio_thread_data *data = (struct audio_thread_data *)arg;
+    struct pcm *pcm = data->pcm;
+    int buffer_size = kOneBuffLen * 4; /* 2 channels * 2 bytes per sample */
+    unsigned char *buffer = NULL;
+
+    /* Allocate buffer */
+    buffer = (unsigned char *)malloc(buffer_size);
+    if (!buffer) {
+        return NULL;
+    }
+
+    /* Initial delay */
+    proc_usleep(200 * 1000);
+
+    while (data->enabled) {
+        /* Check if there's data to play */
+        if (TheFillOffset > ThePlayOffset) {
+            int play_len = TheFillOffset - ThePlayOffset;
+            if (play_len > kOneBuffLen) {
+                play_len = kOneBuffLen;
+            }
+
+            /* Convert 8-bit mono to 16-bit stereo */
+            for (int i = 0; i < play_len; i++) {
+                int sample = TheSoundBuffer[(ThePlayOffset + i) & kAllBuffMask];
+                /* Convert 8-bit to 16-bit */
+                sample = (sample - 128) * 256;
+                /* Write to both channels */
+                ((int16_t *)buffer)[i * 2] = sample;
+                ((int16_t *)buffer)[i * 2 + 1] = sample;
+            }
+
+            /* Write to PCM device using pcm_write (like emu does) */
+            int res = pcm_write(pcm, buffer, play_len * 4);
+            klog("audio_thread: pcm_write res: %d, skipping %d samples\n", res, play_len);
+
+            /* Update play offset - always advance to keep buffer flowing */
+            ThePlayOffset += play_len;
+        } else {
+            /* No data to play, sleep briefly */
+            proc_usleep(10000);
+        }
+    }
+
+    free(buffer);
+    return NULL;
+}
+
+static struct pcm *sound_pcm = NULL;
 
 LOCALPROC MySound_Start(void)
 {
 	if (HaveSoundOut) {
 		MySound_Start0();
+		HaveStartedPlaying = trueblnr;
 	}
 }
 
@@ -1170,13 +1508,97 @@ LOCALPROC MySound_Stop(void)
 
 LOCALFUNC blnr MySound_Init(void)
 {
+	/* Allocate sound buffer */
+	TheSoundBuffer = (tpSoundSamp)malloc(kAllBuffSz);
+	if (!TheSoundBuffer) {
+		// If buffer allocation fails, continue without sound
+		HaveSoundOut = falseblnr;
+		klog("MySound_Init: Failed to allocate sound buffer\n");
+		return falseblnr;
+	}
+
+	/* Initialize PCM device */
+	struct pcm_config config;
+	memset(&config, 0, sizeof(config));
+	config.bit_depth = 16;
+	config.rate = SOUND_SAMPLERATE;
+	config.channels = 2;
+	config.period_size = 1024;
+	config.period_count = 4;
+	config.start_threshold = 1024 * 2;
+	config.stop_threshold = 0;
+
+	// Try different sound device paths
+	const char *sound_devices[] = {
+		"/dev/sound0",
+		"/dev/sound",
+		"/dev/pcm0",
+		"/dev/pcm",
+		NULL
+	};
+
+	int i = 0;
+	while (sound_devices[i] != NULL) {
+		sound_pcm = pcm_open(sound_devices[i], &config);
+		if (sound_pcm) {
+			klog("MySound_Init: Successfully opened PCM device %s\n", sound_devices[i]);
+			break;
+		}
+		klog("MySound_Init: Failed to open PCM device %s\n", sound_devices[i]);
+		i++;
+	}
+
+	if (!sound_pcm) {
+		// If all PCM device opens fail, continue without sound
+		klog("MySound_Init: All PCM devices failed to open\n");
+		free(TheSoundBuffer);
+		TheSoundBuffer = nullpr;
+		HaveSoundOut = falseblnr;
+		return falseblnr;
+	}
+
+	/* Start audio thread */
+	audio_thread_data.pcm = sound_pcm;
+	audio_thread_data.enabled = 1;
+
+	if (pthread_create(&audio_thread_id, NULL, audio_thread, &audio_thread_data) != 0) {
+		// If thread creation fails, continue without sound
+		pcm_close(sound_pcm);
+		sound_pcm = NULL;
+		free(TheSoundBuffer);
+		TheSoundBuffer = nullpr;
+		HaveSoundOut = falseblnr;
+		klog("MySound_Init: Failed to create audio thread\n");
+		return falseblnr;
+	}
+
 	HaveSoundOut = trueblnr;
+	klog("MySound_Init: Success\n");
 	return trueblnr;
 }
 
 LOCALPROC MySound_UnInit(void)
 {
 	if (HaveSoundOut) {
+		/* Stop audio thread */
+		audio_thread_data.enabled = 0;
+		if (audio_thread_id != 0) {
+			pthread_join(audio_thread_id, NULL);
+			audio_thread_id = 0;
+		}
+
+		/* Close PCM device */
+		if (sound_pcm) {
+			pcm_close(sound_pcm);
+			sound_pcm = NULL;
+		}
+
+		/* Free sound buffer */
+		if (TheSoundBuffer) {
+			free(TheSoundBuffer);
+			TheSoundBuffer = nullpr;
+		}
+
 		HaveSoundOut = falseblnr;
 	}
 }
@@ -1184,6 +1606,7 @@ LOCALPROC MySound_UnInit(void)
 GLOBALPROC MySound_EndWrite(ui4r actL)
 {
 	if (MySound_EndWrite0(actL)) {
+		/* Buffer is full, let the audio thread handle it */
 	}
 }
 
