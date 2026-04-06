@@ -1774,7 +1774,7 @@ static void xwin_loop(void* p) {
 		xwin_repaint(xwin);
 	}
 
-	proc_usleep(3000);
+	proc_usleep(1000);
 }
 
 /* --- main window creation and disposal --- */
