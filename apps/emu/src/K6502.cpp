@@ -1082,7 +1082,7 @@ void K6502_Step( WORD wClocks )
       default:   // Unknown Instruction
         CLK( 2 );
 #if 0
-        InfoNES_MessageBox( "0x%02x is unknown instruction.\n", byCode ) ;
+        //InfoNES_MessageBox( "0x%02x is unknown instruction.\n", byCode ) ;
 #endif
         break;
         

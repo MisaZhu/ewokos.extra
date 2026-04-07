@@ -34,6 +34,10 @@
 #include "src/InfoNES_System.h"
 #include "src/InfoNES_pAPU.h"
 
+#include <Widget/Widget.h>
+#include <Widget/WidgetWin.h>
+#include <Widget/WidgetX.h>
+
 // PCM Audio Driver
 #define CTRL_PCM_DEV_HW         (0xF0)
 #define CTRL_PCM_DEV_PRPARE     (0xF2)
@@ -512,16 +516,7 @@ void InfoNES_SoundOutput(int samples, BYTE *wave1, BYTE *wave2, BYTE *wave3, BYT
     }
 }
 
-/* Print system message */
-void InfoNES_MessageBox( char *pszMsg, ... ){
-
-}
-
-class NesEmu : public XWin {
-private:
-     uint32_t lastSec = 0;
-     uint64_t lastUsec = 0;
-
+class NesEmu : public Widget {
 public:
 	inline NesEmu() {
 		padState = 0;
@@ -535,96 +530,80 @@ public:
     bool loadGame(char* path){
 		int i = InfoNES_Load(path);
 		InfoNES_Init();
-		lastSec = 0;
-		lastUsec = 0;
 		return true;
     } 
 
-	void waitForNextFrame(){
-		uint32_t sec;
-		uint64_t usec;
-		int wait;
-
-		kernel_tic(&sec, &usec);
-		wait = 1000000/60 - ((sec - lastSec) * 1000000 + (usec - lastUsec)); 
-		if(wait > 0 && wait < (1000000/60))
-			proc_usleep(wait);
-
-		kernel_tic(&lastSec, &lastUsec);
-	}
-
 protected:
-	void onEvent(xevent_t* ev) {
-		if(ev->type == XEVT_IM){	
-			if(ev->state == XIM_STATE_PRESS){
-				switch(ev->value.im.value){
-					case JOYSTICK_A:
-					case ']':
-						padState |= 0x1;
-						break;
-					case JOYSTICK_B:
-					case '[':
-						padState |= 0x2;
-						break;
-					case JOYSTICK_SELECT:
-						padState |= 0x4;
-						break;
-					case JOYSTICK_START:
-					case KEY_ENTER:
-						padState |= 0x8;
-						break;
-					case KEY_UP:
-						padState |= 0x10;
-						break;
-					case KEY_DOWN:
-						padState |= 0x20;
-						break;
-					case KEY_LEFT:
-						padState |= 0x40;
-						break;
-					case KEY_RIGHT:
-						padState |= 0x80;
-						break;
-					default:
-						break;
-				}
-			}else{
-				switch(ev->value.im.value){
-					case JOYSTICK_A:
-					case ']':
-						padState &= ~0x1;
-						break;
-					case JOYSTICK_B:
-					case '[':
-						padState &= ~0x2;
-						break;
-					case JOYSTICK_SELECT:
-						padState &= ~0x4;
-						break;
-					case JOYSTICK_START:
-					case KEY_ENTER:
-						padState &= ~0x8;
-						break;
-					case KEY_UP:
-						padState &= ~0x10;
-						break;
-					case KEY_DOWN:
-						padState &= ~0x20;
-						break;
-					case KEY_LEFT:
-						padState &= ~0x40;
-						break;
-					case KEY_RIGHT:
-						padState &= ~0x80;
-						break;
-					default:
-						break;
-				}
-			}
+    bool onIM(xevent_t* ev) {
+        if(ev->state == XIM_STATE_PRESS){
+            switch(ev->value.im.value){
+                case JOYSTICK_A:
+                case ']':
+                    padState |= 0x1;
+                    break;
+                case JOYSTICK_B:
+                case '[':
+                    padState |= 0x2;
+                    break;
+                case JOYSTICK_SELECT:
+                    padState |= 0x4;
+                    break;
+                case JOYSTICK_START:
+                case KEY_ENTER:
+                    padState |= 0x8;
+                    break;
+                case KEY_UP:
+                    padState |= 0x10;
+                    break;
+                case KEY_DOWN:
+                    padState |= 0x20;
+                    break;
+                case KEY_LEFT:
+                    padState |= 0x40;
+                    break;
+                case KEY_RIGHT:
+                    padState |= 0x80;
+                    break;
+                default:
+                    break;
+            }
+        }else{
+            switch(ev->value.im.value){
+                case JOYSTICK_A:
+                case ']':
+                    padState &= ~0x1;
+                    break;
+                case JOYSTICK_B:
+                case '[':
+                    padState &= ~0x2;
+                    break;
+                case JOYSTICK_SELECT:
+                    padState &= ~0x4;
+                    break;
+                case JOYSTICK_START:
+                case KEY_ENTER:
+                    padState &= ~0x8;
+                    break;
+                case KEY_UP:
+                    padState &= ~0x10;
+                    break;
+                case KEY_DOWN:
+                    padState &= ~0x20;
+                    break;
+                case KEY_LEFT:
+                    padState &= ~0x40;
+                    break;
+                case KEY_RIGHT:
+                    padState &= ~0x80;
+                    break;
+                default:
+                    break;
+            }
 		}
+        return true;
 	}
 
-	void onRepaint(graph_t* g) {
+    void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
 		static int framecnt= 0;
 		screen = g;
 		graph_clear(g, 0xff000000);
@@ -632,28 +611,14 @@ protected:
 		//printf("wait\n");
 	}
 
+    void onTimer(uint32_t timerFPS, uint32_t timerStep) {
+        update();
+    }
 };
 
-static void loop(void* p) {
-	NesEmu* xwin = (NesEmu*)p;
-	xwin->repaint();
-	xwin->waitForNextFrame();
-}
-
-/*static NesEmu* _xwin;
-static void loop(void) {
-	NesEmu* xwin = _xwin;
-	xwin->repaint();
-}
-*/
-
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	string path;
-	NesEmu emu;
-
-	/*init window*/
-	xscreen_info_t scr;
+	NesEmu *emu = new NesEmu();
 
 	//init emulator
 	if(argc < 2){
@@ -662,27 +627,24 @@ int main(int argc, char *argv[])
 			path = argv[1];
 	}
 
-	printf("load game: %s\n", path.c_str());
-	if(emu.loadGame((char*)path.c_str()) != true){
+	if(emu->loadGame((char*)path.c_str()) != true){
 			printf("Error load rom file:%s\n", path.c_str());
+            delete emu;
 			return -1;
 	}
 
-	X x;
-	x.getScreenInfo(scr, 0);
+    X x;
+    WidgetWin win;
+
+    RootWidget* root = win.getRoot();
+    root->setType(Container::HORIZONTAL);
+    root->add(emu);
+    root->focus(emu);
 
 	scale = 1.0;
-	
-/*#ifdef BSP_BOOST
-	if(scr.size.h > 240)
-		scale = scr.size.h / 240.0;
-#endif
-*/
-
-	emu.open(&x, -1, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
-	//emu.max();
-	x.run(loop, &emu);
-
+    win.open(&x, -1, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
+    win.setTimer(90);
+    widgetXRun(&x, &win);
 	InfoNES_Fin();
 	return 0;
 }

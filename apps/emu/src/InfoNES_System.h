@@ -63,7 +63,4 @@ void InfoNES_SoundClose( void );
 /* Sound Output 5 Waves - 2 Pulse, 1 Triangle, 1 Noise, 1 DPCM */
 void InfoNES_SoundOutput(int samples, BYTE *wave1, BYTE *wave2, BYTE *wave3, BYTE *wave4, BYTE *wave5);
 
-/* Print system message */
-void InfoNES_MessageBox( char *pszMsg, ... );
-
 #endif /* !InfoNES_SYSTEM_H_INCLUDED */
