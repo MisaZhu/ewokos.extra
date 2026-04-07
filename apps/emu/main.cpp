@@ -622,15 +622,15 @@ int main(int argc, char *argv[]) {
 
 	//init emulator
 	if(argc < 2){
-			path = X::getResFullName("roms/nes1200in1.nes");
+		path = X::getResFullName("roms/nes1200in1.nes");
 	}else{
-			path = argv[1];
+		path = argv[1];
 	}
 
 	if(emu->loadGame((char*)path.c_str()) != true){
-			printf("Error load rom file:%s\n", path.c_str());
-            delete emu;
-			return -1;
+        printf("Error load rom file:%s\n", path.c_str());
+        delete emu;
+        return -1;
 	}
 
     X x;
