@@ -545,6 +545,7 @@ protected:
                 case '[':
                     padState |= 0x2;
                     break;
+                case 's':
                 case JOYSTICK_SELECT:
                     padState |= 0x4;
                     break;
@@ -577,6 +578,7 @@ protected:
                 case '[':
                     padState &= ~0x2;
                     break;
+                case 's':
                 case JOYSTICK_SELECT:
                     padState &= ~0x4;
                     break;

@@ -1759,7 +1759,7 @@ LOCALPROC CheckForSavedTasks(void);
 LOCALPROC RunEmulatedTicksToTrueTime(void);
 LOCALPROC DoEmulateOneTick(void);
 
-#define mac_FPS 120
+#define mac_FPS 160
 static void xwin_loop(void* p) {
 	if (ForceMacOff) {
 		x_terminate(x_context);
