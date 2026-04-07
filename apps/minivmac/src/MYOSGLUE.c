@@ -1759,11 +1759,15 @@ LOCALPROC CheckForSavedTasks(void);
 LOCALPROC RunEmulatedTicksToTrueTime(void);
 LOCALPROC DoEmulateOneTick(void);
 
+#define mac_FPS 120
 static void xwin_loop(void* p) {
 	if (ForceMacOff) {
 		x_terminate(x_context);
 		return;
 	}
+
+	uint64_t tik = kernel_tic_ms(0);
+	uint32_t tm = 1000/mac_FPS;
 
 	CheckForSavedTasks();
 
@@ -1778,7 +1782,11 @@ static void xwin_loop(void* p) {
 		xwin_repaint(xwin);
 	}
 
-	proc_usleep(1000);
+	uint32_t gap = (uint32_t)(kernel_tic_ms(0) - tik);
+	if(gap < tm) {
+		gap = tm - gap;
+		proc_usleep(gap*1000);
+	}
 }
 
 /* --- main window creation and disposal --- */
