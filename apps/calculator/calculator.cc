@@ -242,7 +242,7 @@ public:
 
         RootWidget* root = new RootWidget();
         setRoot(root);
-        root->setType(Container::VERTICLE);
+        root->setType(Container::VERTICAL);
 
         // 创建显示屏区域（深灰色圆角背景）
         display = new DisplayWidget();
@@ -251,7 +251,7 @@ public:
 
         // 创建按钮区域（橙色背景）
         Container* buttonArea = new Container();
-        buttonArea->setType(Container::VERTICLE);
+        buttonArea->setType(Container::VERTICAL);
         root->add(buttonArea);
 
         // 按钮布局：4行 x 4列

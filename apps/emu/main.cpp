@@ -37,6 +37,8 @@
 #include <Widget/Widget.h>
 #include <Widget/WidgetWin.h>
 #include <Widget/WidgetX.h>
+#include <WidgetEx/Menubar.h>
+#include <WidgetEx/FileDialog.h>
 
 // PCM Audio Driver
 #define CTRL_PCM_DEV_HW         (0xF0)
@@ -315,6 +317,7 @@ WORD NesPalette[ 64 ] =
 };
 
 graph_t *screen;
+grect_t screenRect;
 graph_t *paint;
 
 /* Menu screen */
@@ -373,18 +376,18 @@ void InfoNES_ReleaseRom(){
 }
 
 static float scale = 1.0;
-void graph_scale_fix_center(graph_t *src, graph_t *dst){
+void graph_scale_fix_center(graph_t *src, graph_t *dst, const grect_t& r){
 	if(dst->h < dst->w)
-		scale = (float)dst->h / (float)src->h;
+		scale = (float)r.h / (float)src->h;
 	else
-		scale = (float)dst->w / (float)src->w;
+		scale = (float)r.w / (float)src->w;
 
     graph_t* sc = graph_scalef_fast(src, scale);
     if(sc == NULL)
         return;
 
-	int sx = MAX((dst->w- src->w * scale)/2, 0);
-	int sy = MAX((dst->h - src->h * scale)/2, 0);
+	int sx = MAX((r.w- src->w * scale)/2, 0) + r.x;
+	int sy = MAX((r.h - src->h * scale)/2, 0) + r.y;
     graph_blt(sc, 0, 0, sc->w, sc->h, dst, sx, sy, sc->w, sc->h);
     graph_free(sc);
 }
@@ -397,7 +400,7 @@ void InfoNES_LoadFrame(){
 		d[i] = RGBPalette[idx];
 	};
 
-	graph_scale_fix_center(paint, screen);
+	graph_scale_fix_center(paint, screen, screenRect);
 }
 
 /* Get a joypad state */
@@ -527,7 +530,7 @@ public:
 		graph_free(paint);
 	}
 
-    bool loadGame(char* path){
+    bool loadGame(const char* path){
 		int i = InfoNES_Load(path);
 		InfoNES_Init();
 		return true;
@@ -608,7 +611,8 @@ protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
 		static int framecnt= 0;
 		screen = g;
-		graph_clear(g, 0xff000000);
+        screenRect = r;
+		//graph_clear(g, 0xff000000);
 		InfoNES_Cycle();
 		//printf("wait\n");
 	}
@@ -617,6 +621,41 @@ protected:
         update();
     }
 };
+
+class PlayerWin : public WidgetWin {
+    FileDialog fdialog;
+    NesEmu* emu;
+protected:
+    void onDialoged(XWin* from, int res, void* arg) {
+        if (res == Dialog::RES_OK && from == &fdialog) {
+            string path = fdialog.getResult();
+            if (path.length() > 0 && emu != NULL) {
+                // Load game
+                emu->loadGame(path.c_str());
+            }
+        }
+    }
+
+public:
+    PlayerWin() {
+        emu = NULL;
+        fdialog.setInitPath(X::getResFullName("roms"));
+    }
+
+    inline void setEmu(NesEmu* emu) {
+        this->emu = emu;
+    }
+
+    ~PlayerWin() {
+    }
+
+    FileDialog* getFileDialog() { return &fdialog; }
+};
+
+static void onOpenFunc(MenuItem* it, void* p) {
+    PlayerWin* win = (PlayerWin*)p;
+    win->getFileDialog()->popup(win, 320, 240, "files", XWIN_STYLE_NORMAL);
+}
 
 int main(int argc, char *argv[]) {
 	string path;
@@ -636,17 +675,24 @@ int main(int argc, char *argv[]) {
 	}
 
     X x;
-    WidgetWin win;
+    PlayerWin win;
+    win.setEmu(emu);
 
     RootWidget* root = win.getRoot();
-    root->setType(Container::HORIZONTAL);
+    root->setType(Container::VERTICAL);
+
+    Menubar* menubar = new Menubar();
+    root->add(menubar);
+    menubar->fix(0, 24);
+    menubar->setItemSize(50);
+    menubar->add(0, "Open", NULL, NULL, onOpenFunc, &win);
+
     root->add(emu);
     root->focus(emu);
 
 	scale = 1.0;
-    win.open(&x, -1, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
+    win.open(&x, -1, -1, -1, 256*scale, 240*scale+24, "NesEmu", XWIN_STYLE_NORMAL);
     win.setTimer(90);
-    win.hideCursor(true);
     widgetXRun(&x, &win);
 	InfoNES_Fin();
 	return 0;

@@ -301,7 +301,7 @@ public:
 		LeftLabel* label;
 		Scroller* transcript_scroller;
 
-		root->setType(Container::VERTICLE);
+		root->setType(Container::VERTICAL);
 		root->setAlpha(false);
 		setRoot(root);
 

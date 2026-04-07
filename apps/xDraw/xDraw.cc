@@ -345,7 +345,7 @@ public:
 
         // 创建工具栏
         Container* toolbar = new Container();
-        toolbar->setType(Container::VERTICLE);
+        toolbar->setType(Container::VERTICAL);
         toolbar->fix(80, 0);
         root->add(toolbar);
 
