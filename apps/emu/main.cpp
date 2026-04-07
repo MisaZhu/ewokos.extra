@@ -646,6 +646,7 @@ int main(int argc, char *argv[]) {
 	scale = 1.0;
     win.open(&x, -1, -1, -1, 256*scale, 240*scale, "NesEmu", XWIN_STYLE_NORMAL);
     win.setTimer(90);
+    win.hideCursor(true);
     widgetXRun(&x, &win);
 	InfoNES_Fin();
 	return 0;
