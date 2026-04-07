@@ -374,48 +374,15 @@ void graph_scale_fix_center(graph_t *src, graph_t *dst){
 		scale = (float)dst->h / (float)src->h;
 	else
 		scale = (float)dst->w / (float)src->w;
-	static int dstW,dstH;
-	static int sx;
-	static int sy; 
-	static int ex;
-	static int ey;
 
-	dstW = dst->w;
-	dstH = dst->h;
+    graph_t* sc = graph_scalef_fast(src, scale);
+    if(sc == NULL)
+        return;
 
-	sx = MAX((dstW- src->w * scale)/2, 0);
-	ex = MIN(sx + (src->w * scale), dst->w);
-	sy = MAX((dstH - src->h * scale)/2, 0);
-	ey = MIN(sy + (src->h * scale), dst->h);
-	int dstY = sy;
-	int srcY = 0;
-
-	if(scale == 1.0) {
-		for(; dstY < ey; dstY++){
-			int dstX = sx;
-			int srcX = 0;
-			uint32_t *d = dst->buffer + dstY * dst->w;
-			uint32_t *s = src->buffer + srcY*src->w;
-			for(; dstX < ex; dstX++){
-				d[dstX] = s[srcX];
-				srcX++;
-			}
-			srcY++;
-		}
-	}
-	else {
-		for(; dstY < ey; dstY++){
-			int dstX = sx;
-			int srcX = 0;
-			uint32_t *d = dst->buffer + dstY * dst->w;
-			uint32_t *s = src->buffer + (uint32_t)(srcY/scale)*src->w;
-			for(; dstX < ex; dstX++){
-				d[dstX] = s[(uint32_t)(srcX/scale)];
-				srcX++;
-			}
-			srcY++;
-		}
-	}
+	int sx = MAX((dst->w- src->w * scale)/2, 0);
+	int sy = MAX((dst->h - src->h * scale)/2, 0);
+    graph_blt(sc, 0, 0, sc->w, sc->h, dst, sx, sy, sc->w, sc->h);
+    graph_free(sc);
 }
 
 void InfoNES_LoadFrame(){
