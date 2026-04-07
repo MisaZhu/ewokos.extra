@@ -1646,7 +1646,7 @@ static void on_xwin_event(xwin_t* win, xevent_t* ev) {
 	switch (ev->type) {
 		case XEVT_IM:
 		{
-			int key = ev->value.im.value;
+			int key = ev->value.im.key_code;
 			blnr down = (ev->state == XIM_STATE_PRESS);
 			DoKeyCode(key, down);
 			break;
