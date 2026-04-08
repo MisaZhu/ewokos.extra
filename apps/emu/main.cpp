@@ -39,6 +39,7 @@
 #include <Widget/WidgetX.h>
 #include <WidgetEx/Menubar.h>
 #include <WidgetEx/FileDialog.h>
+#include <graph/graph_png.h>
 
 // PCM Audio Driver
 #define CTRL_PCM_DEV_HW         (0xF0)
@@ -520,19 +521,32 @@ void InfoNES_SoundOutput(int samples, BYTE *wave1, BYTE *wave2, BYTE *wave3, BYT
 }
 
 class NesEmu : public Widget {
+    bool loaded;
+    graph_t* logo; 
 public:
 	inline NesEmu() {
+        logo = NULL;
+        loaded = false;
 		padState = 0;
 		paint = graph_new(NULL, 256, 240);
 	}
 	
 	inline ~NesEmu() {
-		graph_free(paint);
+        if(paint)
+    		graph_free(paint);
+
+        if(logo)
+            graph_free(logo);
 	}
 
     bool loadGame(const char* path){
 		int i = InfoNES_Load(path);
+        if(i != 0) {
+            loaded = false;
+            return false;
+        }
 		InfoNES_Init();
+        loaded = true;
 		return true;
     } 
 
@@ -612,7 +626,18 @@ protected:
 		static int framecnt= 0;
 		screen = g;
         screenRect = r;
-		//graph_clear(g, 0xff000000);
+        if(!loaded) {
+            graph_fill(g, r.x, r.y, r.w, r.h, theme->basic.bgColor);
+            if(!logo)
+                logo = png_image_new(X::getResFullName("logo.png").c_str());
+            if(logo) {
+                int x = r.x + (r.w - logo->w) / 2;
+                int y = r.y + (r.h - logo->h) / 2;
+                klog("x:%d, y:%d\n", x, y);
+                graph_blt_alpha(logo, 0, 0, logo->w, logo->h, g, x, y, logo->w, logo->h, 0xff);
+            }
+            return;
+        }
 		InfoNES_Cycle();
 		//printf("wait\n");
 	}
@@ -668,11 +693,12 @@ int main(int argc, char *argv[]) {
 		path = argv[1];
 	}
 
-	if(emu->loadGame((char*)path.c_str()) != true){
+	/*if(emu->loadGame((char*)path.c_str()) != true){
         printf("Error load rom file:%s\n", path.c_str());
         delete emu;
         return -1;
 	}
+    */
 
     X x;
     PlayerWin win;
