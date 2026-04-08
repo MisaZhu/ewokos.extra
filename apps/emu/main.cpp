@@ -633,7 +633,6 @@ protected:
             if(logo) {
                 int x = r.x + (r.w - logo->w) / 2;
                 int y = r.y + (r.h - logo->h) / 2;
-                klog("x:%d, y:%d\n", x, y);
                 graph_blt_alpha(logo, 0, 0, logo->w, logo->h, g, x, y, logo->w, logo->h, 0xff);
             }
             return;
