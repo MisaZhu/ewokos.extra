@@ -3715,83 +3715,78 @@ static void draw_triangle_fill(glVertex* v0, glVertex* v1, glVertex* v2, unsigne
 	Line l12 = make_Line(hp1.x, hp1.y, hp2.x, hp2.y);
 	Line l20 = make_Line(hp2.x, hp2.y, hp0.x, hp0.y);
 
+	// Precompute line function denominators and edge tests
+	float denom_l01_hp2 = line_func(&l01, hp2.x, hp2.y);
+	float denom_l20_hp1 = line_func(&l20, hp1.x, hp1.y);
+	float edge_test_l12 = line_func(&l12, hp0.x, hp0.y) * line_func(&l12, -1, -2.5f);
+	float edge_test_l20 = line_func(&l20, hp1.x, hp1.y) * line_func(&l20, -1, -2.5f);
+	float edge_test_l01 = line_func(&l01, hp2.x, hp2.y) * line_func(&l01, -1, -2.5f);
+
 	float alpha, beta, gamma, tmp, tmp2, z;
 	float fs_input[GL_MAX_VERTEX_OUTPUT_COMPONENTS];
 	float perspective[GL_MAX_VERTEX_OUTPUT_COMPONENTS*3];
 	float* vs_output = &c->vs_output.output_buf[0];
 
-	for (int i=0; i<c->vs_output.size; ++i) {
+	int vs_output_size = c->vs_output.size;
+	for (int i=0; i<vs_output_size; ++i) {
 		perspective[i] = v0->vs_out[i]/p0.w;
 		perspective[GL_MAX_VERTEX_OUTPUT_COMPONENTS + i] = v1->vs_out[i]/p1.w;
 		perspective[2*GL_MAX_VERTEX_OUTPUT_COMPONENTS + i] = v2->vs_out[i]/p2.w;
 	}
-	float inv_w0 = 1/p0.w;  //is this worth it?  faster than just dividing by w down below?
-	float inv_w1 = 1/p1.w;
-	float inv_w2 = 1/p2.w;
+	float inv_w0 = 1.0f/p0.w;
+	float inv_w1 = 1.0f/p1.w;
+	float inv_w2 = 1.0f/p2.w;
 
-	float x, y;
+	// Precompute depth mapping
+	float depth_near = c->depth_range_near;
+	float depth_scale = c->depth_range_far - depth_near;
+	float depth_scale_half = depth_scale * 0.5f;
 
 	int fragdepth_or_discard = c->programs.a[c->cur_program].fragdepth_or_discard;
 	Shader_Builtins builtins;
+	builtins.gl_InstanceID = c->builtins.gl_InstanceID;
 
 	for (int iy = y_min; iy<iy_max; ++iy) {
-		y = iy + 0.5f;
+		float y = iy + 0.5f;
 
 		for (int ix = x_min; ix<ix_max; ++ix) {
-			x = ix + 0.5f; //center of min pixel
+			float x = ix + 0.5f;
 
-			// page 117 of glspec describes calculating using areas of triangles but that
-			// simplifies (b*h_1/2)/(b*h_2/2) = h_1/h_2 hence the implicit line equations
-			// See FoCG pg 34-5 and 167
-			gamma = line_func(&l01, x, y)/line_func(&l01, hp2.x, hp2.y);
-			beta = line_func(&l20, x, y)/line_func(&l20, hp1.x, hp1.y);
-			alpha = 1 - beta - gamma;
+			gamma = line_func(&l01, x, y) / denom_l01_hp2;
+			beta = line_func(&l20, x, y) / denom_l20_hp1;
+			alpha = 1.0f - beta - gamma;
 
-			if (alpha >= 0 && beta >= 0 && gamma >= 0) {
-				//if it's on the edge (==0), draw if the opposite vertex is on the same side as arbitrary point -1, -2.5
-				//this is a deterministic way of choosing which triangle gets a pixel for triangles that share
-				//edges (see commit message for e87e324)
-				if ((alpha > 0 || line_func(&l12, hp0.x, hp0.y) * line_func(&l12, -1, -2.5) > 0) &&
-				    (beta  > 0 || line_func(&l20, hp1.x, hp1.y) * line_func(&l20, -1, -2.5) > 0) &&
-				    (gamma > 0 || line_func(&l01, hp2.x, hp2.y) * line_func(&l01, -1, -2.5) > 0)) {
-					//calculate interpolation here
+			if (alpha >= 0.0f && beta >= 0.0f && gamma >= 0.0f) {
+				if ((alpha > 0.0f || edge_test_l12 > 0.0f) &&
+				    (beta  > 0.0f || edge_test_l20 > 0.0f) &&
+				    (gamma > 0.0f || edge_test_l01 > 0.0f)) {
 					tmp2 = alpha*inv_w0 + beta*inv_w1 + gamma*inv_w2;
 
-					z = alpha * hp0.z + beta * hp1.z + gamma * hp2.z;
+					z = alpha * hp0.z + beta * hp1.z + gamma * hp2.z + poly_offset;
+					z = (z + 1.0f) * depth_scale_half + depth_near;
 
-					z += poly_offset;
-					z = rsw_mapf(z, -1.0f, 1.0f, c->depth_range_near, c->depth_range_far); //TODO move out (ie can I map hp1.z etc.)?
-
-					// early testing if shader doesn't use fragdepth or discard
 					if (!fragdepth_or_discard && !fragment_processing(x, y, z)) {
 						continue;
 					}
 
-					for (int i=0; i<c->vs_output.size; ++i) {
-						if (c->vs_output.interpolation[i] == PGL_SMOOTH) {
+					for (int i=0; i<vs_output_size; ++i) {
+						int interp = c->vs_output.interpolation[i];
+						if (interp == PGL_SMOOTH) {
 							tmp = alpha*perspective[i] + beta*perspective[GL_MAX_VERTEX_OUTPUT_COMPONENTS + i] + gamma*perspective[2*GL_MAX_VERTEX_OUTPUT_COMPONENTS + i];
-
 							fs_input[i] = tmp/tmp2;
-
-						} else if (c->vs_output.interpolation[i] == PGL_NOPERSPECTIVE) {
+						} else if (interp == PGL_NOPERSPECTIVE) {
 							fs_input[i] = alpha * v0->vs_out[i] + beta * v1->vs_out[i] + gamma * v2->vs_out[i];
-						} else { // == PGL_FLAT
-							fs_input[i] = vs_output[provoke*c->vs_output.size + i];
+						} else {
+							fs_input[i] = vs_output[provoke*vs_output_size + i];
 						}
 					}
 
-					// tmp2 is 1/w interpolated... I now do that everywhere (draw_line, draw_point)
 					SET_V4(builtins.gl_FragCoord, x, y, z, tmp2);
 					builtins.discard = GL_FALSE;
 					builtins.gl_FragDepth = z;
 
-					// have to do this here instead of outside the loop because somehow openmp messes it up
-					// TODO probably some way to prevent that but it's just copying an int so no big deal
-					builtins.gl_InstanceID = c->builtins.gl_InstanceID;
-
 					c->programs.a[c->cur_program].fragment_shader(fs_input, &builtins, c->programs.a[c->cur_program].uniform);
 					if (!builtins.discard) {
-
 						draw_pixel(builtins.gl_FragColor, x, y, builtins.gl_FragDepth, fragdepth_or_discard);
 					}
 				}
@@ -4131,67 +4126,41 @@ than full, see make_viewport_matrix
 static int fragment_processing(int x, int y, float z)
 {
 #ifndef PGL_NO_DEPTH_NO_STENCIL
-	// TODO only clip z planes, just factor in scissor values into
-	// min/maxing the boundaries of rasterization, maybe do it always
-	// even if scissoring is disabled? (could cause problems if
-	// they're turning it on and off with non-standard scissor bounds)
-	/*
-	// Now handled by "always-on" scissoring/guardband clipping earlier
-	if (c->scissor_test) {
-		if (x < c->scissor_lx || y < c->scissor_ly || x >= c->scissor_ux || y >= c->scissor_uy) {
-			return 0;
-		}
-	}
-	*/
-
 	// NOTE/TODO assumes all 3 buffers have the same dimensions
 	int i = -y*c->zbuf.w + x;
 
-	//MSAA
-	
 #ifndef PGL_NO_STENCIL
-	//Stencil Test
-	stencil_pix_t* stencil_dest = &GET_STENCIL_PIX(i);
+	// Stencil Test
 	if (c->stencil_test) {
+		stencil_pix_t* stencil_dest = &GET_STENCIL_PIX(i);
 		if (!stencil_test(EXTRACT_STENCIL(*stencil_dest))) {
 			stencil_op(GL_FALSE, GL_TRUE, stencil_dest);
 			return 0;
 		}
-	}
-#endif
-
-	//Depth test if necessary
-	if (c->depth_test) {
-		// I made gl_FragDepth read/write, ie same == to gl_FragCoord.z going into the shader
-		// so I can just always use gl_FragDepth here
-		u32 dest_depth = GET_Z(i);
-		u32 src_depth = z * PGL_MAX_Z;
-
-		int depth_result = depthtest(src_depth, dest_depth);
-
-#ifndef PGL_NO_STENCIL
-		if (c->stencil_test) {
+		// Depth test
+		if (c->depth_test) {
+			u32 dest_depth = GET_Z(i);
+			u32 src_depth = z * PGL_MAX_Z;
+			int depth_result = depthtest(src_depth, dest_depth);
 			stencil_op(GL_TRUE, depth_result, stencil_dest);
+			if (!depth_result) return GL_FALSE;
+			SET_Z(i, src_depth & -(c->depth_mask != 0));
+		} else {
+			stencil_op(GL_TRUE, GL_TRUE, stencil_dest);
 		}
+	} else
 #endif
-		if (!depth_result) {
-			return GL_FALSE;
+	{
+		// Depth test only (no stencil)
+		if (c->depth_test) {
+			u32 dest_depth = GET_Z(i);
+			u32 src_depth = z * PGL_MAX_Z;
+			if (!depthtest(src_depth, dest_depth)) return GL_FALSE;
+			if (c->depth_mask) SET_Z(i, src_depth);
 		}
-
-		// TODO do this without an if statement, just bitwise logic, compare
-		// performance
-		if (c->depth_mask) {
-			SET_Z(i, src_depth);
-		}
-#ifndef PGL_NO_STENCIL
-	} else if (c->stencil_test) {
-		// Note depth test is treated as passed when depth testing is disabled
-		stencil_op(GL_TRUE, GL_TRUE, stencil_dest);
-#endif
 	}
 	return GL_TRUE;
 #else
-	// With no depth/stencil buffers this always returns true/pass
 	return GL_TRUE;
 #endif
 }
@@ -4203,35 +4172,23 @@ static void draw_pixel(vec4 cf, int x, int y, float z, int do_frag_processing)
 		return;
 	}
 
-	//Blending
-	Color dest_color, src_color;
-	pix_t src, dst;
 	pix_t* dest_loc = &((pix_t*)c->back_buffer.lastrow)[-y*c->back_buffer.w + x];
-	dst = *dest_loc;
-	
-	// NOTE does not normalize, just extracts the channels
-	dest_color = PIXEL_TO_COLOR(dst);
+	pix_t dst = *dest_loc;
+	pix_t src;
 
 	if (c->blend) {
-		//TODO clamp in blend_pixel?  return the vec4 and clamp?
-		
-		// TODO return pix_t directly?
-		src_color = blend_pixel(cf, COLOR_TO_VEC4(dest_color));
+		Color dest_color = PIXEL_TO_COLOR(dst);
+		Color src_color = blend_pixel(cf, COLOR_TO_VEC4(dest_color));
+		src = RGBA_TO_PIXEL(src_color.r, src_color.g, src_color.b, src_color.a);
 	} else {
 		cf = clamp_01_v4(cf);
-
-		// have VEC4_TO_PIXEL()?
-		src_color = VEC4_TO_COLOR(cf);
+		Color src_color = VEC4_TO_COLOR(cf);
+		src = RGBA_TO_PIXEL(src_color.r, src_color.g, src_color.b, src_color.a);
 	}
 
-	src = RGBA_TO_PIXEL(src_color.r, src_color.g, src_color.b, src_color.a);
-
-	//Logic Ops
 	if (c->logic_ops) {
 		src = logic_ops_pixel(src, dst);
 	}
-
-	//Dithering
 
 #ifndef PGL_DISABLE_COLOR_MASK
 	src = (src & c->color_mask) | (dst & ~c->color_mask);
