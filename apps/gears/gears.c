@@ -369,11 +369,10 @@ void fragment_shader(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
     vec3 color = ((vec3*)fs_input)[0];
 
-    /* Swap R and B channels for ABGR pixel format compatibility */
-    builtins->gl_FragColor.x = color.z;
+    builtins->gl_FragColor.x = color.x;
     builtins->gl_FragColor.y = color.y;
     builtins->gl_FragColor.w = 1.0f;
-    builtins->gl_FragColor.z = color.x;
+    builtins->gl_FragColor.z = color.z;
 }
 
 static void draw_gear(struct gear *gear, GLfloat *transform,

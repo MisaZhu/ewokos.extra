@@ -3,8 +3,8 @@ EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-TASK = gears_sdl
-TASK_OBJS = gears.o
+TASK = sdl_gl
+TASK_OBJS = sdl_gl.o
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/bin/x
 
 LDFLAGS += \

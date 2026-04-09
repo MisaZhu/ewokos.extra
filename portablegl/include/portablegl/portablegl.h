@@ -639,22 +639,22 @@ extern "C" {
  #define PGL_BITDEPTH 16
  #define PGL_PIX_STR "ABGR1555"
 #else
- // default to PGL_ABGR32 for RGBA memory order on LSB
- #define PGL_ABGR32
+ // default to PGL_ARGB32 for ARGB memory order on LSB
+ #define PGL_ARGB32
  #define PGL_AMASK 0xFF000000
- #define PGL_BMASK 0x00FF0000
+ #define PGL_RMASK 0x00FF0000
  #define PGL_GMASK 0x0000FF00
- #define PGL_RMASK 0x000000FF
+ #define PGL_BMASK 0x000000FF
  #define PGL_ASHIFT 24
- #define PGL_BSHIFT 16
+ #define PGL_RSHIFT 16
  #define PGL_GSHIFT 8
- #define PGL_RSHIFT 0
+ #define PGL_BSHIFT 0
  #define PGL_RMAX 255
  #define PGL_GMAX 255
  #define PGL_BMAX 255
  #define PGL_AMAX 255
  #define PGL_BITDEPTH 32
- #define PGL_PIX_STR "ABGR32"
+ #define PGL_PIX_STR "ARGB32"
 #endif
 
 
