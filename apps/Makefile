@@ -9,6 +9,7 @@ all:
 	cd sdl_tetris; make
 	cd emu; make
 	cd minivmac; make
+	cd gears; make
 
 clean:
 	cd 3ddemo;make clean
@@ -20,3 +21,4 @@ clean:
 	cd sdl_tetris; make clean
 	cd emu; make clean
 	cd minivmac; make clean
+	cd gears; make clean
