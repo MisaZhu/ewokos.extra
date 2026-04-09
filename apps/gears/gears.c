@@ -102,6 +102,10 @@ struct gear {
 static GLfloat view_rot[3] = { 20.0f, 30.0f, 0.0f };
 static struct gear *gear1, *gear2, *gear3;
 static GLfloat angle = 0.0f;
+
+// Camera orbit parameters
+static float camera_angle = 0.0f;
+static float camera_speed = 0.5f;  // degrees per frame
 static GLfloat projection_matrix[16];
 
 typedef struct {
@@ -427,6 +431,46 @@ static void draw_gear(struct gear *gear, GLfloat *transform,
     glDisableVertexAttribArray(0);
 }
 
+static void look_at(GLfloat *m, GLfloat eye_x, GLfloat eye_y, GLfloat eye_z,
+                    GLfloat center_x, GLfloat center_y, GLfloat center_z,
+                    GLfloat up_x, GLfloat up_y, GLfloat up_z)
+{
+    GLfloat f[3], s[3], u[3];
+    GLfloat f_len, s_len, u_len;
+    
+    // Forward vector (from eye to center)
+    f[0] = center_x - eye_x;
+    f[1] = center_y - eye_y;
+    f[2] = center_z - eye_z;
+    f_len = sqrtf(f[0]*f[0] + f[1]*f[1] + f[2]*f[2]);
+    f[0] /= f_len; f[1] /= f_len; f[2] /= f_len;
+    
+    // Side vector (cross product of forward and up)
+    s[0] = f[1]*up_z - f[2]*up_y;
+    s[1] = f[2]*up_x - f[0]*up_z;
+    s[2] = f[0]*up_y - f[1]*up_x;
+    s_len = sqrtf(s[0]*s[0] + s[1]*s[1] + s[2]*s[2]);
+    s[0] /= s_len; s[1] /= s_len; s[2] /= s_len;
+    
+    // Recompute up vector (cross product of side and forward)
+    u[0] = s[1]*f[2] - s[2]*f[1];
+    u[1] = s[2]*f[0] - s[0]*f[2];
+    u[2] = s[0]*f[1] - s[1]*f[0];
+    
+    // Build look-at matrix
+    GLfloat look_at_mat[16] = {
+        s[0], u[0], -f[0], 0,
+        s[1], u[1], -f[1], 0,
+        s[2], u[2], -f[2], 0,
+        -(s[0]*eye_x + s[1]*eye_y + s[2]*eye_z),
+        -(u[0]*eye_x + u[1]*eye_y + u[2]*eye_z),
+        f[0]*eye_x + f[1]*eye_y + f[2]*eye_z,
+        1
+    };
+    
+    memcpy(m, look_at_mat, sizeof(look_at_mat));
+}
+
 static void draw_gears(void)
 {
     static const GLfloat red[4] = { 0.8f, 0.1f, 0.0f, 1.0f };
@@ -437,11 +481,14 @@ static void draw_gears(void)
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    identity(transform);
-    translate(transform, 0, 0, -20.0f);
-    rotate(transform, view_rot[0], 1, 0, 0);
-    rotate(transform, view_rot[1], 0, 1, 0);
-    rotate(transform, view_rot[2], 0, 0, 1);
+    // Camera orbits around the gears
+    // Calculate camera position on a circular path
+    float cam_x = sinf(camera_angle * M_PI / 180.0f) * 25.0f;
+    float cam_y = 10.0f;  // Slightly above the gears
+    float cam_z = cosf(camera_angle * M_PI / 180.0f) * 25.0f;
+    
+    // Build look-at matrix to always face the center (0, 0, 0)
+    look_at(transform, cam_x, cam_y, cam_z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
     draw_gear(gear1, transform, -3.0f, -2.0f, angle, red);
     draw_gear(gear2, transform, 3.1f, -2.0f, -2.0f * angle - 9.0f, green);
@@ -512,6 +559,11 @@ static void on_repaint(xwin_t* xwin, graph_t* g)
     (void)xwin;
 
     angle += 2.0f;
+    
+    // Update camera orbit angle
+    camera_angle += camera_speed;
+    if (camera_angle >= 360.0f)
+        camera_angle -= 360.0f;
 
     draw_gears();
 
