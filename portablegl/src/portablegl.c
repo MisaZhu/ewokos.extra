@@ -144,6 +144,127 @@ static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const v
     result->w = vgetq_lane_f32(res, 3);
 }
 
+// Batch transform 3 vertices at once - reduces function call overhead and improves cache locality
+static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, const mat4 m, 
+                                                  const vec4 v0, const vec4 v1, const vec4 v2)
+{
+    // Load matrix columns once
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 4);
+    float32x4_t c2 = vld1q_f32(m + 8);
+    float32x4_t c3 = vld1q_f32(m + 12);
+    
+    // Transform vertex 0
+    float32x4_t res0 = vmulq_f32(vdupq_n_f32(v0.x), c0);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.y), c1);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.z), c2);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.w), c3);
+    
+    // Transform vertex 1
+    float32x4_t res1 = vmulq_f32(vdupq_n_f32(v1.x), c0);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.y), c1);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.z), c2);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.w), c3);
+    
+    // Transform vertex 2
+    float32x4_t res2 = vmulq_f32(vdupq_n_f32(v2.x), c0);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.y), c1);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.z), c2);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.w), c3);
+    
+    // Store results
+    r0->x = vgetq_lane_f32(res0, 0); r0->y = vgetq_lane_f32(res0, 1); 
+    r0->z = vgetq_lane_f32(res0, 2); r0->w = vgetq_lane_f32(res0, 3);
+    
+    r1->x = vgetq_lane_f32(res1, 0); r1->y = vgetq_lane_f32(res1, 1);
+    r1->z = vgetq_lane_f32(res1, 2); r1->w = vgetq_lane_f32(res1, 3);
+    
+    r2->x = vgetq_lane_f32(res2, 0); r2->y = vgetq_lane_f32(res2, 1);
+    r2->z = vgetq_lane_f32(res2, 2); r2->w = vgetq_lane_f32(res2, 3);
+}
+
+// NEON optimized batch depth test - tests 4 depths at once
+static inline int pgl_neon_depth_test_batch(uint32_t* zbuf, uint32_t* src_depths, int count)
+{
+    int pass_count = 0;
+    uint32_t z_values[4];
+    
+    for (int i = 0; i + 4 <= count; i += 4) {
+        uint32x4_t src_z = vld1q_u32(src_depths + i);
+        uint32x4_t dst_z = vld1q_u32(zbuf + i);
+        
+        // Test: src_z > dst_z (new depth is closer)
+        uint32x4_t result = vcgtq_u32(src_z, dst_z);
+        
+        // Store pass/fail mask
+        vst1q_u32(z_values, result);
+        
+        // Update z-buffer for passing pixels
+        uint32x4_t new_z = vbslq_u32(result, src_z, dst_z);
+        vst1q_u32(zbuf + i, new_z);
+        
+        // Count passing pixels
+        pass_count += vgetq_lane_u32(result, 0) + vgetq_lane_u32(result, 1) + 
+                      vgetq_lane_u32(result, 2) + vgetq_lane_u32(result, 3);
+    }
+    
+    return pass_count;
+}
+
+// NEON optimized batch pixel fill with color
+static inline void pgl_neon_fill_pixels_batch(uint32_t* dst, uint32_t color, int count)
+{
+    uint32x4_t color_vec = vmovq_n_u32(color);
+    int i = 0;
+    
+    for (; i + 16 <= count; i += 16) {
+        vst1q_u32(dst + i, color_vec);
+        vst1q_u32(dst + i + 4, color_vec);
+        vst1q_u32(dst + i + 8, color_vec);
+        vst1q_u32(dst + i + 12, color_vec);
+    }
+    for (; i < count; i++) {
+        dst[i] = color;
+    }
+}
+
+// NEON optimized batch blend - blend 4 pixels at once
+static inline void pgl_neon_blend_pixels_batch(uint32_t* dst, uint32_t src_color, int count)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    uint8_t inv_src_a = 255 - src_a;
+    
+    // Fast path: fully opaque
+    if (src_a == 255) {
+        pgl_neon_fill_pixels_batch(dst, src_color, count);
+        return;
+    }
+    
+    // Fast path: fully transparent
+    if (src_a == 0) {
+        return;
+    }
+    
+    int i = 0;
+    for (; i < count; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+        
+        uint8_t r = (src_a * src_r + inv_src_a * dr) >> 8;
+        uint8_t g = (src_a * src_g + inv_src_a * dg) >> 8;
+        uint8_t b = (src_a * src_b + inv_src_a * db) >> 8;
+        uint8_t a = src_a + ((inv_src_a * da) >> 8);
+        
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    }
+}
+
 #elif defined(__ARM_NEON) || defined(ARCH_ARM)
 
 #include <arm_neon.h>
@@ -272,9 +393,104 @@ static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const v
     result->w = vgetq_lane_f32(res, 3);
 }
 
-#endif
+// Batch transform 3 vertices at once for ARM32
+static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, const mat4 m,
+                                                  const vec4 v0, const vec4 v1, const vec4 v2)
+{
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 4);
+    float32x4_t c2 = vld1q_f32(m + 8);
+    float32x4_t c3 = vld1q_f32(m + 12);
+
+    float32x4_t res0 = vmulq_f32(vdupq_n_f32(v0.x), c0);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.y), c1);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.z), c2);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.w), c3);
+
+    float32x4_t res1 = vmulq_f32(vdupq_n_f32(v1.x), c0);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.y), c1);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.z), c2);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.w), c3);
+
+    float32x4_t res2 = vmulq_f32(vdupq_n_f32(v2.x), c0);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.y), c1);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.z), c2);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.w), c3);
+
+    r0->x = vgetq_lane_f32(res0, 0); r0->y = vgetq_lane_f32(res0, 1);
+    r0->z = vgetq_lane_f32(res0, 2); r0->w = vgetq_lane_f32(res0, 3);
+
+    r1->x = vgetq_lane_f32(res1, 0); r1->y = vgetq_lane_f32(res1, 1);
+    r1->z = vgetq_lane_f32(res1, 2); r1->w = vgetq_lane_f32(res1, 3);
+
+    r2->x = vgetq_lane_f32(res2, 0); r2->y = vgetq_lane_f32(res2, 1);
+    r2->z = vgetq_lane_f32(res2, 2); r2->w = vgetq_lane_f32(res2, 3);
+}
+
+// NEON optimized batch depth test for ARM32
+static inline int pgl_neon_depth_test_batch(uint32_t* zbuf, uint32_t* src_depths, int count)
+{
+    int pass_count = 0;
+    for (int i = 0; i + 4 <= count; i += 4) {
+        uint32x4_t src_z = vld1q_u32(src_depths + i);
+        uint32x4_t dst_z = vld1q_u32(zbuf + i);
+        uint32x4_t result = vcgtq_u32(src_z, dst_z);
+        uint32x4_t new_z = vbslq_u32(result, src_z, dst_z);
+        vst1q_u32(zbuf + i, new_z);
+        pass_count += vgetq_lane_u32(result, 0) + vgetq_lane_u32(result, 1) +
+                      vgetq_lane_u32(result, 2) + vgetq_lane_u32(result, 3);
+    }
+    return pass_count;
+}
+
+// NEON optimized batch pixel fill for ARM32
+static inline void pgl_neon_fill_pixels_batch(uint32_t* dst, uint32_t color, int count)
+{
+    uint32x4_t color_vec = vmovq_n_u32(color);
+    int i = 0;
+    for (; i + 8 <= count; i += 8) {
+        vst1q_u32(dst + i, color_vec);
+        vst1q_u32(dst + i + 4, color_vec);
+    }
+    for (; i < count; i++) {
+        dst[i] = color;
+    }
+}
+
+// NEON optimized batch blend for ARM32
+static inline void pgl_neon_blend_pixels_batch(uint32_t* dst, uint32_t src_color, int count)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    if (src_a == 255) {
+        pgl_neon_fill_pixels_batch(dst, src_color, count);
+        return;
+    }
+    if (src_a == 0) return;
+
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    uint8_t inv_src_a = 255 - src_a;
+
+    for (int i = 0; i < count; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+
+        uint8_t r = (src_a * src_r + inv_src_a * dr) >> 8;
+        uint8_t g = (src_a * src_g + inv_src_a * dg) >> 8;
+        uint8_t b = (src_a * src_b + inv_src_a * db) >> 8;
+        uint8_t a = src_a + ((inv_src_a * da) >> 8);
+
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    }
+}
 
 #define PGL_NEON_ENABLED 1
+
+#endif
 
 #else
 
@@ -285,6 +501,63 @@ static inline void pgl_neon_fill_line(uint32_t* dst, uint32_t color, int pixels)
 {
     for (int i = 0; i < pixels; i++) {
         dst[i] = color;
+    }
+}
+
+static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, const mat4 m,
+                                                  const vec4 v0, const vec4 v1, const vec4 v2)
+{
+    *r0 = mult_m4_v4(m, v0);
+    *r1 = mult_m4_v4(m, v1);
+    *r2 = mult_m4_v4(m, v2);
+}
+
+static inline int pgl_neon_depth_test_batch(uint32_t* zbuf, uint32_t* src_depths, int count)
+{
+    int pass_count = 0;
+    for (int i = 0; i < count; i++) {
+        if (src_depths[i] > zbuf[i]) {
+            zbuf[i] = src_depths[i];
+            pass_count++;
+        }
+    }
+    return pass_count;
+}
+
+static inline void pgl_neon_fill_pixels_batch(uint32_t* dst, uint32_t color, int count)
+{
+    for (int i = 0; i < count; i++) {
+        dst[i] = color;
+    }
+}
+
+static inline void pgl_neon_blend_pixels_batch(uint32_t* dst, uint32_t src_color, int count)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    if (src_a == 255) {
+        pgl_neon_fill_pixels_batch(dst, src_color, count);
+        return;
+    }
+    if (src_a == 0) return;
+
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    uint8_t inv_src_a = 255 - src_a;
+
+    for (int i = 0; i < count; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+
+        uint8_t r = (src_a * src_r + inv_src_a * dr) >> 8;
+        uint8_t g = (src_a * src_g + inv_src_a * dg) >> 8;
+        uint8_t b = (src_a * src_b + inv_src_a * db) >> 8;
+        uint8_t a = src_a + ((inv_src_a * da) >> 8);
+
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
     }
 }
 
@@ -326,6 +599,15 @@ static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, 
         
         dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
     }
+}
+
+// Stub for non-NEON version
+static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, const mat4 m,
+                                                  const vec4 v0, const vec4 v1, const vec4 v2)
+{
+    *r0 = mult_m4_v4(m, v0);
+    *r1 = mult_m4_v4(m, v1);
+    *r2 = mult_m4_v4(m, v2);
 }
 
 #endif
@@ -3708,9 +3990,9 @@ static void draw_triangle(glVertex* v0, glVertex* v1, glVertex* v2, unsigned int
 static void draw_triangle_final(glVertex* v0, glVertex* v1, glVertex* v2, unsigned int provoke)
 {
 	int front_facing;
-	v0->screen_space = mult_m4_v4(c->vp_mat, v0->clip_space);
-	v1->screen_space = mult_m4_v4(c->vp_mat, v1->clip_space);
-	v2->screen_space = mult_m4_v4(c->vp_mat, v2->clip_space);
+	// Use batch vertex transformation to reduce function call overhead and improve cache locality
+	pgl_neon_transform_3vertices(&v0->screen_space, &v1->screen_space, &v2->screen_space,
+	                              c->vp_mat, v0->clip_space, v1->clip_space, v2->clip_space);
 
 	front_facing = is_front_facing(v0, v1, v2);
 	if (c->cull_face) {
