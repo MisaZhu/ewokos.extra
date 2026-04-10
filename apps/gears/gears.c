@@ -105,7 +105,6 @@ static GLfloat angle = 0.0f;
 
 // Camera orbit parameters
 static float camera_angle = 0.0f;
-static float camera_speed = 0.5f;  // degrees per frame
 static GLfloat projection_matrix[16];
 
 typedef struct {
@@ -490,6 +489,7 @@ static void draw_gears(void)
     // Build look-at matrix to always face the center (0, 0, 0)
     look_at(transform, cam_x, cam_y, cam_z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
+    // Keep gear positions fixed - projection matrix handles aspect ratio
     draw_gear(gear1, transform, -3.0f, -2.0f, angle, red);
     draw_gear(gear2, transform, 3.1f, -2.0f, -2.0f * angle - 9.0f, green);
     draw_gear(gear3, transform, -3.1f, 4.2f, -2.0f * angle - 25.0f, blue);
@@ -527,19 +527,27 @@ static void init_gears(void)
 
 static void reshape(int width, int height)
 {
+    if (width <= 0 || height <= 0)
+        return;
+        
     win_width = width;
     win_height = height;
-    glViewport(0, 0, width, height);
-    perspective(projection_matrix, 60.0f, (GLfloat)width / (GLfloat)height, 1.0f, 1024.0f);
     
-    /* Resize the PortableGL framebuffer */
+    /* Resize the PortableGL framebuffer first */
     pglResizeFramebuffer(width, height);
     backbuf = (pix_t*)pglGetBackBuffer();
+    
+    /* Update viewport */
+    glViewport(0, 0, width, height);
+    
+    /* Update projection matrix with new aspect ratio */
+    perspective(projection_matrix, 60.0f, (GLfloat)width / (GLfloat)height, 1.0f, 1024.0f);
 }
 
 static int fps = 0;
 static int count = 0;
 static uint32_t last_tic = 0;
+static uint32_t last_frame_tic = 0;
 
 static void update_fps(void)
 {
@@ -558,10 +566,28 @@ static void on_repaint(xwin_t* xwin, graph_t* g)
 {
     (void)xwin;
 
-    angle += 2.0f;
+    // Calculate time-based animation for smooth rotation regardless of frame rate
+    uint32_t current_tic;
+    kernel_tic32(NULL, NULL, &current_tic);
     
-    // Update camera orbit angle
-    camera_angle += camera_speed;
+    if (last_frame_tic == 0) {
+        last_frame_tic = current_tic;
+    }
+    
+    // Calculate delta time in seconds (kernel_tic is in microseconds)
+    float dt = (current_tic - last_frame_tic) / 1000000.0f;
+    last_frame_tic = current_tic;
+    
+    // Limit dt to avoid large jumps
+    if (dt > 0.1f) dt = 0.1f;
+    
+    // Rotate at 240 degrees per second for smooth animation (4x speed)
+    angle += 240.0f * dt;
+    if (angle >= 360.0f)
+        angle -= 360.0f;
+    
+    // Update camera orbit angle (30 degrees per second, 2x speed)
+    camera_angle += 30.0f * dt;
     if (camera_angle >= 360.0f)
         camera_angle -= 360.0f;
 
