@@ -275,7 +275,6 @@ static void render_frame(void)
     // Ensure viewport and scissor match window size
     // PortableGL's glScissor modifies c->ux/c->uy even without GL_SCISSOR_TEST
     // so we must reset it before glClear or only part of the screen gets cleared
-    glViewport(0, 0, win_width, win_height);
     glScissor(0, 0, win_width, win_height);
     
     // Clear background (color and depth)
