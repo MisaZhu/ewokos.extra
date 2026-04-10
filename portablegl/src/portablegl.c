@@ -183,6 +183,73 @@ static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, co
     r2->z = vgetq_lane_f32(res2, 2); r2->w = vgetq_lane_f32(res2, 3);
 }
 
+// NEON optimized perspective-correct interpolation for 4 vertices at once
+static inline void pgl_neon_interp_perspective_4(float* results, const float* a, const float* b,
+                                                  const float* c, const float alpha,
+                                                  const float beta, const float gamma, const float inv_w_sum)
+{
+    for (int i = 0; i < 4; i++) {
+        results[i] = (a[i] * alpha + b[i] * beta + c[i] * gamma) * inv_w_sum;
+    }
+}
+
+// NEON optimized reciprocal (1/x) approximation using Newton-Raphson
+static inline float32x4_t pgl_neon_rcp_f32(float32x4_t x)
+{
+    // Initial approximation
+    float32x4_t approx = vrecpeq_f32(x);
+    // Newton-Raphson refinement: approx = approx * (2 - x * approx)
+    approx = vmulq_f32(approx, vsubq_f32(vdupq_n_f32(2.0f), vmulq_f32(x, approx)));
+    return approx;
+}
+
+// NEON optimized 1/sqrt(x) approximation
+static inline float32x4_t pgl_neon_rsqrt_f32(float32x4_t x)
+{
+    float32x4_t approx = vrsqrteq_f32(x);
+    // Newton-Raphson refinement
+    approx = vmulq_f32(approx, vsubq_f32(vdupq_n_f32(1.5f),
+                              vmulq_f32(vdupq_n_f32(0.5f), vmulq_f32(x, vmulq_f32(approx, approx)))));
+    return approx;
+}
+
+// NEON batch multiply-add for vertex attribute interpolation
+static inline void pgl_neon_mult_add_4(float* dst, const float* src, float scale, int count)
+{
+    float32x4_t scale_vec = vdupq_n_f32(scale);
+    int i = 0;
+    for (; i + 4 <= count; i += 4) {
+        float32x4_t src_vec = vld1q_f32(src + i);
+        float32x4_t dst_vec = vld1q_f32(dst + i);
+        vst1q_f32(dst + i, vmlaq_f32(dst_vec, src_vec, scale_vec));
+    }
+}
+
+// Prefetch next row of pixels for better cache utilization
+static inline void pgl_prefetch_row(const void* ptr)
+{
+    __builtin_prefetch(ptr, 0, 3);  // Read prefetch, high temporal locality
+}
+
+// Early-z rejection - check if all 4 pixels fail depth test
+static inline int pgl_neon_early_z_reject_batch(uint32_t* src_depths, uint32_t* zbuf, int count)
+{
+    int reject_count = 0;
+    for (int i = 0; i + 4 <= count; i += 4) {
+        uint32x4_t src_z = vld1q_u32(src_depths + i);
+        uint32x4_t dst_z = vld1q_u32(zbuf + i);
+        // If all 4 src_z <= dst_z, reject the whole batch
+        uint32x4_t fail_mask = vcleq_u32(src_z, dst_z);
+        // Check if all lanes are set (all pixels failed)
+        uint32_t low = vgetq_lane_u32(fail_mask, 0) & vgetq_lane_u32(fail_mask, 1);
+        uint32_t high = vgetq_lane_u32(fail_mask, 2) & vgetq_lane_u32(fail_mask, 3);
+        if (low & high) {
+            reject_count += 4;
+        }
+    }
+    return reject_count;
+}
+
 // NEON optimized batch depth test - tests 4 depths at once
 static inline int pgl_neon_depth_test_batch(uint32_t* zbuf, uint32_t* src_depths, int count)
 {
@@ -488,6 +555,39 @@ static inline void pgl_neon_blend_pixels_batch(uint32_t* dst, uint32_t src_color
     }
 }
 
+// ARM32 stub functions for new NEON optimizations
+static inline void pgl_neon_interp_perspective_4(float* results, const float* a, const float* b,
+                                                  const float* c, const float alpha,
+                                                  const float beta, const float gamma, const float inv_w_sum)
+{
+    for (int i = 0; i < 4; i++) {
+        results[i] = (a[i] * alpha + b[i] * beta + c[i] * gamma) * inv_w_sum;
+    }
+}
+
+static inline void pgl_neon_mult_add_4(float* dst, const float* src, float scale, int count)
+{
+    for (int i = 0; i < count; i++) {
+        dst[i] += src[i] * scale;
+    }
+}
+
+static inline void pgl_prefetch_row(const void* ptr)
+{
+    __builtin_prefetch(ptr, 0, 3);
+}
+
+static inline int pgl_neon_early_z_reject_batch(uint32_t* src_depths, uint32_t* zbuf, int count)
+{
+    int reject_count = 0;
+    for (int i = 0; i < count; i++) {
+        if (src_depths[i] <= zbuf[i]) {
+            reject_count++;
+        }
+    }
+    return reject_count;
+}
+
 #define PGL_NEON_ENABLED 1
 
 #endif
@@ -608,6 +708,38 @@ static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, co
     *r0 = mult_m4_v4(m, v0);
     *r1 = mult_m4_v4(m, v1);
     *r2 = mult_m4_v4(m, v2);
+}
+
+static inline void pgl_neon_interp_perspective_4(float* results, const float* a, const float* b,
+                                                  const float* c, const float alpha,
+                                                  const float beta, const float gamma, const float inv_w_sum)
+{
+    for (int i = 0; i < 4; i++) {
+        results[i] = (a[i] * alpha + b[i] * beta + c[i] * gamma) * inv_w_sum;
+    }
+}
+
+static inline void pgl_neon_mult_add_4(float* dst, const float* src, float scale, int count)
+{
+    for (int i = 0; i < count; i++) {
+        dst[i] += src[i] * scale;
+    }
+}
+
+static inline void pgl_prefetch_row(const void* ptr)
+{
+    __builtin_prefetch(ptr, 0, 3);
+}
+
+static inline int pgl_neon_early_z_reject_batch(uint32_t* src_depths, uint32_t* zbuf, int count)
+{
+    int reject_count = 0;
+    for (int i = 0; i < count; i++) {
+        if (src_depths[i] <= zbuf[i]) {
+            reject_count++;
+        }
+    }
+    return reject_count;
 }
 
 #endif
