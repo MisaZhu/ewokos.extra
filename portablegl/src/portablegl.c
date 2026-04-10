@@ -2,7 +2,7 @@
 #include "../include/portablegl/portablegl.h"
 
 #ifdef BSP_BOOST
-#if defined(ARCH_AARCH64) || defined(__aarch64__)
+#if defined(__aarch64__)
 #include <arm_neon.h>
 
 // AARCH64 NEON optimized implementation - uses wider registers and more parallelism

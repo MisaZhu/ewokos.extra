@@ -7,10 +7,6 @@ TASK = gears
 TASK_OBJS = gears.o
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
-ifeq ($(ARCH),aarch64)
-CFLAGS += -DARCH_AARCH64
-endif
-
 all: $(TASK)
 
 $(TASK): $(TASK_OBJS)

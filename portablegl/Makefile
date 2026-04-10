@@ -7,15 +7,6 @@ BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
 CFLAGS += -Iinclude -I $(TARGET_DIR)/include
 
-ifeq ($(ARCH),aarch64)
-CFLAGS += -DARCH_AARCH64
-endif
-
-# BSP_BOOST enables NEON/SIMD optimizations
-ifeq ($(BSP_BOOST),1)
-CFLAGS += -DBSP_BOOST
-endif
-
 LIB_PORTABLEGL_OBJS = src/portablegl.o
 
 PORTABLEGL = $(BUILD_DIR)/lib/libportablegl.a
