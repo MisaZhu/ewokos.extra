@@ -172,8 +172,8 @@
 /* #undef SDL_POWER_DISABLED */
 /* #undef SDL_FILESYSTEM_DISABLED */
 
-/* Enable the joystick driver */
-/*#define SDL_JOYSTICK_EWOKOS      1*/
+/* Disable the joystick driver for ewokos */
+/* #undef SDL_JOYSTICK_EWOKOS */
 
 /* Enable various audio drivers */
 #define SDL_AUDIO_DRIVER_EWOKOS  1
