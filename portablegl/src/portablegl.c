@@ -1,6 +1,335 @@
 #define PGLDEF
 #include "../include/portablegl/portablegl.h"
 
+#ifdef BSP_BOOST
+#if defined(ARCH_AARCH64) || defined(__aarch64__)
+#include <arm_neon.h>
+
+// AARCH64 NEON optimized implementation - uses wider registers and more parallelism
+
+static inline void pgl_neon_fill_line(uint32_t* dst, uint32_t color, int pixels)
+{
+    uint32x4_t color_vec = vmovq_n_u32(color);
+    int i = 0;
+    // AARCH64 can process 16 pixels at once (4 x 128-bit registers)
+    for (; i + 16 <= pixels; i += 16) {
+        vst1q_u32(dst + i, color_vec);
+        vst1q_u32(dst + i + 4, color_vec);
+        vst1q_u32(dst + i + 8, color_vec);
+        vst1q_u32(dst + i + 12, color_vec);
+    }
+    // Handle remaining pixels
+    for (; i < pixels; i++) {
+        dst[i] = color;
+    }
+}
+
+static inline void pgl_neon_copy_line(uint32_t* dst, uint32_t* src, int pixels)
+{
+    int i = 0;
+    for (; i + 16 <= pixels; i += 16) {
+        uint32x4_t s0 = vld1q_u32(src + i);
+        uint32x4_t s1 = vld1q_u32(src + i + 4);
+        uint32x4_t s2 = vld1q_u32(src + i + 8);
+        uint32x4_t s3 = vld1q_u32(src + i + 12);
+        vst1q_u32(dst + i, s0);
+        vst1q_u32(dst + i + 4, s1);
+        vst1q_u32(dst + i + 8, s2);
+        vst1q_u32(dst + i + 12, s3);
+    }
+    for (; i < pixels; i++) {
+        dst[i] = src[i];
+    }
+}
+
+static inline void pgl_neon_fill_rect(uint32_t* dst, int stride, uint32_t color, int w, int h)
+{
+    uint32x4_t color_vec = vmovq_n_u32(color);
+    for (int y = 0; y < h; y++) {
+        int i = 0;
+        uint32_t* row = dst + y * stride;
+        for (; i + 16 <= w; i += 16) {
+            vst1q_u32(row + i, color_vec);
+            vst1q_u32(row + i + 4, color_vec);
+            vst1q_u32(row + i + 8, color_vec);
+            vst1q_u32(row + i + 12, color_vec);
+        }
+        for (; i < w; i++) {
+            row[i] = color;
+        }
+    }
+}
+
+// Simplified NEON alpha blending - uses scalar calculation
+static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, int pixels)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    uint8_t inv_src_a = 255 - src_a;
+    
+    // If source alpha is 255, just fill
+    if (src_a == 255) {
+        pgl_neon_fill_line(dst, src_color, pixels);
+        return;
+    }
+    
+    // If source alpha is 0, do nothing
+    if (src_a == 0) {
+        return;
+    }
+    
+    // Process pixels
+    int i = 0;
+    for (; i < pixels; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+        
+        uint8_t r = (src_a * src_r + inv_src_a * dr) >> 8;
+        uint8_t g = (src_a * src_g + inv_src_a * dg) >> 8;
+        uint8_t b = (src_a * src_b + inv_src_a * db) >> 8;
+        uint8_t a = src_a + ((inv_src_a * da) >> 8);
+        
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    }
+}
+
+// Matrix multiplication NEON optimization - AARCH64 version uses more registers
+static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
+{
+    // Load columns of matrix B
+    float32x4_t b0 = vld1q_f32(b);
+    float32x4_t b1 = vld1q_f32(b + 4);
+    float32x4_t b2 = vld1q_f32(b + 8);
+    float32x4_t b3 = vld1q_f32(b + 12);
+
+    for (int i = 0; i < 4; i++) {
+        float32x4_t a_vec = vld1q_f32(a + i * 4);
+
+        // Calculate dot product
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 3)), b3);
+
+        vst1q_f32(c + i * 4, result);
+    }
+}
+
+// Vertex transformation NEON optimization
+static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const vec4 v)
+{
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 4);
+    float32x4_t c2 = vld1q_f32(m + 8);
+    float32x4_t c3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, c0);
+    res = vmlaq_f32(res, vy, c1);
+    res = vmlaq_f32(res, vz, c2);
+    res = vmlaq_f32(res, vw, c3);
+
+    result->x = vgetq_lane_f32(res, 0);
+    result->y = vgetq_lane_f32(res, 1);
+    result->z = vgetq_lane_f32(res, 2);
+    result->w = vgetq_lane_f32(res, 3);
+}
+
+#elif defined(__ARM_NEON) || defined(ARCH_ARM)
+
+#include <arm_neon.h>
+
+// ARM 32-bit NEON optimized implementation
+
+static inline void pgl_neon_fill_line(uint32_t* dst, uint32_t color, int pixels)
+{
+    uint32x4_t color_vec = vmovq_n_u32(color);
+    int i = 0;
+    // ARM 32-bit processes 8 pixels at once
+    for (; i + 8 <= pixels; i += 8) {
+        vst1q_u32(dst + i, color_vec);
+        vst1q_u32(dst + i + 4, color_vec);
+    }
+    for (; i < pixels; i++) {
+        dst[i] = color;
+    }
+}
+
+static inline void pgl_neon_copy_line(uint32_t* dst, uint32_t* src, int pixels)
+{
+    int i = 0;
+    for (; i + 8 <= pixels; i += 8) {
+        uint32x4_t s0 = vld1q_u32(src + i);
+        uint32x4_t s1 = vld1q_u32(src + i + 4);
+        vst1q_u32(dst + i, s0);
+        vst1q_u32(dst + i + 4, s1);
+    }
+    for (; i < pixels; i++) {
+        dst[i] = src[i];
+    }
+}
+
+static inline void pgl_neon_fill_rect(uint32_t* dst, int stride, uint32_t color, int w, int h)
+{
+    uint32x4_t color_vec = vmovq_n_u32(color);
+    for (int y = 0; y < h; y++) {
+        int i = 0;
+        uint32_t* row = dst + y * stride;
+        for (; i + 8 <= w; i += 8) {
+            vst1q_u32(row + i, color_vec);
+            vst1q_u32(row + i + 4, color_vec);
+        }
+        for (; i < w; i++) {
+            row[i] = color;
+        }
+    }
+}
+
+// ARM 32-bit blend function
+static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, int pixels)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    uint8_t inv_src_a = 255 - src_a;
+
+    if (src_a == 255) {
+        pgl_neon_fill_line(dst, src_color, pixels);
+        return;
+    }
+    if (src_a == 0) {
+        return;
+    }
+
+    // Use scalar calculation
+    int i = 0;
+    for (; i < pixels; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+
+        uint8_t r = (src_a * src_r + inv_src_a * dr) >> 8;
+        uint8_t g = (src_a * src_g + inv_src_a * dg) >> 8;
+        uint8_t b = (src_a * src_b + inv_src_a * db) >> 8;
+        uint8_t a = src_a + ((inv_src_a * da) >> 8);
+
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    }
+}
+
+// ARM 32-bit matrix multiplication
+static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
+{
+    float32x4_t b0 = vld1q_f32(b);
+    float32x4_t b1 = vld1q_f32(b + 4);
+    float32x4_t b2 = vld1q_f32(b + 8);
+    float32x4_t b3 = vld1q_f32(b + 12);
+
+    for (int i = 0; i < 4; i++) {
+        float32x4_t a_vec = vld1q_f32(a + i * 4);
+
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 3)), b3);
+
+        vst1q_f32(c + i * 4, result);
+    }
+}
+
+static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const vec4 v)
+{
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 4);
+    float32x4_t c2 = vld1q_f32(m + 8);
+    float32x4_t c3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, c0);
+    res = vmlaq_f32(res, vy, c1);
+    res = vmlaq_f32(res, vz, c2);
+    res = vmlaq_f32(res, vw, c3);
+
+    result->x = vgetq_lane_f32(res, 0);
+    result->y = vgetq_lane_f32(res, 1);
+    result->z = vgetq_lane_f32(res, 2);
+    result->w = vgetq_lane_f32(res, 3);
+}
+
+#endif
+
+#define PGL_NEON_ENABLED 1
+
+#else
+
+#define PGL_NEON_ENABLED 0
+
+// Non-NEON stub functions
+static inline void pgl_neon_fill_line(uint32_t* dst, uint32_t color, int pixels)
+{
+    for (int i = 0; i < pixels; i++) {
+        dst[i] = color;
+    }
+}
+
+static inline void pgl_neon_copy_line(uint32_t* dst, uint32_t* src, int pixels)
+{
+    for (int i = 0; i < pixels; i++) {
+        dst[i] = src[i];
+    }
+}
+
+static inline void pgl_neon_fill_rect(uint32_t* dst, int stride, uint32_t color, int w, int h)
+{
+    for (int y = 0; y < h; y++) {
+        uint32_t* row = dst + y * stride;
+        for (int i = 0; i < w; i++) {
+            row[i] = color;
+        }
+    }
+}
+
+static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, int pixels)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    
+    for (int i = 0; i < pixels; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+        
+        uint8_t r = (src_a * src_r + (255 - src_a) * dr) >> 8;
+        uint8_t g = (src_a * src_g + (255 - src_a) * dg) >> 8;
+        uint8_t b = (src_a * src_b + (255 - src_a) * db) >> 8;
+        uint8_t a = src_a + ((255 - src_a) * da >> 8);
+        
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    }
+}
+
+#endif
+
 extern inline vec2 make_v2(float x, float y);
 extern inline vec2 neg_v2(vec2 v);
 extern inline void fprint_v2(FILE* f, vec2 v, const char* append);
