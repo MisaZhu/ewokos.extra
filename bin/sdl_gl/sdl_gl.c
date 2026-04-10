@@ -204,9 +204,16 @@ static void create_sphere(float radius, int stacks, int slices)
 	int i, j;
 	int vertex_count = (stacks + 1) * (slices + 1);
 	int index_count = stacks * slices * 6;
-	
+
 	float* vertices = malloc(vertex_count * 6 * sizeof(float)); // pos(3) + normal(3)
 	GLuint* indices = malloc(index_count * sizeof(GLuint));
+
+	if (!vertices || !indices) {
+		printf("create_sphere: malloc failed! vertices=%p, indices=%p\n", vertices, indices);
+		if (vertices) free(vertices);
+		if (indices) free(indices);
+		return;
+	}
 	
 	int vidx = 0;
 	for (i = 0; i <= stacks; i++) {
@@ -529,6 +536,10 @@ static void sphere_init(void)
 	GLenum smooth[3] = { PGL_SMOOTH3 };
 	
 	program = pglCreateProgram(vertex_shader, fragment_shader, 3, smooth, GL_FALSE);
+	if (program == 0) {
+		printf("sphere_init: pglCreateProgram failed!\n");
+		return;
+	}
 	glUseProgram(program);
 	pglSetUniform(&uniforms);
 	
