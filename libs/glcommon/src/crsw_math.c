@@ -23,46 +23,106 @@ static inline void neon_mult_m2_m2(float* c, const float* a, const float* b)
     }
 }
 
-static inline void neon_mult_m3_m3(float* c, const float* a, const float* b)
-{
-    // Load matrix B columns (3x3 matrix stored as 9 floats, column-major)
-    // b[0-2], b[3-5], b[6-8]
-    float32x4_t b0 = vld1q_f32(b);      // b[0], b[1], b[2], (unused)
-    float32x4_t b1 = vld1q_f32(b + 3);  // b[3], b[4], b[5], (unused)
-    float32x4_t b2 = vld1q_f32(b + 6);  // b[6], b[7], b[8], (unused)
-
-    for (int i = 0; i < 3; i++) {
-        float32x4_t a_vec = vld1q_f32(a + i * 3);
-
-        // Calculate dot product for each column
-        float32x4_t result = vmulq_n_f32(b0, vgetq_lane_f32(a_vec, 0));
-        result = vmlaq_n_f32(result, b1, vgetq_lane_f32(a_vec, 1));
-        result = vmlaq_n_f32(result, b2, vgetq_lane_f32(a_vec, 2));
-
-        // Store only first 3 elements
-        vst1q_f32(c + i * 3, result);
-    }
-}
-
 static inline void neon_mult_m4_m4(float* c, const float* a, const float* b)
 {
-    // Load columns of matrix B
-    float32x4_t b0 = vld1q_f32(b);
-    float32x4_t b1 = vld1q_f32(b + 4);
-    float32x4_t b2 = vld1q_f32(b + 8);
-    float32x4_t b3 = vld1q_f32(b + 12);
-
-    for (int i = 0; i < 4; i++) {
-        float32x4_t a_vec = vld1q_f32(a + i * 4);
-
-        // Calculate dot product
-        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 3)), b3);
-
-        vst1q_f32(c + i * 4, result);
+#ifndef ROW_MAJOR
+    // Column-major: C = A * B
+    // Each column of result is A * (column of B)
+    for (int col = 0; col < 4; col++) {
+        float32x4_t b_col = vld1q_f32(b + col * 4);
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_col, 0)), vld1q_f32(a));
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_col, 1)), vld1q_f32(a + 4));
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_col, 2)), vld1q_f32(a + 8));
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_col, 3)), vld1q_f32(a + 12));
+        vst1q_f32(c + col * 4, result);
     }
+#else
+    // Row-major: C = A * B
+    // Each row of result is (row of A) * B
+    for (int row = 0; row < 4; row++) {
+        float32x4_t a_row = vld1q_f32(a + row * 4);
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_row, 0)), vld1q_f32(b));
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_row, 1)), vld1q_f32(b + 4));
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_row, 2)), vld1q_f32(b + 8));
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_row, 3)), vld1q_f32(b + 12));
+        vst1q_f32(c + row * 4, result);
+    }
+#endif
+}
+
+// Load rotation matrix NEON optimizations
+static inline void neon_load_rotation_m3(float* mat, const vec3* v, float s, float c)
+{
+    float one_c = 1.0f - c;
+
+    float32x4_t v_vec = vld1q_f32(&v->x);
+    float32x4_t v_squared = vmulq_f32(v_vec, v_vec);
+
+    float32x4_t v_yzx = vextq_f32(v_vec, v_vec, 1);
+    float32x4_t xy_yz_zx = vmulq_f32(v_vec, v_yzx);
+
+    float32x4_t v_s = vmulq_n_f32(v_vec, s);
+
+    float32x4_t xx_yy_zz = vmulq_n_f32(v_squared, one_c);
+    float32x4_t xy_yz_zx_vec = vmulq_n_f32(xy_yz_zx, one_c);
+
+    float one_c_xx = vgetq_lane_f32(xx_yy_zz, 0) + c;
+    float one_c_yy = vgetq_lane_f32(xx_yy_zz, 1) + c;
+    float one_c_zz = vgetq_lane_f32(xx_yy_zz, 2) + c;
+    float one_c_xy = vgetq_lane_f32(xy_yz_zx_vec, 0);
+    float one_c_yz = vgetq_lane_f32(xy_yz_zx_vec, 1);
+    float one_c_zx = vgetq_lane_f32(xy_yz_zx_vec, 2);
+    float xs = vgetq_lane_f32(v_s, 0);
+    float ys = vgetq_lane_f32(v_s, 1);
+    float zs = vgetq_lane_f32(v_s, 2);
+
+#ifndef ROW_MAJOR
+    mat[0] = one_c_xx;           mat[3] = one_c_xy - zs;      mat[6] = one_c_zx + ys;
+    mat[1] = one_c_xy + zs;      mat[4] = one_c_yy;           mat[7] = one_c_yz - xs;
+    mat[2] = one_c_zx - ys;      mat[5] = one_c_yz + xs;      mat[8] = one_c_zz;
+#else
+    mat[0] = one_c_xx;           mat[1] = one_c_xy - zs;      mat[2] = one_c_zx + ys;
+    mat[3] = one_c_xy + zs;      mat[4] = one_c_yy;           mat[5] = one_c_yz - xs;
+    mat[6] = one_c_zx - ys;      mat[7] = one_c_yz + xs;      mat[8] = one_c_zz;
+#endif
+}
+
+static inline void neon_load_rotation_m4(float* mat, const vec3* v, float s, float c)
+{
+    float one_c = 1.0f - c;
+
+    float32x4_t v_vec = vld1q_f32(&v->x);
+    float32x4_t v_squared = vmulq_f32(v_vec, v_vec);
+
+    float32x4_t v_yzx = vextq_f32(v_vec, v_vec, 1);
+    float32x4_t xy_yz_zx = vmulq_f32(v_vec, v_yzx);
+
+    float32x4_t v_s = vmulq_n_f32(v_vec, s);
+
+    float32x4_t xx_yy_zz = vmlaq_n_f32(vdupq_n_f32(c), v_squared, one_c);
+    float32x4_t xy_yz_zx_vec = vmulq_n_f32(xy_yz_zx, one_c);
+
+    float one_c_xx = vgetq_lane_f32(xx_yy_zz, 0);
+    float one_c_yy = vgetq_lane_f32(xx_yy_zz, 1);
+    float one_c_zz = vgetq_lane_f32(xx_yy_zz, 2);
+    float one_c_xy = vgetq_lane_f32(xy_yz_zx_vec, 0);
+    float one_c_yz = vgetq_lane_f32(xy_yz_zx_vec, 1);
+    float one_c_zx = vgetq_lane_f32(xy_yz_zx_vec, 2);
+    float xs = vgetq_lane_f32(v_s, 0);
+    float ys = vgetq_lane_f32(v_s, 1);
+    float zs = vgetq_lane_f32(v_s, 2);
+
+#ifndef ROW_MAJOR
+    mat[0] = one_c_xx;   mat[4] = one_c_xy - zs;  mat[8] = one_c_zx + ys;  mat[12] = 0.0f;
+    mat[1] = one_c_xy + zs;  mat[5] = one_c_yy;   mat[9] = one_c_yz - xs;  mat[13] = 0.0f;
+    mat[2] = one_c_zx - ys;  mat[6] = one_c_yz + xs;  mat[10] = one_c_zz;  mat[14] = 0.0f;
+    mat[3] = 0.0f;       mat[7] = 0.0f;       mat[11] = 0.0f;      mat[15] = 1.0f;
+#else
+    mat[0] = one_c_xx;   mat[1] = one_c_xy - zs;  mat[2] = one_c_zx + ys;  mat[3] = 0.0f;
+    mat[4] = one_c_xy + zs;  mat[5] = one_c_yy;   mat[6] = one_c_yz - xs;  mat[7] = 0.0f;
+    mat[8] = one_c_zx - ys;  mat[9] = one_c_yz + xs;  mat[10] = one_c_zz;  mat[11] = 0.0f;
+    mat[12] = 0.0f;      mat[13] = 0.0f;      mat[14] = 0.0f;      mat[15] = 1.0f;
+#endif
 }
 
 #define CRSW_NEON_ENABLED 1
@@ -277,9 +337,6 @@ extern inline void load_rotation_m2(mat2 mat, float angle);
 
 void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 {
-#if CRSW_NEON_ENABLED
-	neon_mult_m3_m3(c, a, b);
-#else
 #ifndef ROW_MAJOR
 	c[0] = a[0]*b[0] + a[3]*b[1] + a[6]*b[2];
 	c[3] = a[0]*b[3] + a[3]*b[4] + a[6]*b[5];
@@ -305,19 +362,22 @@ void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 	c[7] = a[6]*b[1] + a[7]*b[4] + a[8]*b[7];
 	c[8] = a[6]*b[2] + a[7]*b[5] + a[8]*b[8];
 #endif
-#endif
 }
 
 void load_rotation_m3(mat3 mat, vec3 v, float angle)
 {
 	float s, c;
-	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	s = sin(angle);
 	c = cos(angle);
 
 	// Rotation matrix is normalized
 	normalize_v3(&v);
+
+#if CRSW_NEON_ENABLED
+	neon_load_rotation_m3(mat, &v, s, c);
+#else
+	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	xx = v.x * v.x;
 	yy = v.y * v.y;
@@ -354,6 +414,7 @@ void load_rotation_m3(mat3 mat, vec3 v, float angle)
 	mat[6] = (one_c * zx) - ys;
 	mat[7] = (one_c * yz) + xs;
 	mat[8] = (one_c * zz) + c;
+#endif
 #endif
 }
 
@@ -417,13 +478,17 @@ void mult_m4_m4(mat4 c, mat4 a, mat4 b)
 void load_rotation_m4(mat4 mat, vec3 v, float angle)
 {
 	float s, c;
-	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	s = sin(angle);
 	c = cos(angle);
 
 	// Rotation matrix is normalized
 	normalize_v3(&v);
+
+#if CRSW_NEON_ENABLED
+	neon_load_rotation_m4(mat, &v, s, c);
+#else
+	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	xx = v.x * v.x;
 	yy = v.y * v.y;
@@ -476,6 +541,7 @@ void load_rotation_m4(mat4 mat, vec3 v, float angle)
 	mat[13] = 0.0f;
 	mat[14] = 0.0f;
 	mat[15] = 1.0f;
+#endif
 #endif
 }
 
