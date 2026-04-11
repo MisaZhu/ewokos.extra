@@ -3,25 +3,48 @@
 #define PORTABLEGL_IMPLEMENTATION
 #include "gltools.h"
 
-#include <iostream>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 
-#define SDL_MAIN_HANDLED
-#include <SDL.h>
+#include <unistd.h>
+#include <ewoksys/proc.h>
+#include <ewoksys/keydef.h>
+#include <ewoksys/kernel_tic.h>
+#include <ewoksys/timer.h>
+#include <x/x.h>
+#include <x/xwin.h>
+#include <graph/graph.h>
 
-#define WIDTH 320
-#define HEIGHT 240
+// Window dimensions (can be resized)
+static int win_width = 640;
+static int win_height = 480;
 
-using namespace std;
-
-SDL_Window* window;
-SDL_Renderer* ren;
-SDL_Texture* tex;
-
-u32* bbufpix;
-glContext the_Context;
+static glContext the_Context;
+static pix_t* backbuf = NULL;
+static xwin_t* g_xwin = NULL;
 
 float iGlobalTime;
+
+// FPS counter
+static int fps = 0;
+static int frame_count = 0;
+static uint32_t last_tic = 0;
+
+static void update_fps(void)
+{
+    uint32_t low;
+    kernel_tic32(NULL, NULL, &low);
+
+    if (last_tic == 0 || (low - last_tic) >= 3000000) {
+        last_tic = low;
+        fps = frame_count / 3;
+        printf("FPS: %d\n", fps);
+        frame_count = 0;
+    }
+    frame_count++;
+}
 
 typedef struct My_Uniforms
 {
@@ -38,9 +61,10 @@ GLuint textures[NUM_TEXTURES];
 
 #define NUM_SHADERS 11
 GLuint shaders[NUM_SHADERS];
+int cur_shader = 0;
+uint32_t start_time = 0;
 
-void cleanup();
-void setup_context();
+My_Uniforms the_uniforms;
 
 void graphing_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms);
 void graphing_lines_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms);
@@ -131,45 +155,28 @@ inline pgl_vec3 v3_floor(pgl_vec3 v) { return make_v3(floorf(v.x), floorf(v.y), 
 inline float v2_length(pgl_vec2 a) { return sqrtf(a.x * a.x + a.y * a.y); }
 inline float v3_length(pgl_vec3 a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
 
-int main(int argc, char** argv)
+static void init_textures(void)
 {
-	setup_context();
-
-	float points[] =
-	{
-		-1.0,  1.0, 0,
-		-1.0, -1.0, 0,
-		 1.0,  1.0, 0,
-		 1.0, -1.0, 0
-	};
-
-	My_Uniforms the_uniforms;
-
 	glGenTextures(NUM_TEXTURES, textures);
 	glBindTexture(GL_TEXTURE_2D, textures[0]);
 	if (!load_texture2D("/data/media/textures/tex00.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
-		printf("failed to load texture\n");
-		return 0;
+		printf("failed to load texture tex00.jpg\n");
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[1]);
 	if (!load_texture2D("/data/media/textures/tex02.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
-		printf("failed to load texture\n");
-		return 0;
+		printf("failed to load texture tex02.jpg\n");
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[2]);
 	if (!load_texture2D("/data/media/textures/tex06.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
-		printf("failed to load texture\n");
-		return 0;
+		printf("failed to load texture tex06.jpg\n");
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[3]);
 	if (!load_texture2D("/data/media/textures/tex01.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
-		printf("failed to load texture\n");
-		return 0;
+		printf("failed to load texture tex01.jpg\n");
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[4]);
 	if (!load_texture2D("/data/media/textures/tex09.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
-		printf("failed to load texture\n");
-		return 0;
+		printf("failed to load texture tex09.jpg\n");
 	}
 
 	the_uniforms.tex0 = textures[0];
@@ -177,80 +184,183 @@ int main(int argc, char** argv)
 	the_uniforms.tex6 = textures[2];
 	the_uniforms.tex1 = textures[3];
 	the_uniforms.tex9 = textures[4];
+}
 
+static void init_shaders(void)
+{
+	for (int i=0; i<NUM_SHADERS; ++i) {
+		shaders[i] = pglCreateFragProgram(frag_funcs[i], GL_FALSE);
+		glUseProgram(shaders[i]);
+		pglSetUniform(&the_uniforms);
+	}
+	glUseProgram(shaders[cur_shader]);
+}
+
+static void on_repaint(xwin_t* xwin, graph_t* g)
+{
+	(void)xwin;
+	
+	uint32_t new_time = kernel_tic_ms(0);
+	
+	iGlobalTime = (new_time - start_time) / 1000.0f;  // convert ms to seconds
+	the_uniforms.globaltime = (new_time - start_time) / 1000.0f;  // convert ms to seconds
+
+	// Set viewport to match window size
+	glViewport(0, 0, win_width, win_height);
+	
+	// Clear the framebuffer
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// Draw the shader
+	pglDrawFrame2(frag_funcs[cur_shader], &the_uniforms);
+
+	// Clear destination graph with black before blitting
+	graph_fill(g, 0, 0, win_width, win_height, 0xFF000000);
+	
+	// Blit to screen
+	graph_t bg;
+	graph_init(&bg, backbuf, win_width, win_height);
+	graph_blt(&bg, 0, 0, win_width, win_height, g, 0, 0, win_width, win_height);
+	
+	update_fps();
+}
+
+static void on_event(xwin_t* xwin, xevent_t* ev)
+{
+	(void)xwin;
+	
+	if (ev->type == XEVT_IM) {
+		int key = ev->value.im.value;
+		int32_t state = ev->state;
+		
+		if (state == XIM_STATE_PRESS) {
+			switch (key) {
+			case KEY_ESC: // ESC
+				xwin_close(xwin);
+				break;
+			case KEY_LEFT: // Left arrow
+				cur_shader = (cur_shader) ? cur_shader-1 : NUM_SHADERS-1;
+				start_time = kernel_tic_ms(0);
+				glUseProgram(shaders[cur_shader]);
+				break;
+			case KEY_RIGHT: // Right arrow
+				cur_shader = (cur_shader + 1) % NUM_SHADERS;
+				start_time = kernel_tic_ms(0);
+				glUseProgram(shaders[cur_shader]);
+				break;
+			}
+		}
+	}
+}
+
+static void on_resize(xwin_t* xwin)
+{
+	if(xwin == NULL || xwin->xinfo == NULL)
+		return;
+	
+	int width = xwin->xinfo->wsr.w;
+	int height = xwin->xinfo->wsr.h;
+	
+	if (width <= 0 || height <= 0)
+		return;
+	
+	win_width = width;
+	win_height = height;
+	
+	// Resize PortableGL framebuffer
+	pglResizeFramebuffer(win_width, win_height);
+	backbuf = (pix_t*)pglGetBackBuffer();
+	
+	// Update viewport
+	glViewport(0, 0, win_width, win_height);
+	
+	// Clear the framebuffer after resize
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+}
+
+static void loop(void* p)
+{
+	xwin_t* xwin = (xwin_t*)p;
+	xwin_repaint(xwin);
+	proc_usleep(1000);
+}
+
+int main(int argc, char** argv)
+{
+	(void)argc;
+	(void)argv;
+	
+	x_t x;
+	x_init(&x, NULL);
+	
+	x.on_loop = loop;
+	xwin_t* xwin = xwin_open(&x, -1, 32, 32, win_width, win_height, "Shadertoy", XWIN_STYLE_NORMAL);
+	if (!xwin) {
+		printf("Failed to open window\n");
+		return 1;
+	}
+	xwin_set_alpha(xwin, false);
+	
+	g_xwin = xwin;
+	xwin->on_repaint = on_repaint;
+	xwin->on_event = on_event;
+	xwin->on_resize = on_resize;
+	
+	// Initialize PortableGL context
+	if (!init_glContext(&the_Context, (u32**)&backbuf, win_width, win_height)) {
+		printf("Failed to initialize glContext\n");
+		return 1;
+	}
+	
+	// Set viewport
+	glViewport(0, 0, win_width, win_height);
+	
+	// Create and bind VAO
+	GLuint vao;
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+	
+	// Create screen quad
+	float points[] = {
+		-1.0f,  1.0f, 0.0f,
+		-1.0f, -1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f
+	};
+	
 	GLuint screen_quad;
 	glGenBuffers(1, &screen_quad);
 	glBindBuffer(GL_ARRAY_BUFFER, screen_quad);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-	for (int i=0; i<NUM_SHADERS; ++i) {
-		shaders[i] = pglCreateFragProgram(frag_funcs[i], GL_FALSE);
-		glUseProgram(shaders[i]);
-		pglSetUniform(&the_uniforms);
-	}
-
-	int cur_shader = 0;
-	glUseProgram(shaders[cur_shader]);
-
-	SDL_Event event;
-	SDL_Keysym keysym;
-	bool quit = GL_FALSE;
-
-	unsigned int old_time = 0, new_time=0, counter = 0, start_time = 0;
-
-	while (!quit) {
-		while (SDL_PollEvent(&event)) {
-			if (event.type == SDL_QUIT) {
-				quit = true;
-			} else if (event.type == SDL_KEYDOWN) {
-				keysym = event.key.keysym;
-				switch (keysym.sym) {
-				case SDLK_ESCAPE:
-					quit = true;
-					break;
-				case SDLK_LEFT:
-					cur_shader = (cur_shader) ? cur_shader-1 : NUM_SHADERS-1;
-					start_time = SDL_GetTicks();
-					glUseProgram(shaders[cur_shader]);
-					break;
-				case SDLK_RIGHT:
-					cur_shader = (cur_shader + 1) % NUM_SHADERS;
-					start_time = SDL_GetTicks();
-					glUseProgram(shaders[cur_shader]);
-					break;
-				}
-			}
-		}
-
-		++counter;
-		new_time = SDL_GetTicks();
-		if (new_time - old_time >= 3000) {
-			printf("%f FPS\n", counter*1000.0f/((float)(new_time-old_time)));
-			old_time = new_time;
-			counter = 0;
-		}
-
-		iGlobalTime = (new_time-start_time) / 1000.0f;
-		the_uniforms.globaltime = (new_time-start_time) / 1000.0f;
-
-		pglDrawFrame2(frag_funcs[cur_shader], &the_uniforms);
-
-		SDL_UpdateTexture(tex, NULL, bbufpix, WIDTH * sizeof(u32));
-		SDL_RenderCopy(ren, tex, NULL, NULL);
-		SDL_RenderPresent(ren);
-	}
-
-	cleanup();
+	
+	// Initialize textures and shaders
+	init_textures();
+	init_shaders();
+	
+	// Record start time
+	start_time = kernel_tic_ms(0);
+	
+	// Make window visible
+	xwin_set_visible(xwin, true);
+	
+	x_run(&x, xwin);
+	
+	// Cleanup
+	xwin_destroy(xwin);
+	free_glContext(&the_Context);
+	
 	return 0;
 }
 
 void graphing_lines_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
 	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
-	frag.x /= WIDTH;
-	frag.y /= HEIGHT;
+	frag.x /= win_width;
+	frag.y /= win_height;
 	frag = v2_scale(frag, 2.0f);
 	frag = v2_sub(frag, make_v2(1.0f, 1.0f));
 
@@ -258,7 +368,7 @@ void graphing_lines_fs(float* fs_input, Shader_Builtins* builtins, void* uniform
 	float x2 = frag.y - fragx2;
 	float x3 = frag.y - fragx2 * frag.x + 0.25f * frag.x;
 	float x4 = frag.y - fragx2 * fragx2;
-	float incr = 2.0f / HEIGHT;
+	float incr = 2.0f / win_height;
 
 	if (x2 >= -incr && x2 <= incr) {
 		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(1, 0, 0, 1);
@@ -274,8 +384,8 @@ void graphing_lines_fs(float* fs_input, Shader_Builtins* builtins, void* uniform
 void graphing_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
 	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
-	frag.x /= WIDTH;
-	frag.y /= HEIGHT;
+	frag.x /= win_width;
+	frag.y /= win_height;
 	frag = v2_scale(frag, 2.0f);
 	frag = v2_sub(frag, make_v2(1.0f, 1.0f));
 
@@ -293,8 +403,8 @@ void my_tunnel_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 	float globaltime = ((My_Uniforms*)uniforms)->globaltime;
 
 	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
-	frag.x /= WIDTH;
-	frag.y /= HEIGHT;
+	frag.x /= win_width;
+	frag.y /= win_height;
 	frag = v2_scale(frag, 2.0f);
 	frag = v2_sub(frag, make_v2(1.0f, 1.0f));
 
@@ -309,7 +419,7 @@ void square_tunnel_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms
 	float globaltime = ((My_Uniforms*)uniforms)->globaltime;
 	GLuint channel0 = ((My_Uniforms*)uniforms)->tex0;
 
-	pgl_vec2 resolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 resolution = make_v2(win_width, win_height);
 	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
 	
 	pgl_vec2 p = v2_sub(v2_scale(frag, 2.0f), resolution);
@@ -330,7 +440,7 @@ void deform_tunnel_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms
 	GLuint channel0 = ((My_Uniforms*)uniforms)->tex2;
 	GLuint channel1 = ((My_Uniforms*)uniforms)->tex0;
 
-	pgl_vec2 resolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 resolution = make_v2(win_width, win_height);
 	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
 	pgl_vec2 p = v2_sub(v2_scale(v2_scale(frag, 2.0f), 1.0f/resolution.x), make_v2(1.0f, 1.0f));
@@ -363,7 +473,7 @@ void tileable_water_caustic_fs(float* fs_input, Shader_Builtins* builtins, void*
 #define TAU 6.28318530718f
 #define MAX_ITER 5
 
-	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 iResolution = make_v2(win_width, win_height);
 	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
 	float time = iGlobalTime * 0.5f + 23.0f;
@@ -403,7 +513,7 @@ void tileable_water_caustic_fs(float* fs_input, Shader_Builtins* builtins, void*
 
 void running_in_the_night_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 iResolution = make_v2(win_width, win_height);
 	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 	GLuint iChannel0 = ((My_Uniforms*)uniforms)->tex2;
 
@@ -423,9 +533,9 @@ void running_in_the_night_fs(float* fs_input, Shader_Builtins* builtins, void* u
 		tex.y = mat.y * time1 / uv.y + iGlobalTime * 2.0f;
 
 		pgl_vec4 tmp = texture2D(iChannel0, tex.x * 2.0f, tex.y * 2.0f);
-		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(tmp.x * (-uv.y), tmp.y * (-uv.y), tmp.z * (-uv.y), tmp.w * (-uv.y));
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(tmp.x * (-uv.y), tmp.y * (-uv.y), tmp.z * (-uv.y), 1.0f);
 	} else {
-		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 0, 0, 0);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 0, 0, 1.0f);
 	}
 }
 
@@ -465,7 +575,7 @@ float iqnoise(pgl_vec2 x, float u, float v)
 
 void voronoise_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 iResolution = make_v2(win_width, win_height);
 	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
 	pgl_vec2 uv;
@@ -503,7 +613,6 @@ float noise(pgl_vec3 p)
 	f.y = cosf(f.y) * (-0.5f) + 0.5f;
 	f.z = cosf(f.z) * (-0.5f) + 0.5f;
 	
-	// Simplified mix operations
 	float a1 = sinf(cosf(a.x) * a.x);
 	float a2 = sinf(cosf(a.y) * a.y);
 	float a3 = sinf(cosf(1.0f + a.z) * (1.0f + a.z));
@@ -556,7 +665,7 @@ pgl_vec4 raymarch(pgl_vec3 org, pgl_vec3 dir)
 
 void flame_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 iResolution = make_v2(win_width, win_height);
 	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
 	pgl_vec2 v;
@@ -574,7 +683,9 @@ void flame_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 	pgl_vec4 col2 = make_v4(0.1f, 0.5f, 1.0f, 1.0f);
 	pgl_vec4 col = v4_mix(col1, col2, p.y * 0.02f + 0.4f);
 
-    *(pgl_vec4*)&builtins->gl_FragColor = v4_mix(make_v4(0, 0, 0, 0), col, powf(glow * 2.0f, 4.0f));
+    float intensity = powf(glow * 2.0f, 4.0f);
+    if (intensity > 1.0f) intensity = 1.0f;
+    *(pgl_vec4*)&builtins->gl_FragColor = make_v4(col.x * intensity, col.y * intensity, col.z * intensity, 1.0f);
 }
 
 // Constants for the cave shader
@@ -640,7 +751,7 @@ void the_cave_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 	GLuint iChannel1 = ((My_Uniforms*)uniforms)->tex1;
 	GLuint iChannel2 = ((My_Uniforms*)uniforms)->tex9;
 
-	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 iResolution = make_v2(win_width, win_height);
 	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
 	float time = globaltime / 12.0f + 291.0f;
@@ -763,13 +874,13 @@ void iqs_eyeball(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 	float time = ((My_Uniforms*)uniforms)->globaltime;
 
 	pgl_vec2 uv;
-	uv.x = (*(pgl_vec2*)(&builtins->gl_FragCoord)).x / WIDTH;
-	uv.y = (*(pgl_vec2*)(&builtins->gl_FragCoord)).y / HEIGHT;
+	uv.x = (*(pgl_vec2*)(&builtins->gl_FragCoord)).x / win_width;
+	uv.y = (*(pgl_vec2*)(&builtins->gl_FragCoord)).y / win_height;
 	
 	pgl_vec2 p;
 	p.x = -1.0f + 2.0f * uv.x;
 	p.y = -1.0f + 2.0f * uv.y;
-	p.x *= WIDTH / (float)HEIGHT;
+	p.x *= win_width / (float)win_height;
 
 	float r = sqrtf(v2_dot(p, p));
 	float a = atan2f(p.y, p.x);
@@ -813,37 +924,4 @@ void iqs_eyeball(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 	}
 
 	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(col.x, col.y, col.z, 1.0f);
-}
-
-void setup_context()
-{
-	SDL_SetMainReady();
-	if (SDL_Init(SDL_INIT_VIDEO)) {
-		cout << "SDL_Init error: " << SDL_GetError() << "\n";
-		exit(0);
-	}
-
-	window = SDL_CreateWindow("Shadertoy", 100, 100, WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-	if (!window) {
-		cerr << "Failed to create window\n";
-		SDL_Quit();
-		exit(0);
-	}
-
-	ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
-	tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
-
-	if (!init_glContext(&the_Context, &bbufpix, WIDTH, HEIGHT)) {
-		puts("Failed to initialize glContext");
-		exit(0);
-	}
-}
-
-void cleanup()
-{
-	free_glContext(&the_Context);
-	SDL_DestroyTexture(tex);
-	SDL_DestroyRenderer(ren);
-	SDL_DestroyWindow(window);
-	SDL_Quit();
 }
