@@ -39,7 +39,7 @@
 #include <Widget/WidgetX.h>
 #include <WidgetEx/Menubar.h>
 #include <WidgetEx/FileDialog.h>
-#include <graph/graph_png.h>
+#include <graph/graph_image.h>
 
 // PCM Audio Driver
 #define CTRL_PCM_DEV_HW         (0xF0)
@@ -629,7 +629,7 @@ protected:
         if(!loaded) {
             graph_fill(g, r.x, r.y, r.w, r.h, theme->basic.bgColor);
             if(!logo)
-                logo = png_image_new(X::getResFullName("logo.png").c_str());
+                logo = graph_image_new(X::getResFullName("logo.png").c_str());
             if(logo) {
                 int x = r.x + (r.w - logo->w) / 2;
                 int y = r.y + (r.h - logo->h) / 2;

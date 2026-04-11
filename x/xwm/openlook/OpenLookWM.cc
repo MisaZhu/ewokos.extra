@@ -2,7 +2,7 @@
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/vfs.h>
 #include <ewoksys/klog.h>
-#include <graph/graph_png.h>
+#include <graph/graph_image.h>
 #include <x/x.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,17 +104,17 @@ void OpenLookWM::drawTitle(graph_t* desktop_g, graph_t* g, xinfo_t* info, grect_
 void OpenLookWM::onLoadTheme(void) {
 	char fname[FS_FULL_NAME_MAX+1] = {0};
 	x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/bottom_left.png", fname, FS_FULL_NAME_MAX);
-	frameBLIcon = png_image_new(fname);
+	frameBLIcon = graph_image_new(fname);
 	x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/top_left.png", fname, FS_FULL_NAME_MAX);
-	frameTLIcon = png_image_new(fname);
+	frameTLIcon = graph_image_new(fname);
 	x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/bottom_right.png", fname, FS_FULL_NAME_MAX);
-	frameBRIcon = png_image_new(fname);
+	frameBRIcon = graph_image_new(fname);
 	x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/top_right.png", fname, FS_FULL_NAME_MAX);
-	frameTRIcon = png_image_new(fname);
+	frameTRIcon = graph_image_new(fname);
 	x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/button_down.png", fname, FS_FULL_NAME_MAX);
-	frameCloseIcon = png_image_new(fname);
+	frameCloseIcon = graph_image_new(fname);
 	x_get_theme_fname(X_THEME_ROOT, "xwm", "icons/button_max.png", fname, FS_FULL_NAME_MAX);
-	frameMaxIcon = png_image_new(fname);
+	frameMaxIcon = graph_image_new(fname);
 }
 
 OpenLookWM::~OpenLookWM(void) {
