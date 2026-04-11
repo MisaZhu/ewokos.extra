@@ -8,7 +8,7 @@ ROOTFS_BIN = $(BUILD_DIR)/rootfs/bin/x
 
 # Common flags
 CFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -DUSING_PORTABLEGL -D__ewokos__
-CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -DUSING_PORTABLEGL -D__ewokos__ -fno-threadsafe-statics
+CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -I../glcommon/include -I../glcommon/include/glcommon -DUSING_PORTABLEGL -D__ewokos__ -fno-threadsafe-statics
 
 # Common LDFLAGS
 LDFLAGS += -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lm -lopenlibm -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
@@ -18,7 +18,7 @@ GLCOMMON_LIB = $(BUILD_DIR)/lib/libglcommon.a
 
 # C++ files - all refactored to use portablegl's built-in types with PGL_PREFIX_TYPES
 # Now all demos compile with C-style code using pgl_compat.h
-CPP_SRCS = shadertoy.cpp sphereworld.cpp sphereworld_color.cpp
+CPP_SRCS = shadertoy.cpp sphereworld_color.cpp cubemap.cpp grass.cpp
 
 # Object files
 C_OBJS = $(patsubst %.c,%.o,$(C_SRCS))

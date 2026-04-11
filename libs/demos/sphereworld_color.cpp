@@ -27,11 +27,7 @@
 #define WIDTH 640
 #define HEIGHT 480
 
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-#define PIX_FORMAT SDL_PIXELFORMAT_RGBA8888
-#else
-#define PIX_FORMAT SDL_PIXELFORMAT_ABGR8888
-#endif
+#define PIX_FORMAT SDL_PIXELFORMAT_ARGB8888
 
 
 using namespace std;
@@ -194,6 +190,12 @@ int main(int argc, char** argv)
 	make_torus(torus.verts, torus.tris, torus.texcoords, 0.3, 0.1, 40, 20);
 	make_sphere(sphere.verts, sphere.tris, sphere.texcoords, 0.1, 26, 13);
 
+	rsw::mat3 rot_x;
+	load_rotation_mat3(rot_x, rsw::vec3(1, 0, 0), DEG_TO_RAD(90));
+	for (int i=0; i<torus.verts.size(); ++i) {
+		torus.verts[i] = rot_x * torus.verts[i];
+	}
+
 	compute_normals(torus.verts, torus.tris, NULL, DEG_TO_RAD(30), torus.normals);
 	compute_normals(sphere.verts, sphere.tris, NULL, DEG_TO_RAD(30), sphere.normals);
 
@@ -286,6 +288,7 @@ int main(int argc, char** argv)
 	rsw::mat4 mvp_mat;
 	rsw::mat3 normal_mat;
 	rsw::mat4 translate_sphere = rsw::translation_mat4(rsw::vec3(0.8f, 0.4f, 0.0f));
+	rsw::mat4 translate_torus_back = rsw::translation_mat4(rsw::vec3(0.0f, 0.3f, -1.2f));
 
 	rsw::make_perspective_matrix(proj_mat, DEG_TO_RAD(35.0f), WIDTH/(float)HEIGHT, 0.3f, 100.0f);
 
@@ -340,6 +343,10 @@ int main(int argc, char** argv)
 
 		glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
+		for (int i = 0; i < width * height; ++i) {
+			bbufpix[i] = 0xFF000000;
+		}
+
 
 		rsw::mat4 view_mat = camera.get_camera_matrix();
 		rsw::mat4 mvp_mat = proj_mat * view_mat;
@@ -378,7 +385,7 @@ int main(int argc, char** argv)
 		//draw rotating torus
 		mvp_mat = proj_mat * view_mat;
 		rsw::load_rotation_mat4(rot_mat, rsw::vec3(0, 1, 0), total_time*DEG_TO_RAD(60.0f));
-		the_uniforms.mvp_mat = mvp_mat * rot_mat;
+		the_uniforms.mvp_mat = mvp_mat * rot_mat * translate_torus_back;
 		the_uniforms.normal_mat = rsw::mat3(view_mat*rot_mat);
 
 		the_uniforms.Ka = torus_ambient;
@@ -388,7 +395,8 @@ int main(int argc, char** argv)
 		glDrawArrays(GL_TRIANGLES, 0, torus.tris.size()*3);
 
 		SDL_UpdateTexture(tex, NULL, bbufpix, width * sizeof(pix_t));
-		//Render the scene
+		SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+		SDL_RenderFillRect(ren, NULL);
 		SDL_RenderCopy(ren, tex, NULL, NULL);
 		SDL_RenderPresent(ren);
 
