@@ -129,28 +129,6 @@ static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
     }
 }
 
-// Matrix 3x3 multiplication NEON optimization
-static inline void pgl_neon_mult_m3_m3(float* c, const float* a, const float* b)
-{
-    // Load columns of matrix B (3 columns, 3 floats each, padded to 4)
-    float32x4_t b0 = vld1q_f32(b);
-    float32x4_t b1 = vld1q_f32(b + 3);
-    float32x4_t b2 = vld1q_f32(b + 6);
-
-    // Process each row of result
-    for (int i = 0; i < 3; i++) {
-        float32x4_t a_vec = vld1q_f32(a + i * 3);
-
-        // Calculate dot product: c[i] = a[i][0]*b[0] + a[i][1]*b[1] + a[i][2]*b[2]
-        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
-
-        // Store 3 floats (ignore the 4th)
-        vst1q_f32(c + i * 3, result);
-    }
-}
-
 // Matrix 2x2 multiplication NEON optimization
 static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
 {
@@ -836,24 +814,6 @@ static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
         result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 3)), b3);
 
         vst1q_f32(c + i * 4, result);
-    }
-}
-
-// ARM 32-bit matrix 3x3 multiplication
-static inline void pgl_neon_mult_m3_m3(float* c, const float* a, const float* b)
-{
-    float32x4_t b0 = vld1q_f32(b);
-    float32x4_t b1 = vld1q_f32(b + 3);
-    float32x4_t b2 = vld1q_f32(b + 6);
-
-    for (int i = 0; i < 3; i++) {
-        float32x4_t a_vec = vld1q_f32(a + i * 3);
-
-        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
-        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
-
-        vst1q_f32(c + i * 3, result);
     }
 }
 
@@ -1845,9 +1805,6 @@ extern inline void load_rotation_m2(mat2 mat, float angle);
 
 void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 {
-#if PGL_NEON_ENABLED
-	pgl_neon_mult_m3_m3(c, a, b);
-#else
 #ifndef ROW_MAJOR
 	c[0] = a[0]*b[0] + a[3]*b[1] + a[6]*b[2];
 	c[3] = a[0]*b[3] + a[3]*b[4] + a[6]*b[5];
@@ -1872,7 +1829,6 @@ void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 	c[6] = a[6]*b[0] + a[7]*b[3] + a[8]*b[6];
 	c[7] = a[6]*b[1] + a[7]*b[4] + a[8]*b[7];
 	c[8] = a[6]*b[2] + a[7]*b[5] + a[8]*b[8];
-#endif
 #endif
 }
 
