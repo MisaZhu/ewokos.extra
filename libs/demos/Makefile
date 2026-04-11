@@ -50,7 +50,7 @@ dirs:
 
 # Compile C++ files (include glcommon for rsw_math and gltools)
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I$(BUILD_DIR)/include -c $< -o $@
 
 # Link C programs
 $(ROOTFS_BIN)/%: %.o $(GLCOMMON_UTILS)
