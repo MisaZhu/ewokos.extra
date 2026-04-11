@@ -4,13 +4,30 @@
 
 #include <rsw_math.h>
 
-#ifndef PGL_PREFIX_TYPES
-using rsw::vec3;
-using rsw::ivec3;
-using rsw::vec4;
-using rsw::vec2;
-using rsw::mat4;
-using rsw::mat3;
+// Undef portablegl macros if they exist to avoid conflicts with rsw_math types
+#ifdef vec2
+#undef vec2
+#endif
+#ifdef vec3
+#undef vec3
+#endif
+#ifdef vec4
+#undef vec4
+#endif
+#ifdef ivec2
+#undef ivec2
+#endif
+#ifdef ivec3
+#undef ivec3
+#endif
+#ifdef ivec4
+#undef ivec4
+#endif
+#ifdef mat3
+#undef mat3
+#endif
+#ifdef mat4
+#undef mat4
 #endif
 
 #include <vector>

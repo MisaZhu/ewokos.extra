@@ -648,12 +648,12 @@ int handle_events(void)
 		if (e.type == SDL_QUIT) {
 			return 1;
 		} else if (e.type == SDL_KEYDOWN) {
-			sc = e.key.keysym.scancode;
+			sc = e.key.keysym.sym;
 			
 			switch (sc) {
-			case SDL_SCANCODE_ESCAPE:
+			case SDLK_ESCAPE:
 				return 1;
-			case SDL_SCANCODE_P:
+			case SDLK_p:
 				polygon_mode = (polygon_mode + 1) % 3;
 				if (polygon_mode == 0)
 					glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
@@ -662,7 +662,7 @@ int handle_events(void)
 				else
 					glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 				break;
-			case SDL_SCANCODE_R:
+			case SDLK_r:
 				// Randomize all spheres
 				for (int i = 0; i < NUM_SPHERES; i++) {
 					Sphere* s = &spheres[i];

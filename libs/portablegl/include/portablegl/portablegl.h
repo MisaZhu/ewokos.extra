@@ -1615,51 +1615,9 @@ inline void print_m4(mat4 m, const char* append)
 }
 
 //TODO define macros for doing array version
-inline vec2 mult_m2_v2(mat2 m, vec2 v)
-{
-	vec2 r;
-#ifndef ROW_MAJOR
-	r.x = m[0]*v.x + m[2]*v.y;
-	r.y = m[1]*v.x + m[3]*v.y;
-#else
-	r.x = m[0]*v.x + m[1]*v.y;
-	r.y = m[3]*v.x + m[3]*v.y;
-#endif
-	return r;
-}
-
-
-inline vec3 mult_m3_v3(mat3 m, vec3 v)
-{
-	vec3 r;
-#ifndef ROW_MAJOR
-	r.x = m[0]*v.x + m[3]*v.y + m[6]*v.z;
-	r.y = m[1]*v.x + m[4]*v.y + m[7]*v.z;
-	r.z = m[2]*v.x + m[5]*v.y + m[8]*v.z;
-#else
-	r.x = m[0]*v.x + m[1]*v.y + m[2]*v.z;
-	r.y = m[3]*v.x + m[4]*v.y + m[5]*v.z;
-	r.z = m[6]*v.x + m[7]*v.y + m[8]*v.z;
-#endif
-	return r;
-}
-
-inline vec4 mult_m4_v4(mat4 m, vec4 v)
-{
-	vec4 r;
-#ifndef ROW_MAJOR
-	r.x = m[0]*v.x + m[4]*v.y + m[8]*v.z + m[12]*v.w;
-	r.y = m[1]*v.x + m[5]*v.y + m[9]*v.z + m[13]*v.w;
-	r.z = m[2]*v.x + m[6]*v.y + m[10]*v.z + m[14]*v.w;
-	r.w = m[3]*v.x + m[7]*v.y + m[11]*v.z + m[15]*v.w;
-#else
-	r.x = m[0]*v.x + m[1]*v.y + m[2]*v.z + m[3]*v.w;
-	r.y = m[4]*v.x + m[5]*v.y + m[6]*v.z + m[7]*v.w;
-	r.z = m[8]*v.x + m[9]*v.y + m[10]*v.z + m[11]*v.w;
-	r.w = m[12]*v.x + m[13]*v.y + m[14]*v.z + m[15]*v.w;
-#endif
-	return r;
-}
+vec2 mult_m2_v2(mat2 m, vec2 v);
+vec3 mult_m3_v3(mat3 m, vec3 v);
+vec4 mult_m4_v4(mat4 m, vec4 v);
 
 void mult_m2_m2(mat2 c, mat2 a, mat2 b);
 
@@ -1667,25 +1625,8 @@ void mult_m3_m3(mat3 c, mat3 a, mat3 b);
 
 void mult_m4_m4(mat4 c, mat4 a, mat4 b);
 
-inline void load_rotation_m2(mat2 mat, float angle)
-{
-#ifndef ROW_MAJOR
-	mat[0] = cos(angle);
-	mat[2] = -sin(angle);
-
-	mat[1] = sin(angle);
-	mat[3] = cos(angle);
-#else
-	mat[0] = cos(angle);
-	mat[1] = -sin(angle);
-
-	mat[2] = sin(angle);
-	mat[3] = cos(angle);
-#endif
-}
-
+void load_rotation_m2(mat2 mat, float angle);
 void load_rotation_m3(mat3 mat, vec3 v, float angle);
-
 void load_rotation_m4(mat4 mat, vec3 vec, float angle);
 
 //void invert_m4(mat4 mInverse, const mat4 m);
@@ -1703,107 +1644,15 @@ void lookAt(mat4 mat, vec3 eye, vec3 center, vec3 up);
 
 
 ///////////Matrix transformation functions
-inline void scale_m3(mat3 m, float x, float y, float z)
-{
-#ifndef ROW_MAJOR
-	m[0] = x; m[3] = 0; m[6] = 0;
-	m[1] = 0; m[4] = y; m[7] = 0;
-	m[2] = 0; m[5] = 0; m[8] = z;
-#else
-	m[0] = x; m[1] = 0; m[2] = 0;
-	m[3] = 0; m[4] = y; m[5] = 0;
-	m[6] = 0; m[7] = 0; m[8] = z;
-#endif
-}
-
-inline void scale_m4(mat4 m, float x, float y, float z)
-{
-#ifndef ROW_MAJOR
-	m[ 0] = x; m[ 4] = 0; m[ 8] = 0; m[12] = 0;
-	m[ 1] = 0; m[ 5] = y; m[ 9] = 0; m[13] = 0;
-	m[ 2] = 0; m[ 6] = 0; m[10] = z; m[14] = 0;
-	m[ 3] = 0; m[ 7] = 0; m[11] = 0; m[15] = 1;
-#else
-	m[ 0] = x; m[ 1] = 0; m[ 2] = 0; m[ 3] = 0;
-	m[ 4] = 0; m[ 5] = y; m[ 6] = 0; m[ 7] = 0;
-	m[ 8] = 0; m[ 9] = 0; m[10] = z; m[11] = 0;
-	m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
-#endif
-}
+void scale_m3(mat3 m, float x, float y, float z);
+void scale_m4(mat4 m, float x, float y, float z);
 
 // Create a Translation matrix. Only 4x4 matrices have translation components
-inline void translation_m4(mat4 m, float x, float y, float z)
-{
-#ifndef ROW_MAJOR
-	m[ 0] = 1; m[ 4] = 0; m[ 8] = 0; m[12] = x;
-	m[ 1] = 0; m[ 5] = 1; m[ 9] = 0; m[13] = y;
-	m[ 2] = 0; m[ 6] = 0; m[10] = 1; m[14] = z;
-	m[ 3] = 0; m[ 7] = 0; m[11] = 0; m[15] = 1;
-#else
-	m[ 0] = 1; m[ 1] = 0; m[ 2] = 0; m[ 3] = x;
-	m[ 4] = 0; m[ 5] = 1; m[ 6] = 0; m[ 7] = y;
-	m[ 8] = 0; m[ 9] = 0; m[10] = 1; m[11] = z;
-	m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
-#endif
-}
-
+void translation_m4(mat4 m, float x, float y, float z);
 
 // Extract a rotation matrix from a 4x4 matrix
 // Extracts the rotation matrix (3x3) from a 4x4 matrix
-//
-#ifndef ROW_MAJOR
-#define M44(m, row, col) m[col*4 + row]
-#define M33(m, row, col) m[col*3 + row]
-#else
-#define M44(m, row, col) m[row*4 + col]
-#define M33(m, row, col) m[row*3 + col]
-#endif
-inline void extract_rotation_m4(mat3 dst, mat4 src, int normalize)
-{
-	vec3 tmp;
-	if (normalize) {
-		tmp.x = M44(src, 0, 0);
-		tmp.y = M44(src, 1, 0);
-		tmp.z = M44(src, 2, 0);
-		normalize_v3(&tmp);
-
-		M33(dst, 0, 0) = tmp.x;
-		M33(dst, 1, 0) = tmp.y;
-		M33(dst, 2, 0) = tmp.z;
-
-		tmp.x = M44(src, 0, 1);
-		tmp.y = M44(src, 1, 1);
-		tmp.z = M44(src, 2, 1);
-		normalize_v3(&tmp);
-
-		M33(dst, 0, 1) = tmp.x;
-		M33(dst, 1, 1) = tmp.y;
-		M33(dst, 2, 1) = tmp.z;
-
-		tmp.x = M44(src, 0, 2);
-		tmp.y = M44(src, 1, 2);
-		tmp.z = M44(src, 2, 2);
-		normalize_v3(&tmp);
-
-		M33(dst, 0, 2) = tmp.x;
-		M33(dst, 1, 2) = tmp.y;
-		M33(dst, 2, 2) = tmp.z;
-	} else {
-		M33(dst, 0, 0) = M44(src, 0, 0);
-		M33(dst, 1, 0) = M44(src, 1, 0);
-		M33(dst, 2, 0) = M44(src, 2, 0);
-
-		M33(dst, 0, 1) = M44(src, 0, 1);
-		M33(dst, 1, 1) = M44(src, 1, 1);
-		M33(dst, 2, 1) = M44(src, 2, 1);
-
-		M33(dst, 0, 2) = M44(src, 0, 2);
-		M33(dst, 1, 2) = M44(src, 1, 2);
-		M33(dst, 2, 2) = M44(src, 2, 2);
-	}
-}
-#undef M33
-#undef M44
+void extract_rotation_m4(mat3 dst, mat4 src, int normalize);
 
 
 // returns float [0,1)

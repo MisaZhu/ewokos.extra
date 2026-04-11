@@ -4,6 +4,32 @@
 
 #include <rsw_math.h>
 
+// Undef portablegl macros if they exist to avoid conflicts with rsw_math types
+// These will be restored at the end if needed
+#ifdef vec2
+#undef vec2
+#endif
+#ifdef vec3
+#undef vec3
+#endif
+#ifdef vec4
+#undef vec4
+#endif
+#ifdef ivec2
+#undef ivec2
+#endif
+#ifdef ivec3
+#undef ivec3
+#endif
+#ifdef ivec4
+#undef ivec4
+#endif
+#ifdef mat3
+#undef mat3
+#endif
+#ifdef mat4
+#undef mat4
+#endif
 
 struct GLFrame
 {
@@ -51,6 +77,3 @@ struct GLFrame
 };
 
 #endif
-
-
-

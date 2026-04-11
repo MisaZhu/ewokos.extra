@@ -4,7 +4,7 @@
 
 // Default position and orientation. At the origin, looking
 // down the positive Z axis (right handed coordinate system.
-Frame::Frame(bool camera, vec3 origin_)
+Frame::Frame(bool camera, rsw::vec3 origin_)
 {
 	// At origin
 // 		origin.x= 0.0f; origin.y = 0.0f; origin.z = 0.0f;
@@ -24,11 +24,11 @@ Frame::Frame(bool camera, vec3 origin_)
 
 
 
-mat4 Frame::get_matrix(bool rotation_only)
+rsw::mat4 Frame::get_matrix(bool rotation_only)
 {
-	mat4 matrix;
+	rsw::mat4 matrix;
 
-	vec3 vXAxis = cross(up, forward);
+	rsw::vec3 vXAxis = cross(up, forward);
 
 	matrix.setc1(vXAxis);
 	matrix.setc2(up);
@@ -36,7 +36,7 @@ mat4 Frame::get_matrix(bool rotation_only)
 
 	// Translation (already done)
 	if(rotation_only == true)
-		matrix.setc4(vec3(0,0,0));
+		matrix.setc4(rsw::vec3(0,0,0));
 	else
 		matrix.setc4(origin);
 
@@ -45,10 +45,10 @@ mat4 Frame::get_matrix(bool rotation_only)
 
 
 
-mat4 Frame::get_camera_matrix(bool rotation_only)
+rsw::mat4 Frame::get_camera_matrix(bool rotation_only)
 {
-	vec3 x, z;
-	mat4 mat;
+	rsw::vec3 x, z;
+	rsw::mat4 mat;
 
 	// Make rotation matrix
 	// Z vector is reversed
@@ -64,13 +64,13 @@ mat4 Frame::get_camera_matrix(bool rotation_only)
 	mat.setx(x);
 	mat.sety(up);
 	mat.setz(z);
-	mat.setw(vec3(0,0,0));
+	mat.setw(rsw::vec3(0,0,0));
 
 	if(rotation_only)
 		return mat;
 
 	// Apply translation too
-	mat4 trans;
+	rsw::mat4 trans;
 	trans.setc4(-origin);	//default constructor loads identity so this is all we need to form translation
 
 	//could instead of having the previous 2 lines just mat*(-origin) and drop the result
@@ -82,7 +82,7 @@ mat4 Frame::get_camera_matrix(bool rotation_only)
 
 void Frame::rotate_local_y(float fAngle)
 {
-	mat3 rotMat;
+	rsw::mat3 rotMat;
 
 	// Just Rotate around the up vector
 	// Create a rotation matrix around my Up (Y) vector
@@ -96,7 +96,7 @@ void Frame::rotate_local_y(float fAngle)
 
 void Frame::rotate_local_z(float fAngle)
 {
-	mat3 rotMat;
+	rsw::mat3 rotMat;
 
 	// Only the up vector needs to be rotated
 	load_rotation_mat3(rotMat, forward, fAngle);
@@ -107,8 +107,8 @@ void Frame::rotate_local_z(float fAngle)
 
 void Frame::rotate_local_x(float fAngle)
 {
-	mat3 rotMat;
-	vec3 localX;
+	rsw::mat3 rotMat;
+	rsw::vec3 localX;
 	//get local x axis
 	localX = cross(up, forward);
 
@@ -126,7 +126,7 @@ void Frame::rotate_local_x(float fAngle)
 // if the matrix is long-lived and frequently transformed.
 void Frame::normalize(bool keep_forward)
 {
-	vec3 vCross;
+	rsw::vec3 vCross;
 
 	//calculate cross product of up and forward vectors (local x axis
 	//use the result to recalculate forward vector
@@ -149,10 +149,10 @@ void Frame::normalize(bool keep_forward)
 //Does NOT rotate the frame itself around the world origin (ie the pos of the frame doesn't change)
 void Frame::rotate_world(float fAngle, float x, float y, float z)
 {
-	mat3 rotMat;
+	rsw::mat3 rotMat;
 
 	// Create the Rotation matrix
-	load_rotation_mat3(rotMat, vec3(x,y,z), fAngle);
+	load_rotation_mat3(rotMat, rsw::vec3(x,y,z), fAngle);
 
 	//transform up and forward axis
 	up = rotMat*up;
@@ -163,8 +163,8 @@ void Frame::rotate_world(float fAngle, float x, float y, float z)
 // Rotate around a local axis
 void Frame::rotate_local(float fAngle, float x, float y, float z)
 {
-	vec3 vWorldVect;
-	vec3 vLocalVect(x, y, z);
+	rsw::vec3 vWorldVect;
+	rsw::vec3 vLocalVect(x, y, z);
 
 	vWorldVect = local_to_world(vLocalVect, true);
 
@@ -177,12 +177,12 @@ void Frame::rotate_local(float fAngle, float x, float y, float z)
 // and position on the point
 // Is it better to stick to the convention that the destination always comes
 // first, or use the conventions that "sounds" like the function...
-vec3 Frame::local_to_world(const vec3 vLocal, bool bRotOnly)
+rsw::vec3 Frame::local_to_world(const rsw::vec3 vLocal, bool bRotOnly)
 {
-	vec3 vWorld;
+	rsw::vec3 vWorld;
 
 		// Create the rotation matrix based on the vectors
-	mat4 rotMat = get_matrix(true);
+	rsw::mat4 rotMat = get_matrix(true);
 
 	// Do the rotation (inline it, and remove 4th column...)
 	vWorld.x = rotMat[0] * vLocal.x + rotMat[4] * vLocal.y + rotMat[8] *  vLocal.z;
@@ -199,12 +199,12 @@ vec3 Frame::local_to_world(const vec3 vLocal, bool bRotOnly)
 
 	//THIS IS WHERE I AM!
 	// Change world coordinates into "local" coordinates
-//         vec3 WorldToLocal(const vec3 vWorld)
+//         rsw::vec3 WorldToLocal(const rsw::vec3 vWorld)
 //         {
 //
 // 			////////////////////////////////////////////////
 //             // Translate the origin
-//         	vec3 local = vWorld - origin;
+//         	rsw::vec3 local = vWorld - origin;
 //
 //         	matrix44 rotMat = get_matrix(true);
 //

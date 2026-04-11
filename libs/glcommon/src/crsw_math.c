@@ -1,5 +1,78 @@
 #include "crsw_math.h"
 
+// NEON optimized matrix multiplication for ARM platforms
+#if defined(__aarch64__) || defined(__ARM_NEON) || defined(ARCH_ARM)
+#include <arm_neon.h>
+
+static inline void neon_mult_m2_m2(float* c, const float* a, const float* b)
+{
+    // Load matrix B columns (2x2 matrix stored as 4 floats)
+    float32x2_t b0 = vld1_f32(b);      // b[0], b[1] - first column
+    float32x2_t b1 = vld1_f32(b + 2);  // b[2], b[3] - second column
+
+    // Process each row of A
+    for (int i = 0; i < 2; i++) {
+        float32x2_t a_vec = vld1_f32(a + i * 2);
+
+        // Calculate: c[i*2] = a[i*2]*b[0] + a[i*2+1]*b[2]
+        //           c[i*2+1] = a[i*2]*b[1] + a[i*2+1]*b[3]
+        float32x2_t result = vmul_n_f32(b0, vget_lane_f32(a_vec, 0));
+        result = vmla_n_f32(result, b1, vget_lane_f32(a_vec, 1));
+
+        vst1_f32(c + i * 2, result);
+    }
+}
+
+static inline void neon_mult_m3_m3(float* c, const float* a, const float* b)
+{
+    // Load matrix B columns (3x3 matrix stored as 9 floats, column-major)
+    // b[0-2], b[3-5], b[6-8]
+    float32x4_t b0 = vld1q_f32(b);      // b[0], b[1], b[2], (unused)
+    float32x4_t b1 = vld1q_f32(b + 3);  // b[3], b[4], b[5], (unused)
+    float32x4_t b2 = vld1q_f32(b + 6);  // b[6], b[7], b[8], (unused)
+
+    for (int i = 0; i < 3; i++) {
+        float32x4_t a_vec = vld1q_f32(a + i * 3);
+
+        // Calculate dot product for each column
+        float32x4_t result = vmulq_n_f32(b0, vgetq_lane_f32(a_vec, 0));
+        result = vmlaq_n_f32(result, b1, vgetq_lane_f32(a_vec, 1));
+        result = vmlaq_n_f32(result, b2, vgetq_lane_f32(a_vec, 2));
+
+        // Store only first 3 elements
+        vst1q_f32(c + i * 3, result);
+    }
+}
+
+static inline void neon_mult_m4_m4(float* c, const float* a, const float* b)
+{
+    // Load columns of matrix B
+    float32x4_t b0 = vld1q_f32(b);
+    float32x4_t b1 = vld1q_f32(b + 4);
+    float32x4_t b2 = vld1q_f32(b + 8);
+    float32x4_t b3 = vld1q_f32(b + 12);
+
+    for (int i = 0; i < 4; i++) {
+        float32x4_t a_vec = vld1q_f32(a + i * 4);
+
+        // Calculate dot product
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 3)), b3);
+
+        vst1q_f32(c + i * 4, result);
+    }
+}
+
+#define CRSW_NEON_ENABLED 1
+
+#else
+
+#define CRSW_NEON_ENABLED 0
+
+#endif
+
 
 extern inline vec2 make_v2(float x, float y);
 extern inline vec2 neg_v2(vec2 v);
@@ -181,6 +254,9 @@ extern inline void setw_m4v4(mat4 m, vec4 v);
 
 void mult_m2_m2(mat2 c, mat2 a, mat2 b)
 {
+#if CRSW_NEON_ENABLED
+	neon_mult_m2_m2(c, a, b);
+#else
 #ifndef ROW_MAJOR
 	c[0] = a[0]*b[0] + a[2]*b[1];
 	c[2] = a[0]*b[2] + a[2]*b[3];
@@ -194,12 +270,16 @@ void mult_m2_m2(mat2 c, mat2 a, mat2 b)
 	c[2] = a[2]*b[0] + a[3]*b[2];
 	c[3] = a[2]*b[1] + a[3]*b[3];
 #endif
+#endif
 }
 
 extern inline void load_rotation_m2(mat2 mat, float angle);
 
 void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 {
+#if CRSW_NEON_ENABLED
+	neon_mult_m3_m3(c, a, b);
+#else
 #ifndef ROW_MAJOR
 	c[0] = a[0]*b[0] + a[3]*b[1] + a[6]*b[2];
 	c[3] = a[0]*b[3] + a[3]*b[4] + a[6]*b[5];
@@ -224,6 +304,7 @@ void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 	c[6] = a[6]*b[0] + a[7]*b[3] + a[8]*b[6];
 	c[7] = a[6]*b[1] + a[7]*b[4] + a[8]*b[7];
 	c[8] = a[6]*b[2] + a[7]*b[5] + a[8]*b[8];
+#endif
 #endif
 }
 
@@ -285,6 +366,9 @@ void load_rotation_m3(mat3 mat, vec3 v, float angle)
 //TODO use restrict?
 void mult_m4_m4(mat4 c, mat4 a, mat4 b)
 {
+#if CRSW_NEON_ENABLED
+	neon_mult_m4_m4(c, a, b);
+#else
 #ifndef ROW_MAJOR
 	c[ 0] = a[0]*b[ 0] + a[4]*b[ 1] + a[8]*b[ 2] + a[12]*b[ 3];
 	c[ 4] = a[0]*b[ 4] + a[4]*b[ 5] + a[8]*b[ 6] + a[12]*b[ 7];
@@ -326,6 +410,7 @@ void mult_m4_m4(mat4 c, mat4 a, mat4 b)
 	c[13] = a[12]*b[1] + a[13]*b[5] + a[14]*b[9] + a[15]*b[13];
 	c[14] = a[12]*b[2] + a[13]*b[6] + a[14]*b[10] + a[15]*b[14];
 	c[15] = a[12]*b[3] + a[13]*b[7] + a[14]*b[11] + a[15]*b[15];
+#endif
 #endif
 }
 

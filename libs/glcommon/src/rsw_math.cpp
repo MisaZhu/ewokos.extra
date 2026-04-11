@@ -1,12 +1,15 @@
 #include "rsw_math.h"
 
+#ifdef USING_PORTABLEGL
+#include <portablegl/portablegl.h>
+#endif
+
 namespace rsw
 {
 
 mat2 operator*(const mat2& a, const mat2& b)
 {
 	mat2 tmp;
-	//could use setx/y/z functions and no ifdef?
 #ifndef ROW_MAJOR
 	tmp[0] = dot(a.x(), b.c1());
 	tmp[2] = dot(a.x(), b.c2());
@@ -25,7 +28,6 @@ mat2 operator*(const mat2& a, const mat2& b)
 mat3 operator*(const mat3& a, const mat3& b)
 {
 	mat3 tmp;
-	//could use setx/y/z functions and no ifdef?
 #ifndef ROW_MAJOR
 	tmp[0] = dot(a.x(), b.c1());
 	tmp[3] = dot(a.x(), b.c2());
@@ -59,7 +61,6 @@ void load_rotation_mat3(mat3& mat, vec3 v, float angle)
 	s = float(std::sin(angle));
 	c = float(std::cos(angle));
 
-	// Rotation matrix is normalized
 	v.normalize();
 
 	xx = v.x * v.x;
@@ -106,6 +107,20 @@ void load_rotation_mat3(mat3& mat, vec3 v, float angle)
  * mat4
  */
 
+#ifdef USING_PORTABLEGL
+
+mat4 operator*(const mat4& a, const mat4& b)
+{
+	mat4 tmp;
+	float a_tmp[16], b_tmp[16];
+	memcpy(a_tmp, a.matrix, sizeof(a_tmp));
+	memcpy(b_tmp, b.matrix, sizeof(b_tmp));
+	mult_m4_m4(tmp.matrix, a_tmp, b_tmp);
+	return tmp;
+}
+
+#else
+
 mat4 operator*(const mat4& a, const mat4& b)
 {
 	mat4 tmp;
@@ -151,11 +166,10 @@ mat4 operator*(const mat4& a, const mat4& b)
 	tmp[15] = dot(a.w(), b.c4());
 #endif
 
-	//bottom row is already appropriately set to 0 0 0 1 from constructor
-	//but maybe the last multiplications are necessary in some cases
-
 	return tmp;
 }
+
+#endif
 
 void load_rotation_mat4(mat4& mat, vec3 v, float angle)
 {
@@ -165,7 +179,6 @@ void load_rotation_mat4(mat4& mat, vec3 v, float angle)
 	s = float(std::sin(angle));
 	c = float(std::cos(angle));
 
-//	// Rotation matrix is normalized
 	v.normalize();
 
 	xx = v.x * v.x;
@@ -224,8 +237,6 @@ void load_rotation_mat4(mat4& mat, vec3 v, float angle)
 
 
 
-//TODO rewrite/re-grok these functions
-//det(M) = det(transpose(M)) thus no ifdef
 static float det_ij(const mat4& m, const int i, const int j)
 {
 	float ret, mat[3][3];
@@ -255,14 +266,12 @@ mat4 invert_mat4(const mat4& mat)
 	float det, detij;
 	mat4 inverse_mat;
 
-	// calculate 4x4 determinant
 	det = 0.0f;
 	for (i = 0; i < 4; i++) {
 		det += (i & 0x1) ? (-mat.matrix[i] * det_ij(mat, 0, i)) : (mat.matrix[i] * det_ij(mat, 0, i));
 	}
 	det = 1.0f / det;
 
-	// calculate inverse
 	for (i = 0; i < 4; i++) {
 		for (j = 0; j < 4; j++) {
 			detij = det_ij(mat, j, i);
@@ -276,23 +285,16 @@ mat4 invert_mat4(const mat4& mat)
 
 
 
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-//assumes converting from canonical view volume [-1,1]^3
-//works just like glViewport, x and y are lower left corner.  opengl should be 1.
 void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned int height, int opengl)
 {
 	float w, h, l, t, b, r;
 
 	if (opengl) {
-		//See glspec page 104, integer grid is lower left pixel corners
 		w = width, h = height;
 		l = x, b = y;
-		//range is [0, w) x [0 , h)
-		//TODO pick best epsilon?
-		r = l + w - 0.01; //epsilon larger than float precision
+		r = l + w - 0.01;
 		t = b + h - 0.01;
 
 #ifndef ROW_MAJOR
@@ -302,7 +304,6 @@ void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned 
 		mat[12] = (l + r) / 2;
 
 		mat[ 1] = 0;
-		//see below
 		mat[ 5] = (t - b) / 2;
 		mat[ 9] = 0;
 		mat[13] = (b + t) / 2;
@@ -323,7 +324,6 @@ void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned 
 		mat[3] = (l + r) / 2;
 
 		mat[4] = 0;
-		//this used to be negative to flip y till I changed glFramebuffer and draw_pixel to accomplish the same thing
 		mat[5] = (t - b) / 2;
 		mat[6] = 0;
 		mat[7] = (b + t) / 2;
@@ -340,10 +340,6 @@ void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned 
 #endif
 
 	} else {
-		//old way with pixel centers at integer coordinates
-		//see pages 133/4 and 144 of FoCG
-		//necessary for fast integer only bresenham line drawing
-
 		w = width, h = height;
 		l = x - 0.5f;
 		b = y - 0.5f;
@@ -357,7 +353,6 @@ void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned 
 		mat[12] = (l + r) / 2;
 
 		mat[ 1] = 0;
-		//see below
 		mat[ 5] = (t - b) / 2;
 		mat[ 9] = 0;
 		mat[13] = (b + t) / 2;
@@ -378,10 +373,6 @@ void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned 
 		mat[3] = (l + r) / 2;
 
 		mat[4] = 0;
-		//make this negative to reflect y otherwise positive y maps to lower half of the screen
-		//this is mapping the unit square [-1,1]^2 to the window size. x is fine because it increases left to right
-		//but the screen coordinates (ie framebuffer memory) increase top to bottom opposite of the canonical square
-		//negating this is the easiest way to fix it without any side effects.
 		mat[5] = (t - b) / 2;
 		mat[6] = 0;
 		mat[7] = (b + t) / 2;
@@ -400,15 +391,6 @@ void make_viewport_matrix(mat4& mat, int x, int y, unsigned int width, unsigned 
 }
 
 
-//I can't really think of any reason to ever use this matrix alone.
-//You'd always do ortho * pers and really if you're doing perspective projection
-//just use make_perspective_matrix (or less likely make perspective_proj_matrix)
-//
-//This function is really just for completeness sake based off of FoCG 3rd edition pg 152
-//changed slightly.  z_near and z_far are always positive and z_near < z_far
-//
-//Inconsistently, to generate an ortho matrix to multiply with that will get the equivalent
-//of the other 2 functions you'd use -z_near and -z_far and near > far.
 void make_pers_matrix(mat4& mat, float z_near, float z_far)
 {
 #ifndef ROW_MAJOR
@@ -456,8 +438,27 @@ void make_pers_matrix(mat4& mat, float z_near, float z_far)
 
 
 
-// Create a projection matrix
-// Similiar to the old gluPerspective... fov is in radians btw...
+#ifdef USING_PORTABLEGL
+
+void make_perspective_matrix(mat4 &mat, float fov, float aspect, float n, float f)
+{
+	make_perspective_m4(mat.matrix, fov, aspect, n, f);
+}
+
+void make_perspective_proj_matrix(mat4 &mat, float l, float r, float b, float t, float n, float f)
+{
+	float tmp[16];
+	make_perspective_proj_m4(tmp, l, r, b, t, n, f);
+	memcpy(mat.matrix, tmp, sizeof(tmp));
+}
+
+void make_orthographic_matrix(mat4 &mat, float l, float r, float b, float t, float n, float f)
+{
+	make_orthographic_m4(mat.matrix, l, r, b, t, n, f);
+}
+
+#else
+
 void make_perspective_matrix(mat4 &mat, float fov, float aspect, float n, float f)
 {
 	float t = n * tanf(fov * 0.5f);
@@ -516,8 +517,6 @@ void make_perspective_proj_matrix(mat4 &mat, float l, float r, float b, float t,
 
 
 
-//n and f really are near and far not min and max so if you want the standard looking down the -z axis
-// then n > f otherwise n < f
 void make_orthographic_matrix(mat4 &mat, float l, float r, float b, float t, float n, float f)
 {
 #ifndef ROW_MAJOR
@@ -533,7 +532,7 @@ void make_orthographic_matrix(mat4 &mat, float l, float r, float b, float t, flo
 
 	mat[ 2] = 0;
 	mat[ 6] = 0;
-	mat[10] = 2.0f / (f - n);  //removed - in front of 2 . . . book doesn't have it but superbible did
+	mat[10] = 2.0f / (f - n);
 	mat[14] = -((n + f)/(f - n));
 
 	mat[ 3] = 0;
@@ -551,26 +550,19 @@ void make_orthographic_matrix(mat4 &mat, float l, float r, float b, float t, flo
 	mat[7] = -((t + b)/(t - b));
 	mat[8] = 0;
 	mat[9] = 0;
-	mat[10] = 2.0f / (f - n);  //removed - in front of 2 . . . book doesn't have it but superbible did
+	mat[10] = 2.0f / (f - n);
 	mat[11] = -((n + f)/(f - n));
 	mat[12] = 0;
 	mat[13] = 0;
 	mat[14] = 0;
 	mat[15] = 1;
 #endif
-
-
-	//now I know why the superbible had the -
-	//OpenGL uses a left handed canonical view volume [-1,1]^3
-	//ie in Normalized Device Coordinates.  The math/matrix presented in Fundamentals of Computer
-	//Graphics assumes a right handed version of the same volume.  The negative isn't necessary
-	//if you set n and f correctly as near and far not low and high
 }
 
+#endif
 
 
-//per https://www.opengl.org/sdk/docs/man2/xhtml/gluLookAt.xml
-//and glm.g-truc.net (glm/gtc/matrix_transform.inl)
+
 void lookAt(mat4 &mat, vec3 eye, vec3 center, vec3 up)
 {
 	mat = mat4();
@@ -592,13 +584,11 @@ int intersect_segment_plane(vec3 a, vec3 b, Plane p, float& t, vec3& q)
 	vec3 ab = b - a;
 	t = (p.d - dot(p.n, a)) / dot(p.n, ab);
 
-	//if t in [0-1] compute point
 	if (t >= 0.0f && t <= 1.0f) {
 		q = a + t*ab;
 		return 1;
 	}
 
-	//else no intersection
 	return 0;
 }
 
@@ -606,8 +596,4 @@ int intersect_segment_plane(vec3 a, vec3 b, Plane p, float& t, vec3& q)
 
 
 
-
-
-
-
-}	//close robert3dmath namespace
+}	//close rsw namespace

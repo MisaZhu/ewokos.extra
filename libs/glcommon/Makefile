@@ -13,14 +13,12 @@ LIB_GLCOMMON_C_OBJS = \
 	src/c_utils.o \
 	src/cprimitives.o \
 	src/chalfedge.o \
-	src/crsw_math.o \
 	src/gltools.o \
 	src/stb_vorbis.o
 
 # C++ source files
 LIB_GLCOMMON_CPP_OBJS = \
 	src/Frame.o \
-	src/Primitives.o \
 	src/controls.o \
 	src/halfedge.o \
 	src/rsw_glframe.o \

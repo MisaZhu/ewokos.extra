@@ -2,6 +2,10 @@
 #define CRSW_MATH_H
 
 #include <math.h>
+// Undefine macros that conflict with C++ standard library
+#undef trunc
+#undef min
+#undef max
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -1640,7 +1644,7 @@ PGL_VECTORIZE_IVEC(abs)
 PGL_VECTORIZE_VEC(fabsf)
 PGL_STATIC_VECTORIZE_VEC(signf)
 PGL_VECTORIZE_VEC(floorf)
-PGL_VECTORIZE_VEC(truncf)
+PGL_STATIC_VECTORIZE_VEC(truncf)
 PGL_VECTORIZE_VEC(roundf)
 
 // assumes current rounding direction (fegetround/fesetround)

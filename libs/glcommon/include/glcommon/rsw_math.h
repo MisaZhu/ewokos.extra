@@ -2,7 +2,40 @@
 #ifndef RSW_MATH_H
 #define RSW_MATH_H
 
+// Undef portablegl macros if they exist to avoid conflicts with rsw_math types
+#ifdef vec2
+#undef vec2
+#endif
+#ifdef vec3
+#undef vec3
+#endif
+#ifdef vec4
+#undef vec4
+#endif
+#ifdef ivec2
+#undef ivec2
+#endif
+#ifdef ivec3
+#undef ivec3
+#endif
+#ifdef ivec4
+#undef ivec4
+#endif
+#ifdef mat2
+#undef mat2
+#endif
+#ifdef mat3
+#undef mat3
+#endif
+#ifdef mat4
+#undef mat4
+#endif
+
 #include <cmath>
+// Undefine macros that conflict with C++ standard library
+#undef trunc
+#undef min
+#undef max
 
 #include <iostream>
 #include <cstring>

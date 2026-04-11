@@ -1,6 +1,15 @@
 #define PGLDEF
 #include "../include/portablegl/portablegl.h"
 
+// Matrix access macros for extract_rotation_m4
+#ifndef ROW_MAJOR
+#define M44(m, row, col) m[col*4 + row]
+#define M33(m, row, col) m[col*3 + row]
+#else
+#define M44(m, row, col) m[row*4 + col]
+#define M33(m, row, col) m[row*3 + col]
+#endif
+
 #ifdef BSP_BOOST
 #if defined(__aarch64__)
 #include <arm_neon.h>
@@ -118,6 +127,399 @@ static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 
         vst1q_f32(c + i * 4, result);
     }
+}
+
+// Matrix 3x3 multiplication NEON optimization
+static inline void pgl_neon_mult_m3_m3(float* c, const float* a, const float* b)
+{
+    // Load columns of matrix B (3 columns, 3 floats each, padded to 4)
+    float32x4_t b0 = vld1q_f32(b);
+    float32x4_t b1 = vld1q_f32(b + 3);
+    float32x4_t b2 = vld1q_f32(b + 6);
+
+    // Process each row of result
+    for (int i = 0; i < 3; i++) {
+        float32x4_t a_vec = vld1q_f32(a + i * 3);
+
+        // Calculate dot product: c[i] = a[i][0]*b[0] + a[i][1]*b[1] + a[i][2]*b[2]
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
+
+        // Store 3 floats (ignore the 4th)
+        vst1q_f32(c + i * 3, result);
+    }
+}
+
+// Matrix 2x2 multiplication NEON optimization
+static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
+{
+    // Load columns of matrix B (2 columns, 2 floats each)
+    float32x2_t b0 = vld1_f32(b);
+    float32x2_t b1 = vld1_f32(b + 2);
+
+    // Process each row of result
+    for (int i = 0; i < 2; i++) {
+        float32x2_t a_vec = vld1_f32(a + i * 2);
+
+        // Calculate dot product: c[i] = a[i][0]*b[0] + a[i][1]*b[1]
+        float32x2_t result = vmul_n_f32(b0, vget_lane_f32(a_vec, 0));
+        result = vmla_n_f32(result, b1, vget_lane_f32(a_vec, 1));
+
+        vst1_f32(c + i * 2, result);
+    }
+}
+
+// Matrix-vector multiplication NEON optimizations
+static inline void pgl_neon_mult_m4_v4(vec4* r, const float* m, const vec4 v)
+{
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 4);
+    float32x4_t c2 = vld1q_f32(m + 8);
+    float32x4_t c3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, c0);
+    res = vmlaq_f32(res, vy, c1);
+    res = vmlaq_f32(res, vz, c2);
+    res = vmlaq_f32(res, vw, c3);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+    r->w = vgetq_lane_f32(res, 3);
+}
+
+static inline void pgl_neon_mult_m3_v3(vec3* r, const float* m, const vec3 v)
+{
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 3);
+    float32x4_t c2 = vld1q_f32(m + 6);
+
+    float32x4_t res = vmulq_f32(vx, c0);
+    res = vmlaq_f32(res, vy, c1);
+    res = vmlaq_f32(res, vz, c2);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+}
+
+static inline void pgl_neon_mult_m2_v2(vec2* r, const float* m, const vec2 v)
+{
+    float32x2_t vx = vdup_n_f32(v.x);
+    float32x2_t vy = vdup_n_f32(v.y);
+
+    float32x2_t c0 = vld1_f32(m);
+    float32x2_t c1 = vld1_f32(m + 2);
+
+    float32x2_t res = vmul_f32(vx, c0);
+    res = vmla_f32(res, vy, c1);
+
+    r->x = vget_lane_f32(res, 0);
+    r->y = vget_lane_f32(res, 1);
+}
+
+// Load rotation matrix NEON optimizations
+static inline void pgl_neon_load_rotation_m2(float* mat, float s, float c)
+{
+    float32x2_t cos_vec = vdup_n_f32(c);
+    float32x2_t sin_vec = vdup_n_f32(s);
+    float32x2_t neg_sin_vec = vdup_n_f32(-s);
+
+#ifndef ROW_MAJOR
+    // [ c  -s ]
+    // [ s   c ]
+    float32x2_t col0 = vzip_f32(cos_vec, sin_vec).val[0];
+    float32x2_t col1 = vzip_f32(neg_sin_vec, cos_vec).val[0];
+    vst1_f32(mat, col0);
+    vst1_f32(mat + 2, col1);
+#else
+    // [ c   s ]
+    // [ -s  c ]
+    float32x2_t row0 = vzip_f32(cos_vec, sin_vec).val[0];
+    float32x2_t row1 = vzip_f32(neg_sin_vec, cos_vec).val[0];
+    vst1_f32(mat, row0);
+    vst1_f32(mat + 2, row1);
+#endif
+}
+
+static inline void pgl_neon_load_rotation_m3(float* mat, vec3 v, float s, float c)
+{
+    float one_c = 1.0f - c;
+
+    // Compute intermediate values
+    float32x4_t v_vec = vld1q_f32(&v.x);
+    float32x4_t v_squared = vmulq_f32(v_vec, v_vec);
+    float xx = vgetq_lane_f32(v_squared, 0);
+    float yy = vgetq_lane_f32(v_squared, 1);
+    float zz = vgetq_lane_f32(v_squared, 2);
+
+    // Compute cross products using NEON
+    float32x4_t v_yzx = vextq_f32(v_vec, v_vec, 1);  // [y, z, x, w]
+    float32x4_t v_zxy = vextq_f32(v_vec, v_vec, 2);  // [z, x, y, w]
+    float32x4_t xy_yz_zx = vmulq_f32(v_vec, v_yzx);  // [xy, yz, zx, ...]
+
+    float xy = vgetq_lane_f32(xy_yz_zx, 0);
+    float yz = vgetq_lane_f32(xy_yz_zx, 1);
+    float zx = vgetq_lane_f32(xy_yz_zx, 2);
+
+    // Compute scaled values
+    float32x4_t v_s = vmulq_n_f32(v_vec, s);
+    float xs = vgetq_lane_f32(v_s, 0);
+    float ys = vgetq_lane_f32(v_s, 1);
+    float zs = vgetq_lane_f32(v_s, 2);
+
+    // Compute one_c * products
+    float32x4_t one_c_v = vdupq_n_f32(one_c);
+    float32x4_t xx_yy_zz = vmulq_n_f32(v_squared, one_c);
+    float32x4_t xy_yz_zx_vec = vmulq_n_f32(xy_yz_zx, one_c);
+
+    float one_c_xx = vgetq_lane_f32(xx_yy_zz, 0) + c;
+    float one_c_yy = vgetq_lane_f32(xx_yy_zz, 1) + c;
+    float one_c_zz = vgetq_lane_f32(xx_yy_zz, 2) + c;
+    float one_c_xy = vgetq_lane_f32(xy_yz_zx_vec, 0);
+    float one_c_yz = vgetq_lane_f32(xy_yz_zx_vec, 1);
+    float one_c_zx = vgetq_lane_f32(xy_yz_zx_vec, 2);
+
+#ifndef ROW_MAJOR
+    mat[0] = one_c_xx;           mat[3] = one_c_xy - zs;      mat[6] = one_c_zx + ys;
+    mat[1] = one_c_xy + zs;      mat[4] = one_c_yy;           mat[7] = one_c_yz - xs;
+    mat[2] = one_c_zx - ys;      mat[5] = one_c_yz + xs;      mat[8] = one_c_zz;
+#else
+    mat[0] = one_c_xx;           mat[1] = one_c_xy - zs;      mat[2] = one_c_zx + ys;
+    mat[3] = one_c_xy + zs;      mat[4] = one_c_yy;           mat[5] = one_c_yz - xs;
+    mat[6] = one_c_zx - ys;      mat[7] = one_c_yz + xs;      mat[8] = one_c_zz;
+#endif
+}
+
+static inline void pgl_neon_load_rotation_m4(float* mat, vec3 v, float s, float c)
+{
+    float one_c = 1.0f - c;
+
+    // Compute intermediate values using NEON
+    float32x4_t v_vec = vld1q_f32(&v.x);
+    float32x4_t v_squared = vmulq_f32(v_vec, v_vec);
+
+    // Compute cross products
+    float32x4_t v_yzx = vextq_f32(v_vec, v_vec, 1);
+    float32x4_t xy_yz_zx = vmulq_f32(v_vec, v_yzx);
+
+    // Compute scaled values
+    float32x4_t v_s = vmulq_n_f32(v_vec, s);
+
+    // Compute one_c * products
+    float32x4_t one_c_v = vdupq_n_f32(one_c);
+    float32x4_t xx_yy_zz = vmlaq_n_f32(vdupq_n_f32(c), v_squared, one_c);
+    float32x4_t xy_yz_zx_vec = vmulq_n_f32(xy_yz_zx, one_c);
+
+    float one_c_xx = vgetq_lane_f32(xx_yy_zz, 0);
+    float one_c_yy = vgetq_lane_f32(xx_yy_zz, 1);
+    float one_c_zz = vgetq_lane_f32(xx_yy_zz, 2);
+    float one_c_xy = vgetq_lane_f32(xy_yz_zx_vec, 0);
+    float one_c_yz = vgetq_lane_f32(xy_yz_zx_vec, 1);
+    float one_c_zx = vgetq_lane_f32(xy_yz_zx_vec, 2);
+    float xs = vgetq_lane_f32(v_s, 0);
+    float ys = vgetq_lane_f32(v_s, 1);
+    float zs = vgetq_lane_f32(v_s, 2);
+
+#ifndef ROW_MAJOR
+    mat[0] = one_c_xx;   mat[4] = one_c_xy - zs;  mat[8] = one_c_zx + ys;  mat[12] = 0.0f;
+    mat[1] = one_c_xy + zs;  mat[5] = one_c_yy;   mat[9] = one_c_yz - xs;  mat[13] = 0.0f;
+    mat[2] = one_c_zx - ys;  mat[6] = one_c_yz + xs;  mat[10] = one_c_zz;  mat[14] = 0.0f;
+    mat[3] = 0.0f;       mat[7] = 0.0f;       mat[11] = 0.0f;      mat[15] = 1.0f;
+#else
+    mat[0] = one_c_xx;   mat[1] = one_c_xy - zs;  mat[2] = one_c_zx + ys;  mat[3] = 0.0f;
+    mat[4] = one_c_xy + zs;  mat[5] = one_c_yy;   mat[6] = one_c_yz - xs;  mat[7] = 0.0f;
+    mat[8] = one_c_zx - ys;  mat[9] = one_c_yz + xs;  mat[10] = one_c_zz;  mat[11] = 0.0f;
+    mat[12] = 0.0f;      mat[13] = 0.0f;      mat[14] = 0.0f;      mat[15] = 1.0f;
+#endif
+}
+
+// Scale matrix NEON optimizations
+static inline void pgl_neon_scale_m3(float* m, float x, float y, float z)
+{
+    // Create vectors for diagonal and zeros
+    float32x4_t diag1 = {x, 0.0f, 0.0f, 0.0f};
+    float32x4_t diag2 = {0.0f, y, 0.0f, 0.0f};
+    float32x4_t diag3 = {0.0f, 0.0f, z, 0.0f};
+
+#ifndef ROW_MAJOR
+    // Column major: store columns
+    // Col 0: [x, 0, 0]
+    // Col 1: [0, y, 0]
+    // Col 2: [0, 0, z]
+    vst1q_f32(m, diag1);
+    vst1q_f32(m + 3, diag2);
+    vst1q_f32(m + 6, diag3);
+#else
+    // Row major: store rows
+    // Row 0: [x, 0, 0]
+    // Row 1: [0, y, 0]
+    // Row 2: [0, 0, z]
+    vst1q_f32(m, diag1);
+    vst1q_f32(m + 3, diag2);
+    vst1q_f32(m + 6, diag3);
+#endif
+}
+
+static inline void pgl_neon_scale_m4(float* m, float x, float y, float z)
+{
+    float32x4_t zero = vdupq_n_f32(0.0f);
+    float32x4_t one = vdupq_n_f32(1.0f);
+
+#ifndef ROW_MAJOR
+    // Column major layout
+    // Col 0: [x, 0, 0, 0]
+    // Col 1: [0, y, 0, 0]
+    // Col 2: [0, 0, z, 0]
+    // Col 3: [0, 0, 0, 1]
+    float32x4_t col0 = {x, 0.0f, 0.0f, 0.0f};
+    float32x4_t col1 = {0.0f, y, 0.0f, 0.0f};
+    float32x4_t col2 = {0.0f, 0.0f, z, 0.0f};
+    float32x4_t col3 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    vst1q_f32(m, col0);
+    vst1q_f32(m + 4, col1);
+    vst1q_f32(m + 8, col2);
+    vst1q_f32(m + 12, col3);
+#else
+    // Row major layout
+    // Row 0: [x, 0, 0, 0]
+    // Row 1: [0, y, 0, 0]
+    // Row 2: [0, 0, z, 0]
+    // Row 3: [0, 0, 0, 1]
+    float32x4_t row0 = {x, 0.0f, 0.0f, 0.0f};
+    float32x4_t row1 = {0.0f, y, 0.0f, 0.0f};
+    float32x4_t row2 = {0.0f, 0.0f, z, 0.0f};
+    float32x4_t row3 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    vst1q_f32(m, row0);
+    vst1q_f32(m + 4, row1);
+    vst1q_f32(m + 8, row2);
+    vst1q_f32(m + 12, row3);
+#endif
+}
+
+// Translation matrix NEON optimization
+static inline void pgl_neon_translation_m4(float* m, float x, float y, float z)
+{
+#ifndef ROW_MAJOR
+    // Column major layout
+    // Col 0: [1, 0, 0, 0]
+    // Col 1: [0, 1, 0, 0]
+    // Col 2: [0, 0, 1, 0]
+    // Col 3: [x, y, z, 1]
+    float32x4_t col0 = {1.0f, 0.0f, 0.0f, 0.0f};
+    float32x4_t col1 = {0.0f, 1.0f, 0.0f, 0.0f};
+    float32x4_t col2 = {0.0f, 0.0f, 1.0f, 0.0f};
+    float32x4_t col3 = {x, y, z, 1.0f};
+
+    vst1q_f32(m, col0);
+    vst1q_f32(m + 4, col1);
+    vst1q_f32(m + 8, col2);
+    vst1q_f32(m + 12, col3);
+#else
+    // Row major layout
+    // Row 0: [1, 0, 0, x]
+    // Row 1: [0, 1, 0, y]
+    // Row 2: [0, 0, 1, z]
+    // Row 3: [0, 0, 0, 1]
+    float32x4_t row0 = {1.0f, 0.0f, 0.0f, x};
+    float32x4_t row1 = {0.0f, 1.0f, 0.0f, y};
+    float32x4_t row2 = {0.0f, 0.0f, 1.0f, z};
+    float32x4_t row3 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    vst1q_f32(m, row0);
+    vst1q_f32(m + 4, row1);
+    vst1q_f32(m + 8, row2);
+    vst1q_f32(m + 12, row3);
+#endif
+}
+
+// Extract rotation matrix NEON optimization
+static inline void pgl_neon_extract_rotation_m4(float* dst, const float* src, int normalize)
+{
+    // Load 3 columns/rows from source (first 3 elements of each column/row for column-major)
+#ifndef ROW_MAJOR
+    // Column major: extract first 3 rows from first 3 columns
+    float32x4_t col0 = vld1q_f32(src);
+    float32x4_t col1 = vld1q_f32(src + 4);
+    float32x4_t col2 = vld1q_f32(src + 8);
+
+    // Extract first 3 elements from each column
+    float32x4_t row0 = {vgetq_lane_f32(col0, 0), vgetq_lane_f32(col1, 0), vgetq_lane_f32(col2, 0), 0.0f};
+    float32x4_t row1 = {vgetq_lane_f32(col0, 1), vgetq_lane_f32(col1, 1), vgetq_lane_f32(col2, 1), 0.0f};
+    float32x4_t row2 = {vgetq_lane_f32(col0, 2), vgetq_lane_f32(col1, 2), vgetq_lane_f32(col2, 2), 0.0f};
+
+    if (normalize) {
+        // Normalize each row using NEON
+        float32x4_t sq0 = vmulq_f32(row0, row0);
+        float32x4_t sq1 = vmulq_f32(row1, row1);
+        float32x4_t sq2 = vmulq_f32(row2, row2);
+
+        // Horizontal add for each row's length squared
+        float len0 = vgetq_lane_f32(sq0, 0) + vgetq_lane_f32(sq0, 1) + vgetq_lane_f32(sq0, 2);
+        float len1 = vgetq_lane_f32(sq1, 0) + vgetq_lane_f32(sq1, 1) + vgetq_lane_f32(sq1, 2);
+        float len2 = vgetq_lane_f32(sq2, 0) + vgetq_lane_f32(sq2, 1) + vgetq_lane_f32(sq2, 2);
+
+        len0 = 1.0f / sqrtf(len0);
+        len1 = 1.0f / sqrtf(len1);
+        len2 = 1.0f / sqrtf(len2);
+
+        row0 = vmulq_n_f32(row0, len0);
+        row1 = vmulq_n_f32(row1, len1);
+        row2 = vmulq_n_f32(row2, len2);
+    }
+
+    // Store to destination (3x3 matrix)
+    vst1q_f32(dst, row0);
+    vst1q_f32(dst + 3, row1);
+    vst1q_f32(dst + 6, row2);
+#else
+    // Row major: extract first 3 columns from first 3 rows
+    float32x4_t row0 = vld1q_f32(src);
+    float32x4_t row1 = vld1q_f32(src + 4);
+    float32x4_t row2 = vld1q_f32(src + 8);
+
+    // Extract first 3 elements from each row
+    float32x4x2_t zip01 = vzipq_f32(row0, row1);
+    float32x4x2_t zip2 = vzipq_f32(row2, vdupq_n_f32(0.0f));
+
+    float32x4_t col0 = {vgetq_lane_f32(row0, 0), vgetq_lane_f32(row1, 0), vgetq_lane_f32(row2, 0), 0.0f};
+    float32x4_t col1 = {vgetq_lane_f32(row0, 1), vgetq_lane_f32(row1, 1), vgetq_lane_f32(row2, 1), 0.0f};
+    float32x4_t col2 = {vgetq_lane_f32(row0, 2), vgetq_lane_f32(row1, 2), vgetq_lane_f32(row2, 2), 0.0f};
+
+    if (normalize) {
+        float32x4_t sq0 = vmulq_f32(col0, col0);
+        float32x4_t sq1 = vmulq_f32(col1, col1);
+        float32x4_t sq2 = vmulq_f32(col2, col2);
+
+        float len0 = vgetq_lane_f32(sq0, 0) + vgetq_lane_f32(sq0, 1) + vgetq_lane_f32(sq0, 2);
+        float len1 = vgetq_lane_f32(sq1, 0) + vgetq_lane_f32(sq1, 1) + vgetq_lane_f32(sq1, 2);
+        float len2 = vgetq_lane_f32(sq2, 0) + vgetq_lane_f32(sq2, 1) + vgetq_lane_f32(sq2, 2);
+
+        len0 = 1.0f / sqrtf(len0);
+        len1 = 1.0f / sqrtf(len1);
+        len2 = 1.0f / sqrtf(len2);
+
+        col0 = vmulq_n_f32(col0, len0);
+        col1 = vmulq_n_f32(col1, len1);
+        col2 = vmulq_n_f32(col2, len2);
+    }
+
+    vst1q_f32(dst, col0);
+    vst1q_f32(dst + 3, col1);
+    vst1q_f32(dst + 6, col2);
+#endif
 }
 
 // Vertex transformation NEON optimization
@@ -435,6 +837,327 @@ static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 
         vst1q_f32(c + i * 4, result);
     }
+}
+
+// ARM 32-bit matrix 3x3 multiplication
+static inline void pgl_neon_mult_m3_m3(float* c, const float* a, const float* b)
+{
+    float32x4_t b0 = vld1q_f32(b);
+    float32x4_t b1 = vld1q_f32(b + 3);
+    float32x4_t b2 = vld1q_f32(b + 6);
+
+    for (int i = 0; i < 3; i++) {
+        float32x4_t a_vec = vld1q_f32(a + i * 3);
+
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_vec, 0)), b0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 1)), b1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(a_vec, 2)), b2);
+
+        vst1q_f32(c + i * 3, result);
+    }
+}
+
+// ARM 32-bit matrix 2x2 multiplication
+static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
+{
+    float32x2_t b0 = vld1_f32(b);
+    float32x2_t b1 = vld1_f32(b + 2);
+
+    for (int i = 0; i < 2; i++) {
+        float32x2_t a_vec = vld1_f32(a + i * 2);
+
+        float32x2_t result = vmul_n_f32(b0, vget_lane_f32(a_vec, 0));
+        result = vmla_n_f32(result, b1, vget_lane_f32(a_vec, 1));
+
+        vst1_f32(c + i * 2, result);
+    }
+}
+
+// ARM 32-bit load rotation matrix NEON optimizations
+static inline void pgl_neon_load_rotation_m2(float* mat, float s, float c)
+{
+    float32x2_t cos_vec = vdup_n_f32(c);
+    float32x2_t sin_vec = vdup_n_f32(s);
+    float32x2_t neg_sin_vec = vdup_n_f32(-s);
+
+#ifndef ROW_MAJOR
+    float32x2_t col0 = vzip_f32(cos_vec, sin_vec).val[0];
+    float32x2_t col1 = vzip_f32(neg_sin_vec, cos_vec).val[0];
+    vst1_f32(mat, col0);
+    vst1_f32(mat + 2, col1);
+#else
+    float32x2_t row0 = vzip_f32(cos_vec, sin_vec).val[0];
+    float32x2_t row1 = vzip_f32(neg_sin_vec, cos_vec).val[0];
+    vst1_f32(mat, row0);
+    vst1_f32(mat + 2, row1);
+#endif
+}
+
+static inline void pgl_neon_load_rotation_m3(float* mat, vec3 v, float s, float c)
+{
+    float one_c = 1.0f - c;
+
+    float32x4_t v_vec = vld1q_f32(&v.x);
+    float32x4_t v_squared = vmulq_f32(v_vec, v_vec);
+
+    float32x4_t v_yzx = vextq_f32(v_vec, v_vec, 1);
+    float32x4_t xy_yz_zx = vmulq_f32(v_vec, v_yzx);
+
+    float32x4_t v_s = vmulq_n_f32(v_vec, s);
+
+    float32x4_t xx_yy_zz = vmulq_n_f32(v_squared, one_c);
+    float32x4_t xy_yz_zx_vec = vmulq_n_f32(xy_yz_zx, one_c);
+
+    float one_c_xx = vgetq_lane_f32(xx_yy_zz, 0) + c;
+    float one_c_yy = vgetq_lane_f32(xx_yy_zz, 1) + c;
+    float one_c_zz = vgetq_lane_f32(xx_yy_zz, 2) + c;
+    float one_c_xy = vgetq_lane_f32(xy_yz_zx_vec, 0);
+    float one_c_yz = vgetq_lane_f32(xy_yz_zx_vec, 1);
+    float one_c_zx = vgetq_lane_f32(xy_yz_zx_vec, 2);
+    float xs = vgetq_lane_f32(v_s, 0);
+    float ys = vgetq_lane_f32(v_s, 1);
+    float zs = vgetq_lane_f32(v_s, 2);
+
+#ifndef ROW_MAJOR
+    mat[0] = one_c_xx;           mat[3] = one_c_xy - zs;      mat[6] = one_c_zx + ys;
+    mat[1] = one_c_xy + zs;      mat[4] = one_c_yy;           mat[7] = one_c_yz - xs;
+    mat[2] = one_c_zx - ys;      mat[5] = one_c_yz + xs;      mat[8] = one_c_zz;
+#else
+    mat[0] = one_c_xx;           mat[1] = one_c_xy - zs;      mat[2] = one_c_zx + ys;
+    mat[3] = one_c_xy + zs;      mat[4] = one_c_yy;           mat[5] = one_c_yz - xs;
+    mat[6] = one_c_zx - ys;      mat[7] = one_c_yz + xs;      mat[8] = one_c_zz;
+#endif
+}
+
+static inline void pgl_neon_load_rotation_m4(float* mat, vec3 v, float s, float c)
+{
+    float one_c = 1.0f - c;
+
+    float32x4_t v_vec = vld1q_f32(&v.x);
+    float32x4_t v_squared = vmulq_f32(v_vec, v_vec);
+
+    float32x4_t v_yzx = vextq_f32(v_vec, v_vec, 1);
+    float32x4_t xy_yz_zx = vmulq_f32(v_vec, v_yzx);
+
+    float32x4_t v_s = vmulq_n_f32(v_vec, s);
+
+    float32x4_t xx_yy_zz = vmlaq_n_f32(vdupq_n_f32(c), v_squared, one_c);
+    float32x4_t xy_yz_zx_vec = vmulq_n_f32(xy_yz_zx, one_c);
+
+    float one_c_xx = vgetq_lane_f32(xx_yy_zz, 0);
+    float one_c_yy = vgetq_lane_f32(xx_yy_zz, 1);
+    float one_c_zz = vgetq_lane_f32(xx_yy_zz, 2);
+    float one_c_xy = vgetq_lane_f32(xy_yz_zx_vec, 0);
+    float one_c_yz = vgetq_lane_f32(xy_yz_zx_vec, 1);
+    float one_c_zx = vgetq_lane_f32(xy_yz_zx_vec, 2);
+    float xs = vgetq_lane_f32(v_s, 0);
+    float ys = vgetq_lane_f32(v_s, 1);
+    float zs = vgetq_lane_f32(v_s, 2);
+
+#ifndef ROW_MAJOR
+    mat[0] = one_c_xx;   mat[4] = one_c_xy - zs;  mat[8] = one_c_zx + ys;  mat[12] = 0.0f;
+    mat[1] = one_c_xy + zs;  mat[5] = one_c_yy;   mat[9] = one_c_yz - xs;  mat[13] = 0.0f;
+    mat[2] = one_c_zx - ys;  mat[6] = one_c_yz + xs;  mat[10] = one_c_zz;  mat[14] = 0.0f;
+    mat[3] = 0.0f;       mat[7] = 0.0f;       mat[11] = 0.0f;      mat[15] = 1.0f;
+#else
+    mat[0] = one_c_xx;   mat[1] = one_c_xy - zs;  mat[2] = one_c_zx + ys;  mat[3] = 0.0f;
+    mat[4] = one_c_xy + zs;  mat[5] = one_c_yy;   mat[6] = one_c_yz - xs;  mat[7] = 0.0f;
+    mat[8] = one_c_zx - ys;  mat[9] = one_c_yz + xs;  mat[10] = one_c_zz;  mat[11] = 0.0f;
+    mat[12] = 0.0f;      mat[13] = 0.0f;      mat[14] = 0.0f;      mat[15] = 1.0f;
+#endif
+}
+
+// ARM 32-bit scale matrix NEON optimizations
+static inline void pgl_neon_scale_m3(float* m, float x, float y, float z)
+{
+    float32x4_t diag1 = {x, 0.0f, 0.0f, 0.0f};
+    float32x4_t diag2 = {0.0f, y, 0.0f, 0.0f};
+    float32x4_t diag3 = {0.0f, 0.0f, z, 0.0f};
+
+#ifndef ROW_MAJOR
+    vst1q_f32(m, diag1);
+    vst1q_f32(m + 3, diag2);
+    vst1q_f32(m + 6, diag3);
+#else
+    vst1q_f32(m, diag1);
+    vst1q_f32(m + 3, diag2);
+    vst1q_f32(m + 6, diag3);
+#endif
+}
+
+static inline void pgl_neon_scale_m4(float* m, float x, float y, float z)
+{
+#ifndef ROW_MAJOR
+    float32x4_t col0 = {x, 0.0f, 0.0f, 0.0f};
+    float32x4_t col1 = {0.0f, y, 0.0f, 0.0f};
+    float32x4_t col2 = {0.0f, 0.0f, z, 0.0f};
+    float32x4_t col3 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    vst1q_f32(m, col0);
+    vst1q_f32(m + 4, col1);
+    vst1q_f32(m + 8, col2);
+    vst1q_f32(m + 12, col3);
+#else
+    float32x4_t row0 = {x, 0.0f, 0.0f, 0.0f};
+    float32x4_t row1 = {0.0f, y, 0.0f, 0.0f};
+    float32x4_t row2 = {0.0f, 0.0f, z, 0.0f};
+    float32x4_t row3 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    vst1q_f32(m, row0);
+    vst1q_f32(m + 4, row1);
+    vst1q_f32(m + 8, row2);
+    vst1q_f32(m + 12, row3);
+#endif
+}
+
+// ARM 32-bit translation matrix NEON optimization
+static inline void pgl_neon_translation_m4(float* m, float x, float y, float z)
+{
+#ifndef ROW_MAJOR
+    float32x4_t col0 = {1.0f, 0.0f, 0.0f, 0.0f};
+    float32x4_t col1 = {0.0f, 1.0f, 0.0f, 0.0f};
+    float32x4_t col2 = {0.0f, 0.0f, 1.0f, 0.0f};
+    float32x4_t col3 = {x, y, z, 1.0f};
+
+    vst1q_f32(m, col0);
+    vst1q_f32(m + 4, col1);
+    vst1q_f32(m + 8, col2);
+    vst1q_f32(m + 12, col3);
+#else
+    float32x4_t row0 = {1.0f, 0.0f, 0.0f, x};
+    float32x4_t row1 = {0.0f, 1.0f, 0.0f, y};
+    float32x4_t row2 = {0.0f, 0.0f, 1.0f, z};
+    float32x4_t row3 = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    vst1q_f32(m, row0);
+    vst1q_f32(m + 4, row1);
+    vst1q_f32(m + 8, row2);
+    vst1q_f32(m + 12, row3);
+#endif
+}
+
+// ARM 32-bit extract rotation matrix NEON optimization
+static inline void pgl_neon_extract_rotation_m4(float* dst, const float* src, int normalize)
+{
+#ifndef ROW_MAJOR
+    float32x4_t col0 = vld1q_f32(src);
+    float32x4_t col1 = vld1q_f32(src + 4);
+    float32x4_t col2 = vld1q_f32(src + 8);
+
+    float32x4_t row0 = {vgetq_lane_f32(col0, 0), vgetq_lane_f32(col1, 0), vgetq_lane_f32(col2, 0), 0.0f};
+    float32x4_t row1 = {vgetq_lane_f32(col0, 1), vgetq_lane_f32(col1, 1), vgetq_lane_f32(col2, 1), 0.0f};
+    float32x4_t row2 = {vgetq_lane_f32(col0, 2), vgetq_lane_f32(col1, 2), vgetq_lane_f32(col2, 2), 0.0f};
+
+    if (normalize) {
+        float32x4_t sq0 = vmulq_f32(row0, row0);
+        float32x4_t sq1 = vmulq_f32(row1, row1);
+        float32x4_t sq2 = vmulq_f32(row2, row2);
+
+        float len0 = vgetq_lane_f32(sq0, 0) + vgetq_lane_f32(sq0, 1) + vgetq_lane_f32(sq0, 2);
+        float len1 = vgetq_lane_f32(sq1, 0) + vgetq_lane_f32(sq1, 1) + vgetq_lane_f32(sq1, 2);
+        float len2 = vgetq_lane_f32(sq2, 0) + vgetq_lane_f32(sq2, 1) + vgetq_lane_f32(sq2, 2);
+
+        len0 = 1.0f / sqrtf(len0);
+        len1 = 1.0f / sqrtf(len1);
+        len2 = 1.0f / sqrtf(len2);
+
+        row0 = vmulq_n_f32(row0, len0);
+        row1 = vmulq_n_f32(row1, len1);
+        row2 = vmulq_n_f32(row2, len2);
+    }
+
+    vst1q_f32(dst, row0);
+    vst1q_f32(dst + 3, row1);
+    vst1q_f32(dst + 6, row2);
+#else
+    float32x4_t row0 = vld1q_f32(src);
+    float32x4_t row1 = vld1q_f32(src + 4);
+    float32x4_t row2 = vld1q_f32(src + 8);
+
+    float32x4_t col0 = {vgetq_lane_f32(row0, 0), vgetq_lane_f32(row1, 0), vgetq_lane_f32(row2, 0), 0.0f};
+    float32x4_t col1 = {vgetq_lane_f32(row0, 1), vgetq_lane_f32(row1, 1), vgetq_lane_f32(row2, 1), 0.0f};
+    float32x4_t col2 = {vgetq_lane_f32(row0, 2), vgetq_lane_f32(row1, 2), vgetq_lane_f32(row2, 2), 0.0f};
+
+    if (normalize) {
+        float32x4_t sq0 = vmulq_f32(col0, col0);
+        float32x4_t sq1 = vmulq_f32(col1, col1);
+        float32x4_t sq2 = vmulq_f32(col2, col2);
+
+        float len0 = vgetq_lane_f32(sq0, 0) + vgetq_lane_f32(sq0, 1) + vgetq_lane_f32(sq0, 2);
+        float len1 = vgetq_lane_f32(sq1, 0) + vgetq_lane_f32(sq1, 1) + vgetq_lane_f32(sq1, 2);
+        float len2 = vgetq_lane_f32(sq2, 0) + vgetq_lane_f32(sq2, 1) + vgetq_lane_f32(sq2, 2);
+
+        len0 = 1.0f / sqrtf(len0);
+        len1 = 1.0f / sqrtf(len1);
+        len2 = 1.0f / sqrtf(len2);
+
+        col0 = vmulq_n_f32(col0, len0);
+        col1 = vmulq_n_f32(col1, len1);
+        col2 = vmulq_n_f32(col2, len2);
+    }
+
+    vst1q_f32(dst, col0);
+    vst1q_f32(dst + 3, col1);
+    vst1q_f32(dst + 6, col2);
+#endif
+}
+
+// ARM 32-bit matrix-vector multiplication
+static inline void pgl_neon_mult_m4_v4(vec4* r, const float* m, const vec4 v)
+{
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 4);
+    float32x4_t c2 = vld1q_f32(m + 8);
+    float32x4_t c3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, c0);
+    res = vmlaq_f32(res, vy, c1);
+    res = vmlaq_f32(res, vz, c2);
+    res = vmlaq_f32(res, vw, c3);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+    r->w = vgetq_lane_f32(res, 3);
+}
+
+static inline void pgl_neon_mult_m3_v3(vec3* r, const float* m, const vec3 v)
+{
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+
+    float32x4_t c0 = vld1q_f32(m);
+    float32x4_t c1 = vld1q_f32(m + 3);
+    float32x4_t c2 = vld1q_f32(m + 6);
+
+    float32x4_t res = vmulq_f32(vx, c0);
+    res = vmlaq_f32(res, vy, c1);
+    res = vmlaq_f32(res, vz, c2);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+}
+
+static inline void pgl_neon_mult_m2_v2(vec2* r, const float* m, const vec2 v)
+{
+    float32x2_t vx = vdup_n_f32(v.x);
+    float32x2_t vy = vdup_n_f32(v.y);
+
+    float32x2_t c0 = vld1_f32(m);
+    float32x2_t c1 = vld1_f32(m + 2);
+
+    float32x2_t res = vmul_f32(vx, c0);
+    res = vmla_f32(res, vy, c1);
+
+    r->x = vget_lane_f32(res, 0);
+    r->y = vget_lane_f32(res, 1);
 }
 
 static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const vec4 v)
@@ -913,8 +1636,195 @@ extern inline void setz_m4v4(mat4 m, vec4 v);
 extern inline void setw_m4v4(mat4 m, vec4 v);
 
 
+vec2 mult_m2_v2(mat2 m, vec2 v)
+{
+	vec2 r;
+#if PGL_NEON_ENABLED
+	pgl_neon_mult_m2_v2(&r, m, v);
+#else
+#ifndef ROW_MAJOR
+	r.x = m[0]*v.x + m[2]*v.y;
+	r.y = m[1]*v.x + m[3]*v.y;
+#else
+	r.x = m[0]*v.x + m[1]*v.y;
+	r.y = m[2]*v.x + m[3]*v.y;
+#endif
+#endif
+	return r;
+}
+
+vec3 mult_m3_v3(mat3 m, vec3 v)
+{
+	vec3 r;
+#if PGL_NEON_ENABLED
+	pgl_neon_mult_m3_v3(&r, m, v);
+#else
+#ifndef ROW_MAJOR
+	r.x = m[0]*v.x + m[3]*v.y + m[6]*v.z;
+	r.y = m[1]*v.x + m[4]*v.y + m[7]*v.z;
+	r.z = m[2]*v.x + m[5]*v.y + m[8]*v.z;
+#else
+	r.x = m[0]*v.x + m[1]*v.y + m[2]*v.z;
+	r.y = m[3]*v.x + m[4]*v.y + m[5]*v.z;
+	r.z = m[6]*v.x + m[7]*v.y + m[8]*v.z;
+#endif
+#endif
+	return r;
+}
+
+vec4 mult_m4_v4(mat4 m, vec4 v)
+{
+	vec4 r;
+#if PGL_NEON_ENABLED
+	pgl_neon_mult_m4_v4(&r, m, v);
+#else
+#ifndef ROW_MAJOR
+	r.x = m[0]*v.x + m[4]*v.y + m[8]*v.z + m[12]*v.w;
+	r.y = m[1]*v.x + m[5]*v.y + m[9]*v.z + m[13]*v.w;
+	r.z = m[2]*v.x + m[6]*v.y + m[10]*v.z + m[14]*v.w;
+	r.w = m[3]*v.x + m[7]*v.y + m[11]*v.z + m[15]*v.w;
+#else
+	r.x = m[0]*v.x + m[1]*v.y + m[2]*v.z + m[3]*v.w;
+	r.y = m[4]*v.x + m[5]*v.y + m[6]*v.z + m[7]*v.w;
+	r.z = m[8]*v.x + m[9]*v.y + m[10]*v.z + m[11]*v.w;
+	r.w = m[12]*v.x + m[13]*v.y + m[14]*v.z + m[15]*v.w;
+#endif
+#endif
+	return r;
+}
+
+void scale_m3(mat3 m, float x, float y, float z)
+{
+#if PGL_NEON_ENABLED
+	pgl_neon_scale_m3(m, x, y, z);
+#else
+#ifndef ROW_MAJOR
+	m[0] = x; m[3] = 0; m[6] = 0;
+	m[1] = 0; m[4] = y; m[7] = 0;
+	m[2] = 0; m[5] = 0; m[8] = z;
+#else
+	m[0] = x; m[1] = 0; m[2] = 0;
+	m[3] = 0; m[4] = y; m[5] = 0;
+	m[6] = 0; m[7] = 0; m[8] = z;
+#endif
+#endif
+}
+
+void scale_m4(mat4 m, float x, float y, float z)
+{
+#if PGL_NEON_ENABLED
+	pgl_neon_scale_m4(m, x, y, z);
+#else
+#ifndef ROW_MAJOR
+	m[ 0] = x; m[ 4] = 0; m[ 8] = 0; m[12] = 0;
+	m[ 1] = 0; m[ 5] = y; m[ 9] = 0; m[13] = 0;
+	m[ 2] = 0; m[ 6] = 0; m[10] = z; m[14] = 0;
+	m[ 3] = 0; m[ 7] = 0; m[11] = 0; m[15] = 1;
+#else
+	m[ 0] = x; m[ 1] = 0; m[ 2] = 0; m[ 3] = 0;
+	m[ 4] = 0; m[ 5] = y; m[ 6] = 0; m[ 7] = 0;
+	m[ 8] = 0; m[ 9] = 0; m[10] = z; m[11] = 0;
+	m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
+#endif
+#endif
+}
+
+void translation_m4(mat4 m, float x, float y, float z)
+{
+#if PGL_NEON_ENABLED
+	pgl_neon_translation_m4(m, x, y, z);
+#else
+#ifndef ROW_MAJOR
+	m[ 0] = 1; m[ 4] = 0; m[ 8] = 0; m[12] = x;
+	m[ 1] = 0; m[ 5] = 1; m[ 9] = 0; m[13] = y;
+	m[ 2] = 0; m[ 6] = 0; m[10] = 1; m[14] = z;
+	m[ 3] = 0; m[ 7] = 0; m[11] = 0; m[15] = 1;
+#else
+	m[ 0] = 1; m[ 1] = 0; m[ 2] = 0; m[ 3] = x;
+	m[ 4] = 0; m[ 5] = 1; m[ 6] = 0; m[ 7] = y;
+	m[ 8] = 0; m[ 9] = 0; m[10] = 1; m[11] = z;
+	m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
+#endif
+#endif
+}
+
+void extract_rotation_m4(mat3 dst, mat4 src, int normalize)
+{
+#if PGL_NEON_ENABLED
+	pgl_neon_extract_rotation_m4(dst, src, normalize);
+#else
+	vec3 tmp;
+	if (normalize) {
+		tmp.x = M44(src, 0, 0);
+		tmp.y = M44(src, 1, 0);
+		tmp.z = M44(src, 2, 0);
+		normalize_v3(&tmp);
+
+		M33(dst, 0, 0) = tmp.x;
+		M33(dst, 1, 0) = tmp.y;
+		M33(dst, 2, 0) = tmp.z;
+
+		tmp.x = M44(src, 0, 1);
+		tmp.y = M44(src, 1, 1);
+		tmp.z = M44(src, 2, 1);
+		normalize_v3(&tmp);
+
+		M33(dst, 0, 1) = tmp.x;
+		M33(dst, 1, 1) = tmp.y;
+		M33(dst, 2, 1) = tmp.z;
+
+		tmp.x = M44(src, 0, 2);
+		tmp.y = M44(src, 1, 2);
+		tmp.z = M44(src, 2, 2);
+		normalize_v3(&tmp);
+
+		M33(dst, 0, 2) = tmp.x;
+		M33(dst, 1, 2) = tmp.y;
+		M33(dst, 2, 2) = tmp.z;
+	} else {
+		M33(dst, 0, 0) = M44(src, 0, 0);
+		M33(dst, 1, 0) = M44(src, 1, 0);
+		M33(dst, 2, 0) = M44(src, 2, 0);
+
+		M33(dst, 0, 1) = M44(src, 0, 1);
+		M33(dst, 1, 1) = M44(src, 1, 1);
+		M33(dst, 2, 1) = M44(src, 2, 1);
+
+		M33(dst, 0, 2) = M44(src, 0, 2);
+		M33(dst, 1, 2) = M44(src, 1, 2);
+		M33(dst, 2, 2) = M44(src, 2, 2);
+	}
+#endif
+}
+
+void load_rotation_m2(mat2 mat, float angle)
+{
+	float s = sin(angle);
+	float c = cos(angle);
+#if PGL_NEON_ENABLED
+	pgl_neon_load_rotation_m2(mat, s, c);
+#else
+#ifndef ROW_MAJOR
+	mat[0] = c;
+	mat[2] = -s;
+
+	mat[1] = s;
+	mat[3] = c;
+#else
+	mat[0] = c;
+	mat[1] = -s;
+
+	mat[2] = s;
+	mat[3] = c;
+#endif
+#endif
+}
+
 void mult_m2_m2(mat2 c, mat2 a, mat2 b)
 {
+#if PGL_NEON_ENABLED
+	pgl_neon_mult_m2_m2(c, a, b);
+#else
 #ifndef ROW_MAJOR
 	c[0] = a[0]*b[0] + a[2]*b[1];
 	c[2] = a[0]*b[2] + a[2]*b[3];
@@ -928,12 +1838,16 @@ void mult_m2_m2(mat2 c, mat2 a, mat2 b)
 	c[2] = a[2]*b[0] + a[3]*b[2];
 	c[3] = a[2]*b[1] + a[3]*b[3];
 #endif
+#endif
 }
 
 extern inline void load_rotation_m2(mat2 mat, float angle);
 
 void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 {
+#if PGL_NEON_ENABLED
+	pgl_neon_mult_m3_m3(c, a, b);
+#else
 #ifndef ROW_MAJOR
 	c[0] = a[0]*b[0] + a[3]*b[1] + a[6]*b[2];
 	c[3] = a[0]*b[3] + a[3]*b[4] + a[6]*b[5];
@@ -959,18 +1873,23 @@ void mult_m3_m3(mat3 c, mat3 a, mat3 b)
 	c[7] = a[6]*b[1] + a[7]*b[4] + a[8]*b[7];
 	c[8] = a[6]*b[2] + a[7]*b[5] + a[8]*b[8];
 #endif
+#endif
 }
 
 void load_rotation_m3(mat3 mat, vec3 v, float angle)
 {
 	float s, c;
-	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	s = sin(angle);
 	c = cos(angle);
 
 	// Rotation matrix is normalized
 	normalize_v3(&v);
+
+#if PGL_NEON_ENABLED
+	pgl_neon_load_rotation_m3(mat, v, s, c);
+#else
+	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	xx = v.x * v.x;
 	yy = v.y * v.y;
@@ -1008,6 +1927,7 @@ void load_rotation_m3(mat3 mat, vec3 v, float angle)
 	mat[7] = (one_c * yz) + xs;
 	mat[8] = (one_c * zz) + c;
 #endif
+#endif
 }
 
 
@@ -1019,6 +1939,9 @@ void load_rotation_m3(mat3 mat, vec3 v, float angle)
 //TODO use restrict?
 void mult_m4_m4(mat4 c, mat4 a, mat4 b)
 {
+#if PGL_NEON_ENABLED
+	pgl_neon_mult_m4_m4(c, a, b);
+#else
 #ifndef ROW_MAJOR
 	c[ 0] = a[0]*b[ 0] + a[4]*b[ 1] + a[8]*b[ 2] + a[12]*b[ 3];
 	c[ 4] = a[0]*b[ 4] + a[4]*b[ 5] + a[8]*b[ 6] + a[12]*b[ 7];
@@ -1061,18 +1984,23 @@ void mult_m4_m4(mat4 c, mat4 a, mat4 b)
 	c[14] = a[12]*b[2] + a[13]*b[6] + a[14]*b[10] + a[15]*b[14];
 	c[15] = a[12]*b[3] + a[13]*b[7] + a[14]*b[11] + a[15]*b[15];
 #endif
+#endif
 }
 
 void load_rotation_m4(mat4 mat, vec3 v, float angle)
 {
 	float s, c;
-	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	s = sin(angle);
 	c = cos(angle);
 
 	// Rotation matrix is normalized
 	normalize_v3(&v);
+
+#if PGL_NEON_ENABLED
+	pgl_neon_load_rotation_m4(mat, v, s, c);
+#else
+	float xx, yy, zz, xy, yz, zx, xs, ys, zs, one_c;
 
 	xx = v.x * v.x;
 	yy = v.y * v.y;
@@ -1125,6 +2053,7 @@ void load_rotation_m4(mat4 mat, vec3 v, float angle)
 	mat[13] = 0.0f;
 	mat[14] = 0.0f;
 	mat[15] = 1.0f;
+#endif
 #endif
 }
 
