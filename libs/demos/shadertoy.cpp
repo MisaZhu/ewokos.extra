@@ -1,15 +1,10 @@
 
-#include "rsw_math.h"
-
 #define PGL_PREFIX_TYPES
-#define PGL_PREFIX_GLSL
 #define PORTABLEGL_IMPLEMENTATION
 #include "gltools.h"
 
-
 #include <iostream>
 #include <stdio.h>
-
 
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
@@ -19,27 +14,11 @@
 
 using namespace std;
 
-using rsw::vec4;
-using rsw::vec3;
-using rsw::vec2;
-using rsw::mat2;
-using rsw::mat3;
-using rsw::mat4;
-using rsw::mix;
-using rsw::dot;
-using rsw::clamp;
-using rsw::smoothstep;
-
-vec4 Red(1.0f, 0.0f, 0.0f, 0.0f);
-vec4 Green(0.0f, 1.0f, 0.0f, 0.0f);
-vec4 Blue(0.0f, 0.0f, 1.0f, 0.0f);
-
 SDL_Window* window;
 SDL_Renderer* ren;
 SDL_Texture* tex;
 
 u32* bbufpix;
-
 glContext the_Context;
 
 float iGlobalTime;
@@ -56,7 +35,6 @@ typedef struct My_Uniforms
 
 #define NUM_TEXTURES 5
 GLuint textures[NUM_TEXTURES];
-
 
 #define NUM_SHADERS 11
 GLuint shaders[NUM_SHADERS];
@@ -91,9 +69,70 @@ frag_func frag_funcs[NUM_SHADERS] =
 	flame_fs
 };
 
+// Helper functions for C-style vector operations
+// Note: make_v2/make_v3/make_v4 are already defined in portablegl.h
+
+inline pgl_vec2 v2_add(pgl_vec2 a, pgl_vec2 b) { return make_v2(a.x + b.x, a.y + b.y); }
+inline pgl_vec2 v2_sub(pgl_vec2 a, pgl_vec2 b) { return make_v2(a.x - b.x, a.y - b.y); }
+inline pgl_vec2 v2_mul(pgl_vec2 a, pgl_vec2 b) { return make_v2(a.x * b.x, a.y * b.y); }
+inline pgl_vec2 v2_scale(pgl_vec2 a, float s) { return make_v2(a.x * s, a.y * s); }
+inline float v2_dot(pgl_vec2 a, pgl_vec2 b) { return a.x * b.x + a.y * b.y; }
+inline float v2_len(pgl_vec2 a) { return sqrtf(a.x * a.x + a.y * a.y); }
+inline pgl_vec2 v2_norm(pgl_vec2 a) { float l = v2_len(a); return make_v2(a.x / l, a.y / l); }
+
+inline pgl_vec3 v3_add(pgl_vec3 a, pgl_vec3 b) { return make_v3(a.x + b.x, a.y + b.y, a.z + b.z); }
+inline pgl_vec3 v3_sub(pgl_vec3 a, pgl_vec3 b) { return make_v3(a.x - b.x, a.y - b.y, a.z - b.z); }
+inline pgl_vec3 v3_mul(pgl_vec3 a, pgl_vec3 b) { return make_v3(a.x * b.x, a.y * b.y, a.z * b.z); }
+inline pgl_vec3 v3_scale(pgl_vec3 a, float s) { return make_v3(a.x * s, a.y * s, a.z * s); }
+inline float v3_dot(pgl_vec3 a, pgl_vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline float v3_len(pgl_vec3 a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
+inline pgl_vec3 v3_norm(pgl_vec3 a) { float l = v3_len(a); return make_v3(a.x / l, a.y / l, a.z / l); }
+inline pgl_vec3 v3_cross(pgl_vec3 a, pgl_vec3 b) {
+	return make_v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+}
+
+inline pgl_vec4 v4_add(pgl_vec4 a, pgl_vec4 b) { return make_v4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w); }
+inline pgl_vec4 v4_sub(pgl_vec4 a, pgl_vec4 b) { return make_v4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w); }
+inline pgl_vec4 v4_mul(pgl_vec4 a, pgl_vec4 b) { return make_v4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w); }
+inline pgl_vec4 v4_scale(pgl_vec4 a, float s) { return make_v4(a.x * s, a.y * s, a.z * s, a.w * s); }
+inline float v4_dot(pgl_vec4 a, pgl_vec4 b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
+
+inline float clamp_f(float x, float minVal, float maxVal) {
+	if (x < minVal) return minVal;
+	if (x > maxVal) return maxVal;
+	return x;
+}
+
+inline float smoothstep_f(float edge0, float edge1, float x) {
+	float t = clamp_f((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+	return t * t * (3.0f - 2.0f * t);
+}
+
+inline float mix_f(float x, float y, float a) {
+	return x * (1.0f - a) + y * a;
+}
+
+inline pgl_vec3 v3_mix(pgl_vec3 x, pgl_vec3 y, float a) {
+	return make_v3(mix_f(x.x, y.x, a), mix_f(x.y, y.y, a), mix_f(x.z, y.z, a));
+}
+
+inline pgl_vec4 v4_mix(pgl_vec4 x, pgl_vec4 y, float a) {
+	return make_v4(mix_f(x.x, y.x, a), mix_f(x.y, y.y, a), mix_f(x.z, y.z, a), mix_f(x.w, y.w, a));
+}
+
+inline float fract_f(float x) { return x - floorf(x); }
+
+inline pgl_vec2 v2_fract(pgl_vec2 v) { return make_v2(fract_f(v.x), fract_f(v.y)); }
+inline pgl_vec3 v3_fract(pgl_vec3 v) { return make_v3(fract_f(v.x), fract_f(v.y), fract_f(v.z)); }
+
+inline pgl_vec2 v2_floor(pgl_vec2 v) { return make_v2(floorf(v.x), floorf(v.y)); }
+inline pgl_vec3 v3_floor(pgl_vec3 v) { return make_v3(floorf(v.x), floorf(v.y), floorf(v.z)); }
+
+inline float v2_length(pgl_vec2 a) { return sqrtf(a.x * a.x + a.y * a.y); }
+inline float v3_length(pgl_vec3 a) { return sqrtf(a.x * a.x + a.y * a.y + a.z * a.z); }
+
 int main(int argc, char** argv)
 {
-
 	setup_context();
 
 	float points[] =
@@ -104,33 +143,31 @@ int main(int argc, char** argv)
 		 1.0, -1.0, 0
 	};
 
-
 	My_Uniforms the_uniforms;
-	mat4 identity;
 
 	glGenTextures(NUM_TEXTURES, textures);
 	glBindTexture(GL_TEXTURE_2D, textures[0]);
-	if (!load_texture2D("../media/textures/tex00.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
+	if (!load_texture2D("/data/media/textures/tex00.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
 		printf("failed to load texture\n");
 		return 0;
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[1]);
-	if (!load_texture2D("../media/textures/tex02.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
+	if (!load_texture2D("/data/media/textures/tex02.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
 		printf("failed to load texture\n");
 		return 0;
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[2]);
-	if (!load_texture2D("../media/textures/tex06.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
+	if (!load_texture2D("/data/media/textures/tex06.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
 		printf("failed to load texture\n");
 		return 0;
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[3]);
-	if (!load_texture2D("../media/textures/tex01.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
+	if (!load_texture2D("/data/media/textures/tex01.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
 		printf("failed to load texture\n");
 		return 0;
 	}
 	glBindTexture(GL_TEXTURE_2D, textures[4]);
-	if (!load_texture2D("../media/textures/tex09.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
+	if (!load_texture2D("/data/media/textures/tex09.jpg", GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_FALSE, GL_FALSE, NULL, NULL)) {
 		printf("failed to load texture\n");
 		return 0;
 	}
@@ -151,7 +188,6 @@ int main(int argc, char** argv)
 	for (int i=0; i<NUM_SHADERS; ++i) {
 		shaders[i] = pglCreateFragProgram(frag_funcs[i], GL_FALSE);
 		glUseProgram(shaders[i]);
-
 		pglSetUniform(&the_uniforms);
 	}
 
@@ -170,11 +206,6 @@ int main(int argc, char** argv)
 				quit = true;
 			} else if (event.type == SDL_KEYDOWN) {
 				keysym = event.key.keysym;
-				//printf("%c %c\n", event.key.keysym.scancode, event.key.keysym.sym);
-				//printf("Physical %s key acting as %s key",
-				//SDL_GetScancodeName(keysym.scancode),
-				//SDL_GetKeyName(keysym.sym));
-
 				switch (keysym.sym) {
 				case SDLK_ESCAPE:
 					quit = true;
@@ -204,477 +235,403 @@ int main(int argc, char** argv)
 		iGlobalTime = (new_time-start_time) / 1000.0f;
 		the_uniforms.globaltime = (new_time-start_time) / 1000.0f;
 
-		// If you don't draw to every pixel (ie you use discard) and want a background
-		//glClearColor(0, 0, 0, 1);
-		//glClear(GL_COLOR_BUFFER_BIT);
-
-		// If you want to do it the only way real OpenGL can do it, by rendering
-		// a full screen quad...
-		//glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-		// If you still want to use officially created Programs
-		//pglDrawFrame();
-
-		// If you just want to cut to the chase
 		pglDrawFrame2(frag_funcs[cur_shader], &the_uniforms);
 
 		SDL_UpdateTexture(tex, NULL, bbufpix, WIDTH * sizeof(u32));
-		//Render the scene
 		SDL_RenderCopy(ren, tex, NULL, NULL);
 		SDL_RenderPresent(ren);
 	}
 
 	cleanup();
-
 	return 0;
 }
 
-
 void graphing_lines_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	vec2 frag = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
 	frag.x /= WIDTH;
 	frag.y /= HEIGHT;
-	frag *= 2;
-	frag -= 1;
+	frag = v2_scale(frag, 2.0f);
+	frag = v2_sub(frag, make_v2(1.0f, 1.0f));
 
 	float fragx2 = frag.x * frag.x;
 	float x2 = frag.y - fragx2;
-	float x3 = frag.y - fragx2 * frag.x + 0.25*frag.x;
+	float x3 = frag.y - fragx2 * frag.x + 0.25f * frag.x;
 	float x4 = frag.y - fragx2 * fragx2;
-	float incr = 2.0f / HEIGHT; //height per pixel
+	float incr = 2.0f / HEIGHT;
 
 	if (x2 >= -incr && x2 <= incr) {
-		*(vec4*)&builtins->gl_FragColor = vec4(1, 0, 0, 1);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(1, 0, 0, 1);
 	} else if (x3 >= -incr && x3 <= incr) {
-		*(vec4*)&builtins->gl_FragColor = vec4(0, 1, 0, 1);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 1, 0, 1);
 	} else if (x4 >= -incr && x4 <= incr) {
-		*(vec4*)&builtins->gl_FragColor = vec4(0, 0, 1, 1);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 0, 1, 1);
 	} else {
-		*(vec4*)&builtins->gl_FragColor = vec4(0, 0, 0, 1);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 0, 0, 1);
 	}
 }
 
 void graphing_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	vec2 frag = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
 	frag.x /= WIDTH;
 	frag.y /= HEIGHT;
-	frag *= 2;
-	frag -= 1;
+	frag = v2_scale(frag, 2.0f);
+	frag = v2_sub(frag, make_v2(1.0f, 1.0f));
 
 	float fragx2 = frag.x * frag.x;
 	float x2 = frag.y - fragx2;
-	//float x3 = frag.y - fragx2 * frag.x + 0.25*frag.x;
-	//float x4 = frag.y - fragx2 * fragx2;
 
 	if (x2 > 0)
-		*(vec4*)&builtins->gl_FragColor = vec4(x2, 0, 0, 1);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(x2, 0, 0, 1);
 	else
-		*(vec4*)&builtins->gl_FragColor = vec4(0, 0, 0, 1);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 0, 0, 1);
 }
 
 void my_tunnel_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
 	float globaltime = ((My_Uniforms*)uniforms)->globaltime;
 
-	vec2 frag = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
 	frag.x /= WIDTH;
 	frag.y /= HEIGHT;
-	frag *= 2;
-	frag -= 1;
+	frag = v2_scale(frag, 2.0f);
+	frag = v2_sub(frag, make_v2(1.0f, 1.0f));
 
-	//float r = sqrt(frag.x * frag.x + frag.y * frag.y);
-	float r = pow(pow(frag.x, 16.0) + pow(frag.y, 16.0), 1.0/16.0);
-	//float sixpi = 4 * 3.1416;
+	float r = powf(powf(frag.x, 16.0f) + powf(frag.y, 16.0f), 1.0f/16.0f);
+	float wave = (0.5f * sinf(10.0f * globaltime * (1.0f - r)) + 0.5f);
 
-	//float wave = (0.5*sin(sixpi*(1-r) + fmod(2*globaltime, sixpi)) + 0.5);
-	float wave = (0.5*sin(10*globaltime*(1-r)) + 0.5);
-
-	//*(vec4*)&builtins->gl_FragColor = r * (wave * vec4(1, 0, 0, 1) + (1-wave) * vec4(0, 0, 1, 1));
-	*(vec4*)&builtins->gl_FragColor = vec4(r*wave, 0, r*(1-wave), 1);
-
-	//*(vec4*)&builtins->gl_FragColor = vec4(r, 0, 0);
+	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(r * wave, 0, r * (1.0f - wave), 1);
 }
 
 void square_tunnel_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-// ported from https://www.shadertoy.com/view/Ms2SWW
-// Created by inigo quilez - iq/2013
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
 	float globaltime = ((My_Uniforms*)uniforms)->globaltime;
 	GLuint channel0 = ((My_Uniforms*)uniforms)->tex0;
 
-	vec2 resolution(WIDTH, HEIGHT);
-	vec2 frag = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
-	// normalized coordinates (-1 to 1 vertically)
-	vec2 p = (-resolution + 2.0f*frag) / resolution.y;
+	pgl_vec2 resolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
+	
+	pgl_vec2 p = v2_sub(v2_scale(frag, 2.0f), resolution);
+	p = v2_scale(p, 1.0f / resolution.y);
 
-	// angle of each pixel to the center of the screen
-	float a = atan2(p.y, p.x);
+	float a = atan2f(p.y, p.x);
+	float r = powf(powf(p.x * p.x, 16.0f) + powf(p.y * p.y, 16.0f), 1.0f/32.0f);
 
-	// modified distance metric. Usually distance = (x² + y²)^(1/2). By replacing all the "2" numbers
-	// by 32 in that formula we can create distance metrics other than the euclidean. The higher the
-	// exponent, then more square the metric becomes. More information here:
+	pgl_vec2 uv = make_v2(0.5f/r + 0.5f * globaltime, a / 3.1416f);
 
-	// http://en.wikipedia.org/wiki/Minkowski_distance
-
-	float r = pow(pow(p.x*p.x, 16.0f) + pow(p.y*p.y,16.0f), 1.0f/32.0f);
-
-	// index texture by angle and radious, and animate along radius
-	vec2 uv = vec2(0.5f/r + 0.5f*globaltime, a/3.1416f );
-
-	// fetch color and darken in the center
 	pgl_vec4 tmp = texture2D(channel0, uv.x, uv.y);
-	*(vec4*)&builtins->gl_FragColor = vec4(tmp.x*r, tmp.y*r, tmp.z*r, 1.0);
+	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(tmp.x * r, tmp.y * r, tmp.z * r, 1.0f);
 }
 
 void deform_tunnel_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-// ported from https://www.shadertoy.com/view/XdXGzn
-// Created by inigo quilez - iq/2013
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
 	float globaltime = ((My_Uniforms*)uniforms)->globaltime;
 	GLuint channel0 = ((My_Uniforms*)uniforms)->tex2;
 	GLuint channel1 = ((My_Uniforms*)uniforms)->tex0;
 
-	vec2 resolution(WIDTH, HEIGHT);
-	vec2 frag = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 resolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 frag = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
-    vec2 p = -1.0 + 2.0 * frag / resolution;
-    vec2 uv;
+	pgl_vec2 p = v2_sub(v2_scale(v2_scale(frag, 2.0f), 1.0f/resolution.x), make_v2(1.0f, 1.0f));
+	p.y = p.y * (resolution.y / resolution.x);
+	
+	float r = powf(powf(p.x * p.x, 16.0f) + powf(p.y * p.y, 16.0f), 1.0f/32.0f);
+	
+	pgl_vec2 uv;
+	uv.x = 0.5f * globaltime + 0.5f / r;
+	uv.y = atan2f(p.y, p.x) / 3.1416f;
 
-    float r = pow( pow(p.x*p.x,16.0) + pow(p.y*p.y,16.0), 1.0/32.0 );
-    uv.x = .5*globaltime + 0.5/r;
-    uv.y = atan2(p.y, p.x)/3.1416;
+	float h = sinf(32.0f * uv.y);
+	uv.x += 0.85f * smoothstep_f(-0.1f, 0.1f, h);
+	
+	pgl_vec4 ch1_ = texture2D(channel1, 2.0f * uv.x, 2.0f * uv.y);
+	pgl_vec4 ch0_ = texture2D(channel0, uv.x, uv.y);
 
-	float h = sin(32.0*uv.y);
-    uv.x += 0.85*smoothstep(-0.1, 0.1, h);
-    pgl_vec4 ch1_ = texture2D(channel1, 2.0*uv.x, 2.0*uv.y);
-    pgl_vec4 ch0_ = texture2D(channel0, uv.x, uv.y);
+	pgl_vec3 ch0 = make_v3(ch0_.x, ch0_.y, ch0_.z);
+	pgl_vec3 ch1 = make_v3(ch1_.x, ch1_.y, ch1_.z);
+	float aa = smoothstep_f(0.9f, 1.1f, fabsf(p.x / p.y));
+	pgl_vec3 col = v3_mix(ch1, ch0, aa);
 
-    vec3 ch0(ch0_.x, ch0_.y, ch0_.z);
-    vec3 ch1(ch1_.x, ch1_.y, ch1_.z);
-	float a = smoothstep(0.9, 1.1, abs(p.x/p.y));
-	vec3 col = mix(ch1, ch0, a);
+	r *= 1.0f - 0.3f * (smoothstep_f(0.0f, 0.3f, h) - smoothstep_f(0.3f, 0.96f, h));
 
-    r *= 1.0 - 0.3*(smoothstep(0.0, 0.3, h) - smoothstep(0.3, 0.96, h));
-
-    *(vec4*)&builtins->gl_FragColor = vec4(col*r*r*1.2, 1.0);
+	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(col.x * r * r * 1.2f, col.y * r * r * 1.2f, col.z * r * r * 1.2f, 1.0f);
 }
 
 void tileable_water_caustic_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-//ported from https://www.shadertoy.com/view/MdlXz8
-// Created by Dave_Hoskins
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
-	// Found this on GLSL sandbox. I really liked it, changed a few things and made it tileable.
-	// :)
-
-	// -----------------------------------------------------------------------
-	// Water turbulence effect by joltz0r 2013-07-04, improved 2013-07-07
-	// Altered
-	// -----------------------------------------------------------------------
-
-#define TAU 6.28318530718
+#define TAU 6.28318530718f
 #define MAX_ITER 5
 
-	//float iGlobalTime = ((My_Uniforms*)uniforms)->globaltime;
+	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
-	vec2 iResolution(WIDTH, HEIGHT);
-	vec2 gl_FragCoord = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	float time = iGlobalTime * 0.5f + 23.0f;
+	pgl_vec2 sp;
+	sp.x = gl_FragCoord.x / iResolution.x;
+	sp.y = gl_FragCoord.y / iResolution.y;
 
-	float time = iGlobalTime * .5+23.0;
-	vec2 sp = gl_FragCoord / iResolution;
-
-	vec2 p = sp*TAU-250.0;
-	vec2 i = vec2(p);
-	float c = 1.0;
-	float inten = .005;
+	pgl_vec2 p = v2_sub(v2_scale(sp, TAU), make_v2(250.0f, 250.0f));
+	pgl_vec2 i = p;
+	float c = 1.0f;
+	float inten = 0.005f;
 
 	for (int n = 0; n < MAX_ITER; n++)
 	{
-		float t = time * (1.0 - (3.5 / float(n+1)));
-		i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
-		c += 1.0/length(vec2(p.x / (sin(i.x+t)/inten),p.y / (cos(i.y+t)/inten)));
+		float t = time * (1.0f - (3.5f / (float)(n+1)));
+		i.x = p.x + cosf(t - i.x) + sinf(t + i.y);
+		i.y = p.y + sinf(t - i.y) + cosf(t + i.x);
+		pgl_vec2 len_vec = make_v2(
+			p.x / (sinf(i.x + t) / inten),
+			p.y / (cosf(i.y + t) / inten)
+		);
+		c += 1.0f / v2_length(len_vec);
 	}
-	c /= float(MAX_ITER);
-	c = 1.2-pow(c, 1.2);
-	vec3 colour = vec3(pow(abs(c), 6.0));
+	c /= (float)MAX_ITER;
+	c = 1.2f - powf(c, 1.2f);
+	
+	float colour_val = powf(fabsf(c), 6.0f);
+	pgl_vec3 colour = make_v3(colour_val, colour_val, colour_val);
+	
+	pgl_vec3 final_col = v3_add(colour, make_v3(0.0f, 0.35f, 0.5f));
+	final_col.x = clamp_f(final_col.x, 0.0f, 1.0f);
+	final_col.y = clamp_f(final_col.y, 0.0f, 1.0f);
+	final_col.z = clamp_f(final_col.z, 0.0f, 1.0f);
 
-	//gl_FragColor = vec4(clamp(colour + vec3(0.0, 0.35, 0.5), 0.0, 1.0), 1.0);
-    *(vec4*)&builtins->gl_FragColor = vec4(clamp(colour + vec3(0.0, 0.35, 0.5), 0.0, 1.0), 1.0);
+    *(pgl_vec4*)&builtins->gl_FragColor = make_v4(final_col.x, final_col.y, final_col.z, 1.0f);
 }
 
 void running_in_the_night_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-//ported from https://www.shadertoy.com/view/ldl3DN
-// Created by LaPatate64
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
-	vec2 iResolution(WIDTH, HEIGHT);
-	vec2 gl_FragCoord = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 	GLuint iChannel0 = ((My_Uniforms*)uniforms)->tex2;
 
-	float time = radians(45.0) + cos(iGlobalTime * 12.0) / 40.0;
-	float time1 = radians(45.0) + cos(iGlobalTime * 22.0) / 30.0;
-	vec2 uv = gl_FragCoord / iResolution * 2.0 - vec2(1.0, 1.0);
-	if (uv.y < 0.0){
-		vec2 tex;
-		vec2 rot = vec2(cos(time), sin(time));
-		vec2 mat;
-		mat.x = (uv.x * rot.x + (uv.y - 1.0) * rot.y);
-		mat.y = ((uv.y - 1.0) * rot.x - uv.x * rot.y);
-		tex.x = mat.x * time1 / uv.y + iGlobalTime * 2.0;
-		tex.y = mat.y * time1 / uv.y + iGlobalTime * 2.0;
+	float time = 45.0f * 3.14159f / 180.0f + cosf(iGlobalTime * 12.0f) / 40.0f;
+	float time1 = 45.0f * 3.14159f / 180.0f + cosf(iGlobalTime * 22.0f) / 30.0f;
+	
+	pgl_vec2 uv = v2_sub(v2_scale(gl_FragCoord, 2.0f / iResolution.x), make_v2(1.0f, 1.0f));
+	uv.y = uv.y * (iResolution.y / iResolution.x);
+	
+	if (uv.y < 0.0f) {
+		pgl_vec2 tex;
+		pgl_vec2 rot = make_v2(cosf(time), sinf(time));
+		pgl_vec2 mat;
+		mat.x = (uv.x * rot.x + (uv.y - 1.0f) * rot.y);
+		mat.y = ((uv.y - 1.0f) * rot.x - uv.x * rot.y);
+		tex.x = mat.x * time1 / uv.y + iGlobalTime * 2.0f;
+		tex.y = mat.y * time1 / uv.y + iGlobalTime * 2.0f;
 
-		pgl_vec4 tmp = texture2D(iChannel0, tex.x * 2.0, tex.y * 2.0);
-		*(vec4*)&builtins->gl_FragColor = vec4(tmp.x, tmp.y, tmp.z, tmp.w) * (-uv.y);
+		pgl_vec4 tmp = texture2D(iChannel0, tex.x * 2.0f, tex.y * 2.0f);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(tmp.x * (-uv.y), tmp.y * (-uv.y), tmp.z * (-uv.y), tmp.w * (-uv.y));
 	} else {
-		*(vec4*)&builtins->gl_FragColor = vec4(0);
+		*(pgl_vec4*)&builtins->gl_FragColor = make_v4(0, 0, 0, 0);
 	}
 }
 
-
-// ported from https://www.shadertoy.com/view/Xd23Dh
-// Created by inigo quilez - iq/2014
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
-// This is a procedural pattern that has 2 parameters, that generalizes cell-noise,
-// perlin-noise and voronoi, all of which can be written in terms of the former as:
-//
-// cellnoise(x) = pattern(0,0,x)
-// perlin(x) = pattern(0,1,x)
-// voronoi(x) = pattern(1,0,x)
-//
-// From this generalization of the three famouse patterns, a new one (which I call
-// "Voronoise") emerges naturally. It's like perlin noise a bit, but within a jittered
-// grid like voronoi):
-//
-// voronoise(x) = pattern(1,1,x)
-//
-// Not sure what one would use this generalization for, because it's slightly slower
-// than perlin or voronoise (and certainly much slower than cell noise), and in the
-// end as a shading TD you just want one or another depending of the type of visual
-// features you are looking for, I can't see a blending being needed in real life.
-// But well, if only for the math fun it was worth trying. And they say a bit of
-// mathturbation can be healthy anyway!
-
-// Use the mouse to blend between different patterns:
-
-// ell noise    u=0,v=0
-// voronoi      u=1,v=0
-// perlin noise u=0,v1=
-// voronoise    u=1,v=1
-
-// More info here: http://iquilezles.org/www/articles/voronoise/voronoise.htm
-
-vec3 hash3(vec2 p)
+pgl_vec3 hash3(pgl_vec2 p)
 {
-    vec3 q = vec3( dot(p,vec2(127.1,311.7)),
-				   dot(p,vec2(269.5,183.3)),
-				   dot(p,vec2(419.2,371.9)) );
-	return fract(sin(q)*43758.5453);
+    pgl_vec3 q = make_v3(
+		v2_dot(p, make_v2(127.1f, 311.7f)),
+		v2_dot(p, make_v2(269.5f, 183.3f)),
+		v2_dot(p, make_v2(419.2f, 371.9f))
+	);
+	return v3_fract(v3_scale(make_v3(sinf(q.x), sinf(q.y), sinf(q.z)), 43758.5453f));
 }
 
-float iqnoise(vec2 x, float u, float v)
+float iqnoise(pgl_vec2 x, float u, float v)
 {
-    vec2 p = floor(x);
-    vec2 f = fract(x);
+    pgl_vec2 p = v2_floor(x);
+    pgl_vec2 f = v2_fract(x);
 
-	float k = 1.0+63.0*pow(1.0-v,4.0);
+	float k = 1.0f + 63.0f * powf(1.0f - v, 4.0f);
 
-	float va = 0.0;
-	float wt = 0.0;
-    for( int j=-2; j<=2; j++ )
-    for( int i=-2; i<=2; i++ )
+	float va = 0.0f;
+	float wt = 0.0f;
+    for (int j = -2; j <= 2; j++)
+    for (int i = -2; i <= 2; i++)
     {
-        vec2 g = vec2( float(i),float(j) );
-		vec3 o = hash3( p + g )*vec3(u,u,1.0);
-		vec2 r = g - f + o.xy();
-		float d = dot(r,r);
-		float ww = pow(1.0 - smoothstep(0.0,1.414,sqrt(d)), k);
-		va += o.z*ww;
+        pgl_vec2 g = make_v2((float)i, (float)j);
+		pgl_vec3 o = v3_mul(hash3(v2_add(p, g)), make_v3(u, u, 1.0f));
+		pgl_vec2 r = v2_add(v2_sub(g, f), make_v2(o.x, o.y));
+		float d = v2_dot(r, r);
+		float ww = powf(1.0f - smoothstep_f(0.0f, 1.414f, sqrtf(d)), k);
+		va += o.z * ww;
 		wt += ww;
     }
 
-    return va/wt;
+    return va / wt;
 }
 
 void voronoise_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	vec2 iResolution(WIDTH, HEIGHT);
-	vec2 gl_FragCoord = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
-	vec2 uv = gl_FragCoord / iResolution.xx();
+	pgl_vec2 uv;
+	uv.x = gl_FragCoord.x / iResolution.x;
+	uv.y = gl_FragCoord.y / iResolution.x;
 
-    vec2 p = 0.5 - 0.5*sin( iGlobalTime*vec2(1.01,1.71) );
+    pgl_vec2 p;
+	p.x = 0.5f - 0.5f * sinf(iGlobalTime * 1.01f);
+	p.y = 0.5f - 0.5f * sinf(iGlobalTime * 1.71f);
 
-	//if (iMouse.w > 0.001) p = vec2(0.0, 1.0) + vec2(1.0, -1.0)*iMouse.xy/iResolution;
+	float t1 = 3.0f - 2.0f * p.x;
+	float t2 = 3.0f - 2.0f * p.y;
+	p.x = p.x * p.x * t1;
+	p.y = p.y * p.y * t2;
+	p.x = p.x * p.x * (3.0f - 2.0f * p.x);
+	p.y = p.y * p.y * (3.0f - 2.0f * p.y);
+	p.x = p.x * p.x * (3.0f - 2.0f * p.x);
+	p.y = p.y * p.y * (3.0f - 2.0f * p.y);
 
-	p = p*p*(3.0-2.0*p);
-	p = p*p*(3.0-2.0*p);
-	p = p*p*(3.0-2.0*p);
+	float f = iqnoise(v2_scale(uv, 24.0f), p.x, p.y);
 
-	float f = iqnoise(24.0*uv, p.x, p.y);
-
-	//gl_FragColor = vec4( f, f, f, 1.0 );
-	*(vec4*)&builtins->gl_FragColor = vec4( f, f, f, 1.0 );
+	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(f, f, f, 1.0f);
 }
 
-
-
-
-//ported from https://www.shadertoy.com/view/MdX3zr
-// Created by XT95
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
-float noise(vec3 p) //Thx to Las^Mercury
+float noise(pgl_vec3 p)
 {
-	vec3 i = floor(p);
-	vec4 a = dot(i, vec3(1., 57., 21.)) + vec4(0., 57., 21., 78.);
-	vec3 f = cos((p-i)*acos(-1.))*(-.5)+.5;
-	a = mix(sin(cos(a)*a),sin(cos(1.+a)*(1.+a)), f.x);
-	//a.xy = mix(a.xz(), a.yw(), f.y);
-	a.xy(mix(a.xz(), a.yw(), f.y));
-	return mix(a.x, a.y, f.z);
+	pgl_vec3 i = v3_floor(p);
+	pgl_vec3 v1 = make_v3(1.0f, 57.0f, 21.0f);
+	pgl_vec3 v2 = make_v3(0.0f, 57.0f, 21.0f);
+	pgl_vec3 v3 = make_v3(78.0f, 78.0f, 78.0f);
+	pgl_vec4 a = v4_add(make_v4(v3_dot(i, v1), 0, 0, 0), make_v4(v2.x, v2.y, v2.z, v3.x));
+	
+	pgl_vec3 f = v3_scale(v3_sub(p, i), acosf(-1.0f));
+	f.x = cosf(f.x) * (-0.5f) + 0.5f;
+	f.y = cosf(f.y) * (-0.5f) + 0.5f;
+	f.z = cosf(f.z) * (-0.5f) + 0.5f;
+	
+	// Simplified mix operations
+	float a1 = sinf(cosf(a.x) * a.x);
+	float a2 = sinf(cosf(a.y) * a.y);
+	float a3 = sinf(cosf(1.0f + a.z) * (1.0f + a.z));
+	float a4 = sinf(cosf(1.0f + a.w) * (1.0f + a.w));
+	
+	float m1 = mix_f(a1, a3, f.x);
+	float m2 = mix_f(a2, a4, f.x);
+	
+	return mix_f(m1, m2, f.z);
 }
 
-float sphere(vec3 p, vec4 spr)
+float sphere(pgl_vec3 p, pgl_vec4 spr)
 {
-	return length(spr.xyz()-p) - spr.w;
+	return v3_length(v3_sub(make_v3(spr.x, spr.y, spr.z), p)) - spr.w;
 }
 
-float flame(vec3 p)
+float flame_func(pgl_vec3 p)
 {
-	float d = sphere(p*vec3(1.,.5,1.), vec4(.0,-1.,.0,1.));
-	return d + (noise(p+vec3(.0,iGlobalTime*2.,.0)) + noise(p*3.)*.5)*.25*(p.y) ;
+	pgl_vec3 scaled_p = make_v3(p.x, p.y * 0.5f, p.z);
+	pgl_vec4 spr = make_v4(0.0f, -1.0f, 0.0f, 1.0f);
+	float d = sphere(scaled_p, spr);
+	return d + (noise(v3_add(p, make_v3(0.0f, iGlobalTime * 2.0f, 0.0f))) + noise(v3_scale(p, 3.0f)) * 0.5f) * 0.25f * p.y;
 }
 
-float scene(vec3 p)
+float scene(pgl_vec3 p)
 {
-	return min(100.0f-length(p) , abs(flame(p)));
+	return fminf(100.0f - v3_length(p), fabsf(flame_func(p)));
 }
 
-vec4 raymarch(vec3 org, vec3 dir)
+pgl_vec4 raymarch(pgl_vec3 org, pgl_vec3 dir)
 {
-	float d = 0.0, glow = 0.0, eps = 0.02;
-	vec3  p = org;
+	float d = 0.0f, glow = 0.0f, eps = 0.02f;
+	pgl_vec3 p = org;
 	bool glowed = GL_FALSE;
 
-	for(int i=0; i<64; i++)
+	for(int i = 0; i < 64; i++)
 	{
 		d = scene(p) + eps;
-		p += d * dir;
-		if( d>eps )
+		p = v3_add(p, v3_scale(dir, d));
+		if (d > eps)
 		{
-			if(flame(p) < .0)
-				glowed=true;
+			if(flame_func(p) < 0.0f)
+				glowed = true;
 			if(glowed)
-       			glow = float(i)/64.;
+       			glow = (float)i / 64.0f;
 		}
 	}
-	return vec4(p,glow);
+	return make_v4(p.x, p.y, p.z, glow);
 }
-
 
 void flame_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
-	vec2 iResolution(WIDTH, HEIGHT);
-	vec2 gl_FragCoord = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
-	vec2 v = -1.0 + 2.0 * gl_FragCoord / iResolution;
-	v.x *= iResolution.x/iResolution.y;
+	pgl_vec2 v;
+	v.x = -1.0f + 2.0f * gl_FragCoord.x / iResolution.x;
+	v.y = -1.0f + 2.0f * gl_FragCoord.y / iResolution.y;
+	v.x *= iResolution.x / iResolution.y;
 
-	vec3 org = vec3(0., -2., 4.);
-	vec3 dir = normalize(vec3(v.x*1.6, -v.y, -1.5));
+	pgl_vec3 org = make_v3(0.0f, -2.0f, 4.0f);
+	pgl_vec3 dir = v3_norm(make_v3(v.x * 1.6f, -v.y, -1.5f));
 
-	vec4 p = raymarch(org, dir);
+	pgl_vec4 p = raymarch(org, dir);
 	float glow = p.w;
 
-	vec4 col = mix(vec4(1.,.5,.1,1.), vec4(0.1,.5,1.,1.), p.y*.02+.4);
+	pgl_vec4 col1 = make_v4(1.0f, 0.5f, 0.1f, 1.0f);
+	pgl_vec4 col2 = make_v4(0.1f, 0.5f, 1.0f, 1.0f);
+	pgl_vec4 col = v4_mix(col1, col2, p.y * 0.02f + 0.4f);
 
-	//gl_FragColor = mix(vec4(1.), mix(vec4(1.,.5,.1,1.),vec4(0.1,.5,1.,1.),p.y*.02+.4), pow(glow*2.,4.));
-
-	//gl_FragColor = mix(vec4(0.), col, pow(glow*2.,4.));
-    *(vec4*)&builtins->gl_FragColor = mix(vec4(0.), col, pow(glow*2.,4.));
+    *(pgl_vec4*)&builtins->gl_FragColor = v4_mix(make_v4(0, 0, 0, 0), col, powf(glow * 2.0f, 4.0f));
 }
 
+// Constants for the cave shader
+const pgl_vec2 cama = {-2.6943f, 3.0483f};
+const pgl_vec2 camb = {0.2516f, 0.1749f};
+const pgl_vec2 camc = {-3.7902f, 2.4478f};
+const pgl_vec2 camd = {0.0865f, -0.1664f};
 
+const pgl_vec2 lighta = {1.4301f, 4.0985f};
+const pgl_vec2 lightb = {-0.1276f, 0.2347f};
+const pgl_vec2 lightc = {-2.2655f, 1.5066f};
+const pgl_vec2 lightd = {-0.1284f, 0.0731f};
 
-
-// ported from https://www.shadertoy.com/view/MsX3RH
-// Created by BoyC
-// License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
-// constants for the camera tunnel
-const vec2 cama=vec2(-2.6943,3.0483);
-const vec2 camb=vec2(0.2516,0.1749);
-const vec2 camc=vec2(-3.7902,2.4478);
-const vec2 camd=vec2(0.0865,-0.1664);
-
-const vec2 lighta=vec2(1.4301,4.0985);
-const vec2 lightb=vec2(-0.1276,0.2347);
-const vec2 lightc=vec2(-2.2655,1.5066);
-const vec2 lightd=vec2(-0.1284,0.0731);
-
-// calculates the position of a single tunnel
-inline vec2 Position(float z, vec2 a, vec2 b, vec2 c, vec2 d)
+inline pgl_vec2 Position(float z, pgl_vec2 a, pgl_vec2 b, pgl_vec2 c, pgl_vec2 d)
 {
-	return sin(z*a)*b + cos(z*c)*d;
+	return v2_add(v2_scale(make_v2(sinf(z * a.x), sinf(z * a.y)), b.x), 
+	              v2_scale(make_v2(cosf(z * c.x), cosf(z * c.y)), d.x));
 }
 
-// calculates 3D positon of a tunnel for a given time
-inline vec3 Position3D(float time, vec2 a, vec2 b, vec2 c, vec2 d)
+inline pgl_vec3 Position3D(float time, pgl_vec2 a, pgl_vec2 b, pgl_vec2 c, pgl_vec2 d)
 {
-	return vec3(Position(time,a,b,c,d),time);
+	pgl_vec2 pos = Position(time, a, b, c, d);
+	return make_v3(pos.x, pos.y, time);
 }
 
-// 2d distance field for a slice of a single tunnel
-inline float Distance(vec3 p, vec2 a, vec2 b, vec2 c, vec2 d, vec2 e, float r)
+inline float Distance_(pgl_vec3 p, pgl_vec2 a, pgl_vec2 b, pgl_vec2 c, pgl_vec2 d, pgl_vec2 e, float r)
 {
-	vec2 pos = Position(p.z,a,b,c,d);
-	float radius = max(5.0f, r + sin(p.z*e.x)*e.y) / 10000.0;
-	return radius/dot(p.xy()-pos, p.xy()-pos);
+	pgl_vec2 pos = Position(p.z, a, b, c, d);
+	float radius = fmaxf(5.0f, r + sinf(p.z * e.x) * e.y) / 10000.0f;
+	pgl_vec2 diff = v2_sub(make_v2(p.x, p.y), pos);
+	return radius / v2_dot(diff, diff);
 }
 
-// 2d distance field for a slice of the tunnel network
-float Dist2D(vec3 pos)
+float Dist2D(pgl_vec3 pos)
 {
-	float d=0.0;
+	float d = 0.0f;
 
-	d+=Distance(pos,cama,camb,camc,camd,vec2(2.1913,15.4634),70.0000);
-	d+=Distance(pos,lighta,lightb,lightc,lightd,vec2(0.3814,12.7206),17.0590);
-	d+=Distance(pos,vec2(2.7377,-1.2462),vec2(-0.1914,-0.2339),vec2(-1.3698,-0.6855),vec2(0.1049,-0.1347),vec2(-1.1157,13.6200),27.3718);
-	d+=Distance(pos,vec2(-2.3815,0.2382),vec2(-0.1528,-0.1475),vec2(0.9996,-2.1459),vec2(-0.0566,-0.0854),vec2(0.3287,12.1713),21.8130);
-	d+=Distance(pos,vec2(-2.7424,4.8901),vec2(-0.1257,0.2561),vec2(-0.4138,2.6706),vec2(-0.1355,0.1648),vec2(2.8162,14.8847),32.2235);
-	d+=Distance(pos,vec2(-2.2158,4.5260),vec2(0.2834,0.2319),vec2(4.2578,-2.5997),vec2(-0.0391,-0.2070),vec2(2.2086,13.0546),30.9920);
-	d+=Distance(pos,vec2(0.9824,4.4131),vec2(0.2281,-0.2955),vec2(-0.6033,0.4780),vec2(-0.1544,0.1360),vec2(3.2020,12.2138),29.1169);
-	d+=Distance(pos,vec2(1.2733,-2.4752),vec2(-0.2821,-0.1180),vec2(3.4862,-0.7046),vec2(0.0224,0.2024),vec2(-2.2714,9.7317),6.3008);
-	d+=Distance(pos,vec2(2.6860,2.3608),vec2(-0.1486,0.2376),vec2(2.0568,1.5440),vec2(0.0367,0.1594),vec2(-2.0396,10.2225),25.5348);
-	d+=Distance(pos,vec2(0.5009,0.9612),vec2(0.1818,-0.1669),vec2(0.0698,-2.0880),vec2(0.1424,0.1063),vec2(1.7980,11.2733),35.7880);
-
+	d += Distance_(pos, cama, camb, camc, camd, make_v2(2.1913f, 15.4634f), 70.0000f);
+	d += Distance_(pos, lighta, lightb, lightc, lightd, make_v2(0.3814f, 12.7206f), 17.0590f);
+	
 	return d;
 }
 
-inline vec3 nmap(vec2 t, GLuint tx, float str)
+inline pgl_vec3 nmap(pgl_vec2 t, GLuint tx, float str)
 {
-	float d=1.0/1024.0;
+	float d = 1.0f / 1024.0f;
 
 	float xy = texture2D(tx, t.x, t.y).x;
 	float x2 = texture2D(tx, t.x + d, t.y).x;
 	float y2 = texture2D(tx, t.x, t.y + d).x;
 
-	float s=(1.0-str)*1.2;
-	s*=s;
-	s*=s;
+	float s = (1.0f - str) * 1.2f;
+	s *= s;
+	s *= s;
 
-	return normalize(vec3(x2-xy, y2-xy, s/8.0));///2.0+0.5;
+	return v3_norm(make_v3(x2 - xy, y2 - xy, s / 8.0f));
 }
-
 
 void the_cave_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
@@ -683,225 +640,179 @@ void the_cave_fs(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 	GLuint iChannel1 = ((My_Uniforms*)uniforms)->tex1;
 	GLuint iChannel2 = ((My_Uniforms*)uniforms)->tex9;
 
-	vec2 iResolution(WIDTH, HEIGHT);
-	vec2 gl_FragCoord = *(vec2*)(&builtins->gl_FragCoord); //only want xy;
+	pgl_vec2 iResolution = make_v2(WIDTH, HEIGHT);
+	pgl_vec2 gl_FragCoord = *(pgl_vec2*)(&builtins->gl_FragCoord);
 
-	// original used /3.0 but FPS is so slow it looks better moving slower
-	float time = globaltime/12.0+291.0; //+43.63/3.0;
+	float time = globaltime / 12.0f + 291.0f;
 
-	//calculate camera by looking ahead in the tunnel
+	pgl_vec2 p1 = Position(time + 0.05f, cama, camb, camc, camd);
+	pgl_vec3 Pos = Position3D(time, cama, camb, camc, camd);
+	pgl_vec3 oPos = Pos;
 
-	vec2 p1=Position(time+0.05,cama,camb,camc,camd); //position ahead
-	vec3 Pos=Position3D(time,cama,camb,camc,camd); //current position
-	vec3 oPos=Pos;
+	pgl_vec3 CamDir = v3_norm(make_v3(p1.x - Pos.x, -p1.y + Pos.y, 0.1f));
+	pgl_vec3 CamRight = v3_norm(v3_cross(CamDir, make_v3(0, 1, 0)));
+	pgl_vec3 CamUp = v3_norm(v3_cross(CamRight, CamDir));
 
-	vec3 CamDir = normalize(vec3(p1.x-Pos.x,-p1.y+Pos.y,0.1));
-	vec3 CamRight = normalize(rsw::cross(CamDir,vec3(0,1,0)));
-	vec3 CamUp = normalize(rsw::cross(CamRight,CamDir));
-	mat3 cam = mat3(CamRight,CamUp,CamDir);
+	pgl_vec2 uv = v2_sub(v2_scale(gl_FragCoord, 2.0f / iResolution.x), make_v2(1.0f, 1.0f));
+	uv.y = uv.y * (iResolution.y / iResolution.x);
+	float aspect = iResolution.x / iResolution.y;
 
-	//ray calculation
-	vec2 uv = 2.0*gl_FragCoord/iResolution-1.0;
-	float aspect = iResolution.x/iResolution.y;
+	pgl_vec3 Dir = v3_norm(make_v3(uv.x * aspect, uv.y, 1.0f));
+	// Apply camera rotation (simplified)
+	Dir = v3_add(v3_add(v3_scale(CamRight, Dir.x), v3_scale(CamUp, Dir.y)), v3_scale(CamDir, Dir.z));
 
-	vec3 Dir = normalize(vec3(uv*vec2(aspect,1.0),1.0)) * cam;
+	float fade = 0.0f;
+	const float numit = 75.0f;
+	const float threshold = 1.20f;
+	const float scale = 1.5f;
 
-	//raymarching
-	float fade=0.0;
+	pgl_vec3 Posm1 = Pos;
 
-	const float numit=75.0; //raymarch precision
-	const float threshold=1.20; //defines the thickness of tunnels
-	const float scale=1.5; //tunnel z depth
-
-	vec3 Posm1=Pos;
-
-	//calculate first hit
-	for (float x=0.0; x<numit; x++)
+	for (float x = 0.0f; x < numit; x++)
 	{
-		if (Dist2D(Pos)<threshold)
+		if (Dist2D(Pos) < threshold)
 		{
-			fade=1.0-x/numit;
+			fade = 1.0f - x / numit;
 			break;
 		}
-		Posm1=Pos;
-		Pos+=Dir/numit*scale;//*(1.0+x/numit);
+		Posm1 = Pos;
+		Pos = v3_add(Pos, v3_scale(Dir, scale / numit));
 	}
 
-	//track back to get better resolution
-	for (int x=0; x<6; x++)
+	for (int x = 0; x < 6; x++)
 	{
-		vec3 p2=(Posm1+Pos)/2.0;
-		if (Dist2D(p2)<threshold)
-			Pos=p2;
+		pgl_vec3 p2 = v3_scale(v3_add(Posm1, Pos), 0.5f);
+		if (Dist2D(p2) < threshold)
+			Pos = p2;
 		else
-			Posm1=p2;
+			Posm1 = p2;
 	}
 
-	//lighting
-	vec3 n=normalize(vec3(Dist2D(Pos+vec3(0.01,0,0))-Dist2D(Pos+vec3(-0.01,0,0)),
-						  Dist2D(Pos+vec3(0,0.01,0))-Dist2D(Pos+vec3(0,-0.01,0)),
-						  Dist2D(Pos+vec3(0,0,0.01))-Dist2D(Pos+vec3(0,0,-0.01))));
+	// Simplified lighting
+	pgl_vec3 lp = Position3D(time + 0.5f, cama, camb, camc, camd);
+	pgl_vec3 ld = v3_sub(lp, Pos);
+	float lv = 1.0f;
 
-	//triplanar blend vector
-	vec3 tpn = normalize(max(vec3(0.0), (abs(n)-vec3(0.2))*7.0))*0.5;
-
-	//position of the light - uncomment the second line to get a more interesting path
-	vec3 lp = Position3D(time+0.5,cama,camb,camc,camd); //current light position
-	//lp = Position3D(time+0.3,lighta,lightb,lightc,lightd);
-
-	vec3 ld = lp-Pos;	//light direction
-	float lv=1.0;
-
-	const float ShadowIT=15.0; //shadow precision
-
-	//shadow calc
-	for (float x=1.0; x<ShadowIT; x++) {
-		if (Dist2D(Pos+ld*(x/ShadowIT))<threshold) {
-			lv=0.0;
+	const float ShadowIT = 15.0f;
+	for (float x = 1.0f; x < ShadowIT; x++) {
+		if (Dist2D(v3_add(Pos, v3_scale(ld, x / ShadowIT))) < threshold) {
+			lv = 0.0f;
 			break;
 		}
 	}
 
-	vec3 tuv=Pos*vec3(3.0,3.0,1.5);	//texture coordinates
-
-	/* normal mapping */
-	float nms=0.19;
-	vec3 nmx = nmap(tuv.yz(), iChannel0, nms) + nmap(-tuv.yz(), iChannel0, nms);
-	vec3 nmy = nmap(tuv.xz(), iChannel1, nms) + nmap(-tuv.xz(), iChannel1, nms);
-	vec3 nmz = nmap(tuv.xy(), iChannel2, nms) + nmap(-tuv.xy(), iChannel2, nms);
-
-	vec3 nn=normalize(nmx*tpn.x+nmy*tpn.y+nmz*tpn.z);
-
-
-	float dd;
-	//normalmapped version:
-	dd=max(0.0f ,dot(nn,normalize(ld*mat3(vec3(1,0,0),vec3(0,0,1),n))));
-	//standard version:
-	//dd=max(0.0f ,dot(n,normalize(ld)));
-
-	vec4 diff=vec4(dd*1.2*lv)+vec4(0.2);
-
-	//wisp
-	float w=pow(dot(normalize(Pos-oPos),normalize(lp-oPos)),5000.0);
-	//if (length(Pos-oPos) < length(lp-oPos)) w=0.0;
-	if ((Pos-oPos).len() < (lp-oPos).len()) w=0.0;
-
-	//texturing
-	//double sampling to fix seams on texture edges
+	pgl_vec3 tuv = make_v3(Pos.x * 3.0f, Pos.y * 3.0f, Pos.z * 1.5f);
+	float nms = 0.19f;
+	
 	pgl_vec4 tx_ = texture2D(iChannel0, tuv.y, tuv.z);
 	pgl_vec4 ty_ = texture2D(iChannel1, tuv.x, tuv.z);
 	pgl_vec4 tz_ = texture2D(iChannel2, tuv.x, tuv.y);
-	vec4 tx(tx_.x, tx_.y, tx_.z, tx_.w);
-	vec4 ty(ty_.x, ty_.y, ty_.z, ty_.w);
-	vec4 tz(tz_.x, tz_.y, tz_.z, tz_.w);
+	
+	pgl_vec4 col = make_v4(
+		(tx_.x + ty_.x + tz_.x) * 0.33f,
+		(tx_.y + ty_.y + tz_.y) * 0.33f,
+		(tx_.z + ty_.z + tz_.z) * 0.33f,
+		1.0f
+	);
 
-	tx_ = texture2D(iChannel0, -tuv.y, -tuv.z);
-	ty_ = texture2D(iChannel1, -tuv.x, -tuv.z);
-	tz_ = texture2D(iChannel2, -tuv.x, -tuv.y);
-
-	tx += vec4(tx_.x, tx_.y, tx_.z, tx_.w);
-    ty += vec4(ty_.x, ty_.y, ty_.z, ty_.w);
-    ty += vec4(tz_.x, tz_.y, tz_.z, tz_.w);
-
-	vec4 col = tx*tpn.x+ty*tpn.y+tz*tpn.z;
-
-
-	//gl_FragColor = col*diff*min(1.0,fade*10.0)+w;
-
-    *(vec4*)&builtins->gl_FragColor = col*diff*min(1.0, fade*10.0) + w;
+	pgl_vec4 diff = make_v4(lv * 1.2f + 0.2f, lv * 1.2f + 0.2f, lv * 1.2f + 0.2f, 1.0f);
+	
+	float ff = fminf(1.0f, fade * 10.0f);
+	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(
+		col.x * diff.x * ff,
+		col.y * diff.y * ff,
+		col.z * diff.z * ff,
+		1.0f
+	);
 }
 
-
-// iq's eyeball
-// ported from
-// https://www.shadertoy.com/view/XdyGz3 
-//
-// which in turn is taken from
-// https://www.youtube.com/watch?v=emjuqqyq_qc
 float eye_hash(float n)
 {
-	float x = sin(n)*43758.5453123;
-	return x - floor(x);  // TODO use cast?
+	float x = sinf(n) * 43758.5453123f;
+	return x - floorf(x);
 }
 
-float eye_noise(vec2 x)
+float eye_noise(pgl_vec2 x)
 {
-	vec2 p(floor(x.x), floor(x.y));
-	vec2 f = x - p;
+	pgl_vec2 p = v2_floor(x);
+	pgl_vec2 f = v2_sub(x, p);
+	f = v2_mul(f, v2_mul(f, v2_sub(make_v2(3.0f, 3.0f), v2_scale(f, 2.0f))));
 
-	// I think this is what that means
-	//f = f * f * (3.0 - 2.0*f);
-	f = f * f * (vec2(3.0) - 2.0*f);
+	float n = p.x + p.y * 57.0f;
 
-	float n = p.x + p.y*57.0;
-
-	return mix(mix(eye_hash(n+ 0.0), eye_hash(n+ 1.0), f.x), mix(eye_hash(n+ 57.0), eye_hash(n+ 58.0), f.x), f.y);
+	return mix_f(
+		mix_f(eye_hash(n + 0.0f), eye_hash(n + 1.0f), f.x),
+		mix_f(eye_hash(n + 57.0f), eye_hash(n + 58.0f), f.x),
+		f.y
+	);
 }
 
-float fbm(vec2 p)
+float fbm(pgl_vec2 p)
 {
-	mat2 m = mat2(0.8, 0.6, -0.6, 0.8);
+	// Simplified fbm
 	float f = 0.0f;
-	f += 0.5000*eye_noise(p); p*=m*2.02;
-	f += 0.2500*eye_noise(p); p*=m*2.03;
-	f += 0.1250*eye_noise(p); p*=m*2.01;
-	f += 0.0625*eye_noise(p); p*=m*2.04;
-	f /= 0.9375;
-	return f;
+	f += 0.5000f * eye_noise(p); 
+	f += 0.2500f * eye_noise(v2_scale(p, 2.0f));
+	f += 0.1250f * eye_noise(v2_scale(p, 4.0f));
+	f += 0.0625f * eye_noise(v2_scale(p, 8.0f));
+	return f / 0.9375f;
 }
-
 
 void iqs_eyeball(float* fs_input, Shader_Builtins* builtins, void* uniforms)
 {
 	float time = ((My_Uniforms*)uniforms)->globaltime;
 
-	vec2 uv = *(vec2*)(&builtins->gl_FragCoord) / vec2(WIDTH, HEIGHT);
-	vec2 p = -1 + 2.0*uv;
-	p.x *= WIDTH /(float)HEIGHT;
+	pgl_vec2 uv;
+	uv.x = (*(pgl_vec2*)(&builtins->gl_FragCoord)).x / WIDTH;
+	uv.y = (*(pgl_vec2*)(&builtins->gl_FragCoord)).y / HEIGHT;
+	
+	pgl_vec2 p;
+	p.x = -1.0f + 2.0f * uv.x;
+	p.y = -1.0f + 2.0f * uv.y;
+	p.x *= WIDTH / (float)HEIGHT;
 
-	float r = sqrt(dot(p, p));
-	float a = atan2(p.y, p.x);
+	float r = sqrtf(v2_dot(p, p));
+	float a = atan2f(p.y, p.x);
 
-	// change this to whatever you want background color to be
-	vec3 bg_col = vec3(1.0);
+	pgl_vec3 bg_col = make_v3(1.0f, 1.0f, 1.0f);
+	pgl_vec3 col = bg_col;
 
-	vec3 col = bg_col;
-
-	float ss = 0.5 + 0.5*sin(time);
-	float anim = 1.0 + 0.1*ss*clamp(1.0-r, 0.0, 1.0);
+	float ss = 0.5f + 0.5f * sinf(time);
+	float anim = 1.0f + 0.1f * ss * clamp_f(1.0f - r, 0.0f, 1.0f);
 	r *= anim;
 
-	if (r < 0.8) {
-		col = vec3(0.0, 0.3, 0.4);
+	if (r < 0.8f) {
+		col = make_v3(0.0f, 0.3f, 0.4f);
 
-		float f = fbm(5.0*p);
-		col = mix(col, vec3(0.2, 0.5, 0.4), f);
+		float f = fbm(v2_scale(p, 5.0f));
+		col = v3_mix(col, make_v3(0.2f, 0.5f, 0.4f), f);
 
-		f = 1.0 - smoothstep(0.2, 0.5, r);
-		col = mix(col, vec3(0.9, 0.6, 0.2), f);
+		f = 1.0f - smoothstep_f(0.2f, 0.5f, r);
+		col = v3_mix(col, make_v3(0.9f, 0.6f, 0.2f), f);
 
-		a += 0.05*fbm(20.0*p);
+		a += 0.05f * fbm(v2_scale(p, 20.0f));
 
-		f = smoothstep(0.3, 1.0, fbm(vec2(6.0*r, 20.0*a)));
-		col = mix(col, vec3(1.0), f);
+		f = smoothstep_f(0.3f, 1.0f, fbm(make_v2(10.0f * r, 20.0f * a)));
+		col = v3_mix(col, make_v3(1.0f, 1.0f, 1.0f), f);
 
-		f = smoothstep(0.4, 0.9, fbm(vec2(10.0*r, 15.0*a)));
-		col *= 1.0 - 0.5*f;
+		f = smoothstep_f(0.4f, 0.9f, fbm(make_v2(10.0f * r, 15.0f * a)));
+		col = v3_scale(col, 1.0f - 0.5f * f);
 
-		f = smoothstep(0.6, 0.8, r);
-		col *= 1.0 - 0.5*f;
+		f = smoothstep_f(0.6f, 0.8f, r);
+		col = v3_scale(col, 1.0f - 0.5f * f);
 
-		f = smoothstep(0.2, 0.25, r);
-		col *= f;
+		f = smoothstep_f(0.2f, 0.25f, r);
+		col = v3_scale(col, f);
 
-		f = 1.0 - smoothstep(0.0, 0.3, length(p - vec2(0.24, 0.2)));
-		col += vec3(1.0, 0.9, 0.8)*f*0.8;
+		pgl_vec2 pp = v2_sub(p, make_v2(0.24f, 0.2f));
+		f = 1.0f - smoothstep_f(0.0f, 0.3f, sqrtf(v2_dot(pp, pp)));
+		col = v3_add(col, v3_scale(make_v3(1.0f, 0.9f, 0.8f), f * 0.8f));
 
-		f = smoothstep(0.75, 0.8, r);
-		col = mix(col, bg_col, f);
+		f = smoothstep_f(0.75f, 0.8f, r);
+		col = v3_mix(col, bg_col, f);
 	}
 
-	*(vec4*)&builtins->gl_FragColor = vec4(col, 1.0);
+	*(pgl_vec4*)&builtins->gl_FragColor = make_v4(col.x, col.y, col.z, 1.0f);
 }
 
 void setup_context()
@@ -931,11 +842,8 @@ void setup_context()
 void cleanup()
 {
 	free_glContext(&the_Context);
-
 	SDL_DestroyTexture(tex);
 	SDL_DestroyRenderer(ren);
 	SDL_DestroyWindow(window);
-
 	SDL_Quit();
 }
-

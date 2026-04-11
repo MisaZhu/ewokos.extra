@@ -11,7 +11,6 @@ all:
 	cd minivmac; make
 	cd gears; make
 	cd imgui_demo; make
-	cd Craft; make
 
 clean:
 	cd 3ddemo;make clean
@@ -25,4 +24,3 @@ clean:
 	cd minivmac; make clean
 	cd gears; make clean
 	cd imgui_demo; make clean
-	cd Craft; make clean

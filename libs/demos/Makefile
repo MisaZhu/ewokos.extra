@@ -16,13 +16,9 @@ LDFLAGS += -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lp
 # glcommon utility sources (only c_utils and gltools, rsw_math is in libportablegl.a)
 GLCOMMON_UTILS = ../glcommon/src/c_utils.o ../glcommon/src/gltools.o
 
-# Source files
-# C files - only pointsprites.c compiles without conflicts
-C_SRCS = pointsprites.c
-
-# C++ files - multidraw.cpp is fixed to use portablegl's built-in types
-# imgui_demo moved to sw.extra/bin/imgui_demo
-CPP_SRCS = multidraw.cpp
+# C++ files - all refactored to use portablegl's built-in types with PGL_PREFIX_TYPES
+# Now all demos compile with C-style code using pgl_compat.h
+CPP_SRCS = shadertoy.cpp 
 
 # Object files
 C_OBJS = $(patsubst %.c,%.o,$(C_SRCS))

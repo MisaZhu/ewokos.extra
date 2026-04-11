@@ -8,7 +8,7 @@ TASK_OBJS = sdltest.o
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/bin
 
 LDFLAGS += \
-	-lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lm -lopenlibm
+	-ljpeg -lgif -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -ljpeg -lgif -lvorbis -logg -lz -lm -lopenlibm
 
 all: $(TASK)
 
