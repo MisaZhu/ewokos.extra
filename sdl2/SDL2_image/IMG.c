@@ -36,7 +36,7 @@ static struct {
     SDL_Surface *(SDLCALL *load)(SDL_RWops *src);
 } supported[] = {
     /* keep magicless formats first */
-    //{ "TGA", NULL,      IMG_LoadTGA_RW },
+    { "TGA", NULL,      IMG_LoadTGA_RW },
     { "CUR", IMG_isCUR, IMG_LoadCUR_RW },
     { "ICO", IMG_isICO, IMG_LoadICO_RW },
     { "BMP", IMG_isBMP, IMG_LoadBMP_RW },

@@ -2,8 +2,9 @@
 #ifndef RSW_MATH_H
 #define RSW_MATH_H
 
-#include <iostream>
 #include <cmath>
+
+#include <iostream>
 #include <cstring>
 #include <cstdlib>
 #include <stdint.h>

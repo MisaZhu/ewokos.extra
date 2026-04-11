@@ -9,7 +9,7 @@ AR := $(TOOLCHAIN)ar
 OBJCOPY := $(TOOLCHAIN)objcopy
 
 DEPDIR := .deps
-DEFS = -D_REENTRANT -D__EWOKOS__ -DLOAD_BMP -DLOAD_GIF -DLOAD_JPG -DLOAD_PNG -DHAVE_HIDDEN -DSDL_BYTEORDER=SDL_LIL_ENDIAN
+DEFS = -D_REENTRANT -D__EWOKOS__ -DLOAD_BMP -DLOAD_GIF -DLOAD_JPG -DLOAD_PNG -DLOAD_TGA -DHAVE_HIDDEN -DSDL_BYTEORDER=SDL_LIL_ENDIAN
 
 PREFIX := /opt/ewokos
 
@@ -28,7 +28,7 @@ all: deps libSDL2_image.a
 
 .PHONY: deps
 
-OBJS = IMG.o IMG_bmp.o IMG_gif.o IMG_jpg.o IMG_png.o IMG_tif.o IMG_webp.o
+OBJS = IMG.o IMG_bmp.o IMG_gif.o IMG_jpg.o IMG_png.o IMG_tga.o IMG_tif.o IMG_webp.o
 
 -include $(DEPDIR)/*.Po
 
