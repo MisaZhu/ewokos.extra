@@ -68,16 +68,19 @@ static int phys_width;
 static int phys_height;
 
 static bool on_close(xwin_t* xwin) {
-    SDL_Event event;
-    event.type = SDL_QUIT;
-    SDL_PushEvent(&event);
+    if(xwin == NULL || xwin->xinfo == NULL)
+        return;
+    SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
+    if(window == NULL)
+        return;
+
+    SDL_SendWindowEvent(window, SDL_WINDOWEVENT_CLOSE, 0, 0);
     return false;
 }
 
 static void on_resize(xwin_t* xwin) {
     if(xwin == NULL || xwin->xinfo == NULL)
         return;
-
     SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
     if(window == NULL)
         return;
