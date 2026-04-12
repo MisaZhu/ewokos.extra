@@ -74,6 +74,20 @@ static bool on_close(xwin_t* xwin) {
     return false;
 }
 
+static void on_resize(xwin_t* xwin) {
+    if(xwin == NULL || xwin->xinfo == NULL)
+        return;
+
+    SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
+    if(window == NULL)
+        return;
+
+    if(xwin->xinfo->wsr.w != window->w || xwin->xinfo->wsr.h != window->h) {
+        SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED, xwin->xinfo->wsr.w, xwin->xinfo->wsr.h);
+        SDL_SetWindowSize(window, xwin->xinfo->wsr.w, xwin->xinfo->wsr.h);
+    }
+}
+
 static int sdl_key(int v) {
     switch(v) {
         case KEY_UP:
@@ -91,7 +105,6 @@ static int sdl_key(int v) {
 static void on_event(xwin_t* xw, xevent_t* ev) {
 	if(xw == NULL)
 		return;
-    
 
     SDL_Event sdlEvent;
     SDL_zero(sdlEvent);
@@ -149,7 +162,6 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     if(window->w <= 0 || window->h <= 0)
         window->flags |= SDL_WINDOW_FULLSCREEN;
 
-    window->flags &= ~SDL_WINDOW_RESIZABLE;     /* window is NEVER resizeable */
     window->flags &= (~SDL_WINDOW_HIDDEN);
     window->flags |= SDL_WINDOW_SHOWN;          /* only one window */
     window->flags |= SDL_WINDOW_INPUT_FOCUS;    /* always has input focus */
@@ -159,16 +171,20 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     if((window->y & SDL_WINDOWPOS_CENTERED) != 0 || (window->y & SDL_WINDOWPOS_UNDEFINED) != 0)
         window->y = (phys_height - window->h)/2;
 
+    int flags = (window->flags & SDL_WINDOW_RESIZABLE) ? XWIN_STYLE_NORMAL : XWIN_STYLE_NO_RESIZE;     /* window is NEVER resizeable */
     x_t* x = (x_t*)_this->driverdata;
 	xwin_t* xwin = xwin_open(x, 0, 
             window->x, window->y,
             window->w, window->h,
             window->title,
-            XWIN_STYLE_NO_RESIZE);
+            flags);
 
     xwin->on_event = on_event;
     xwin->on_close = on_close;
+    xwin->on_resize = on_resize;
     window->driverdata = xwin;
+    if(xwin->xinfo != NULL)
+        window->id = xwin->xinfo->win;
     if((window->flags & SDL_WINDOW_HIDDEN) == 0) {
         if((window->flags & SDL_WINDOW_FULLSCREEN) != 0) {
             xwin_fullscreen(xwin);

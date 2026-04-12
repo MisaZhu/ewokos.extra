@@ -24,6 +24,8 @@
 #include <vector>
 #include <algorithm>
 
+#include <ewoksys/klog.h>
+
 #define WIDTH 640
 #define HEIGHT 480
 
@@ -482,7 +484,6 @@ int handle_events(GLFrame& camera_frame, unsigned int last_time, unsigned int cu
 		case SDL_WINDOWEVENT:
 			switch (event.window.event) {
 			case SDL_WINDOWEVENT_RESIZED:
-				printf("window size %d x %d\n", event.window.data1, event.window.data2);
 				width = event.window.data1;
 				height = event.window.data2;
 

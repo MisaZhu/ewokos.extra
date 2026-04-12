@@ -22,6 +22,8 @@
 
 #if SDL_VIDEO_DRIVER_EWOKOS
 
+#include <string.h>
+
 #include "../SDL_sysvideo.h"
 #include "SDL_ewokosvideo.h"
 #include "SDL_ewokosframebuffer_c.h"
@@ -46,8 +48,16 @@ int EWOKOS_CreateWindowFramebuffer(_THIS, SDL_Window * window, Uint32 * format, 
     if(xwin_fetch_graph(xwin, &g) == NULL)
         return -1;
 
+    // Allocate a new buffer for SDL to write to
+    // The buffer size is width * height * 4 bytes (ARGB8888)
+    size_t buffer_size = g.w * g.h * 4;
+    void *buffer = SDL_malloc(buffer_size);
+    if (buffer == NULL) {
+        return SDL_OutOfMemory();
+    }
+
     *format = SDL_PIXELFORMAT_ARGB8888;
-    *pixels = (void*)g.buffer;
+    *pixels = buffer;
     *pitch = g.w * 4;
 
     return 0;
@@ -59,12 +69,31 @@ int EWOKOS_UpdateWindowFramebuffer(_THIS, SDL_Window * window, const SDL_Rect * 
         return SDL_SetError("Couldn't find surface for window");
     }
     xwin_t* xwin = (xwin_t*)window->driverdata;
+    if(xwin == NULL || xwin->xinfo == NULL)
+        return -1;
+    
+    if(surface->w != xwin->xinfo->wsr.w || surface->h != xwin->xinfo->wsr.h)
+        return -1;
+
+    // Get EwokOS graphics buffer
+    graph_t g;
+    if(xwin_fetch_graph(xwin, &g) == NULL)
+        return -1;
+
+    // Copy SDL surface pixels to EwokOS graphics buffer
+    // surface->pixels is the buffer we allocated in CreateWindowFramebuffer
+    memcpy(g.buffer, surface->pixels, surface->h * surface->pitch);
+
     xwin_repaint(xwin);
     return 0;
 }
 
 void EWOKOS_DestroyWindowFramebuffer(_THIS, SDL_Window * window) {
-
+    SDL_Surface *surface = (SDL_Surface *) SDL_GetWindowSurface(window);
+    if (surface && surface->pixels) {
+        SDL_free(surface->pixels);
+        surface->pixels = NULL;
+    }
 }
 
 #endif /* SDL_VIDEO_DRIVER_EWOKOS */

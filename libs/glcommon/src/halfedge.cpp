@@ -223,7 +223,7 @@ void compute_normals(vector<vec3>&verts, vector<ivec3>& t, half_edge_data* he_da
 						tmp_verts.push_back(face2*3+k);
 						edge2 = he_array[he_array[edge2].next].pair;
 						
-						std::cout<<"prevented face equal "<<i<<"\n\n";
+						//std::cout<<"prevented face equal "<<i<<"\n\n";
 						continue;
 					}
 					
@@ -255,7 +255,7 @@ void compute_normals(vector<vec3>&verts, vector<ivec3>& t, half_edge_data* he_da
 						//check if that normal has already been added (ie 2 triangles in same plane)
 						for (k=0; k<tmp_normals.size(); ++k) {
 							if (rsw::eql_epsilon(tmp_normals[k], v2, 0.00001f)) {//tmp_normals[k] == v2) {//rsw::eql_epsilon(tmp_normals[k], v2, 0.0001f))	//probably could use == here
-								fprintf(stderr, "preventing adding same normal\n");
+								//fprintf(stderr, "preventing adding same normal\n");
 								break;
 								
 							}
@@ -276,7 +276,7 @@ void compute_normals(vector<vec3>&verts, vector<ivec3>& t, half_edge_data* he_da
 				
 				//loop through list of "verts" setting them to the averaged normal
 				ave_normal = ave_normal.norm();
-				fprintf(stderr, "tmp_verts size = %lu\t", tmp_verts.size());
+				//fprintf(stderr, "tmp_verts size = %lu\t", tmp_verts.size());
 				for (int k=0; k<tmp_verts.size(); ++k)
 					normals[tmp_verts[k]] = ave_normal;
 				

@@ -14,11 +14,12 @@ CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -I../glcommon/include
 LDFLAGS += -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lm -lopenlibm -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 # glcommon library
-GLCOMMON_LIB = $(BUILD_DIR)/lib/libglcommon.a
+GLCOMMON_LIB = $(BUILD_DIR)/lib/libglcommon.a \
+	$(BUILD_DIR)/lib/libportablegl.a
 
 # C++ files - all refactored to use portablegl's built-in types with PGL_PREFIX_TYPES
 # Now all demos compile with C-style code using pgl_compat.h
-CPP_SRCS = shadertoy.cpp sphereworld_color.cpp cubemap.cpp grass.cpp
+CPP_SRCS = shadertoy.cpp sphere.cpp cubemap.cpp grass.cpp
 
 # Object files
 C_OBJS = $(patsubst %.c,%.o,$(C_SRCS))
@@ -46,11 +47,7 @@ dirs:
 	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I$(BUILD_DIR)/include -c $< -o $@
 
 # Link C programs
-$(ROOTFS_BIN)/%: %.o $(GLCOMMON_LIB)
-	$(LD) -Ttext=100 $< $(GLCOMMON_LIB) -o $@ $(LDFLAGS)
-
-# Link C++ programs
-$(ROOTFS_BIN)/%: %.o $(GLCOMMON_LIB)
+$(ROOTFS_BIN)/%: %.o $(GLCOMMON_LIB) $(BUILD_DIR)/lib/libSDL2.a
 	$(LD) -Ttext=100 $< $(GLCOMMON_LIB) -o $@ $(LDFLAGS)
 
 clean:
