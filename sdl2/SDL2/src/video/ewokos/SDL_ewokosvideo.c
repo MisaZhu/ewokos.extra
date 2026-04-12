@@ -69,10 +69,10 @@ static int phys_height;
 
 static bool on_close(xwin_t* xwin) {
     if(xwin == NULL || xwin->xinfo == NULL)
-        return;
+        return false;
     SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
     if(window == NULL)
-        return;
+        return false;
 
     SDL_SendWindowEvent(window, SDL_WINDOWEVENT_CLOSE, 0, 0);
     return false;
