@@ -10,7 +10,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#define PORTABLEGL_IMPLEMENTATION
 #include "portablegl/portablegl.h"
 
 #define SDL_MAIN_HANDLED

@@ -1,5 +1,3 @@
-#define PORTABLEGL_IMPLEMENTATION
-#define USING_PORTABLEGL
 #include "glcommon/gltools.h"
 
 #include <stdio.h>

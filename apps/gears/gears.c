@@ -67,8 +67,6 @@
 #include <x/xwin.h>
 #include <graph/graph.h>
 
-#define PORTABLEGL_IMPLEMENTATION
-#define USING_PORTABLEGL
 #include "glcommon/gltools.h"
 
 #ifndef M_PI

@@ -2,7 +2,6 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 
-#define PORTABLEGL_IMPLEMENTATION
 #include "glcommon/gltools.h"
 
 #include <stdio.h>
@@ -198,12 +197,18 @@ float randf_range(float min, float max) {
 
 void make_torus(std::vector<vec3>& verts, std::vector<int>& tris, std::vector<vec2>& texcoords,
                 float major_radius, float minor_radius, int major_segments, int minor_segments) {
-    for (int i = 0; i <= major_segments; i++) {
+    // Create vertex grid
+    // Torus is closed in both i (major circle) and j (minor circle) directions
+    // Both directions need texture coordinate wrapping
+    
+    // Vertex array size: (major_segments) * (minor_segments)
+    // Each vertex has unique 3D position and texture coordinates
+    for (int i = 0; i < major_segments; i++) {
         float theta = 2.0f * M_PI * i / major_segments;
         float cos_theta = cosf(theta);
         float sin_theta = sinf(theta);
 
-        for (int j = 0; j <= minor_segments; j++) {
+        for (int j = 0; j < minor_segments; j++) {
             float phi = 2.0f * M_PI * j / minor_segments;
             float cos_phi = cosf(phi);
             float sin_phi = sinf(phi);
@@ -213,17 +218,31 @@ void make_torus(std::vector<vec3>& verts, std::vector<int>& tris, std::vector<ve
             float z = (major_radius + minor_radius * cos_phi) * sin_theta;
 
             verts.push_back(make_v3(x, y, z));
+            // Texture coordinates range [0,1), properly wrapped at edges
             texcoords.push_back({(float)i / major_segments, (float)j / minor_segments});
         }
     }
 
+    // Generate triangle indices with proper wrapping in both directions
     for (int i = 0; i < major_segments; i++) {
+        int next_i = (i + 1) % major_segments;
         for (int j = 0; j < minor_segments; j++) {
-            int curr = i * (minor_segments + 1) + j;
-            int next = curr + minor_segments + 1;
+            int next_j = (j + 1) % minor_segments;
+            
+            int curr = i * minor_segments + j;
+            int right = i * minor_segments + next_j;
+            int down = next_i * minor_segments + j;
+            int diag = next_i * minor_segments + next_j;
 
-            tris.push_back(curr); tris.push_back(next); tris.push_back(curr + 1);
-            tris.push_back(curr + 1); tris.push_back(next); tris.push_back(next + 1);
+            // First triangle
+            tris.push_back(curr);
+            tris.push_back(down);
+            tris.push_back(right);
+            
+            // Second triangle
+            tris.push_back(right);
+            tris.push_back(down);
+            tris.push_back(diag);
         }
     }
 }

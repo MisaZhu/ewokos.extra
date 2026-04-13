@@ -1,6 +1,9 @@
 #ifndef GLTOOLS_H
 #define GLTOOLS_H
 
+#define PORTABLEGL_IMPLEMENTATION
+#define USING_PORTABLEGL
+
 #ifdef __cplusplus
 extern "C" {
 #endif
