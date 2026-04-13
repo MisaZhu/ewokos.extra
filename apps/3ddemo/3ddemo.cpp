@@ -141,21 +141,27 @@ void init_gl() {
 	printf("Texture ID: %u\n", texture);
 }
 
-static float rotation = 0;
+static float camera_angle = 0;
 
 static void render_mesh() {
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    mat4 view_mat, proj_mat, model_mat, mvp_mat, rot_mat, scale_mat;
+    mat4 view_mat, proj_mat, model_mat, mvp_mat, scale_mat;
 
-    lookAt(view_mat, make_v3(0.0f, 1.5f, 2.6f), make_v3(0.0f, 0.0f, 0.0f), make_v3(0.0f, 1.0f, 0.0f));
+    // 摄像机围绕模型水平旋转（类似gears）
+    float cam_radius = 4.0f;
+    float cam_x = sinf(camera_angle) * cam_radius;
+    float cam_z = cosf(camera_angle) * cam_radius;
+    float cam_y = 1.0f;
+    
+    // 摄像机始终看向模型中心
+    lookAt(view_mat, make_v3(cam_x, cam_y, cam_z), make_v3(0.0f, 0.0f, 0.0f), make_v3(0.0f, 1.0f, 0.0f));
     make_perspective_m4(proj_mat, DEG_TO_RAD(60.0f), win_width / (float)win_height, 0.1f, 100.0f);
 
-    scale_m4(scale_mat, 0.5f, 0.5f, 0.5f);
-    load_rotation_m4(rot_mat, make_v3(0, 1, 0), DEG_TO_RAD(rotation * 60.0f));
-
-    mult_m4_m4(model_mat, scale_mat, rot_mat);
+    // 模型不旋转，只缩放（模型中心已通过顶点数据偏移）
+    scale_m4(scale_mat, 1.0f, 1.0f, 1.0f);
+    memcpy(model_mat, scale_mat, sizeof(mat4));
 
     mult_m4_m4(mvp_mat, proj_mat, view_mat);
     mult_m4_m4(mvp_mat, mvp_mat, model_mat);
@@ -168,7 +174,7 @@ static void render_mesh() {
 
 static void on_repaint(xwin_t* xwin, graph_t* g) {
     (void)xwin;
-    rotation += 0.01f;
+    camera_angle += 0.05f;
     render_mesh();
     graph_fill(g, 0, 0, win_width, win_height, 0xFF1a1a2e);
     graph_t bg;

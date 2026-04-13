@@ -11070,3 +11070,4 @@ PGLDEF void pgl_init_std_shaders(GLuint programs[PGL_NUM_SHADERS])
 		programs[i] = pglCreateProgram(p->vs, p->fs, p->vs_out_sz, p->interp, p->uses_fragdepth_or_discard);
 	}
 }
+#endif
