@@ -87,7 +87,7 @@ static void on_resize(xwin_t* xwin) {
 
     if(xwin->xinfo->wsr.w != window->w || xwin->xinfo->wsr.h != window->h) {
         SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED, xwin->xinfo->wsr.w, xwin->xinfo->wsr.h);
-        SDL_SetWindowSize(window, xwin->xinfo->wsr.w, xwin->xinfo->wsr.h);
+        //SDL_SetWindowSize(window, xwin->xinfo->wsr.w, xwin->xinfo->wsr.h);
     }
 }
 

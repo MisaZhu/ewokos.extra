@@ -128,6 +128,9 @@ int main(int argc, char** argv)
 			counter = 0;
 		}
 
+		// Always get latest backbuffer pointer (in case of resize)
+		bbufpix = (pix_t*)pglGetBackBuffer();
+
 		glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
 		for (int i = 0; i < width * height; ++i) {
