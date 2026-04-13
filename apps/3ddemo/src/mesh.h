@@ -1,27 +1,40 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "vector.h"
-#include "triangle.h"
+#include <stdint.h>
 
-#define N_CUBE_VERTICES 8
-#define N_CUBE_FACES (6 * 2) // 6 faces with 2 triangles each
-
-extern vec3_t cube_vertices[N_CUBE_VERTICES]; // Defined externally in ("in mesh.c")
-extern face_t cube_faces[N_CUBE_FACES];
-
-// Defines a struct for dynamic size meshes, with array of verticesa and faces
 typedef struct {
-  vec3_t* vertices;   // Dynamic array of vertices
-  face_t* faces;      // Dynamic array of faces
-  vec3_t rotation;    // rotation with x,y,z values (Euler angles)
-  vec3_t scale;       // scale with x,y and z values
-  vec3_t translation; // translation with x,y and z values
+    float x;
+    float y;
+    float z;
+} vec3_t;
+
+typedef struct {
+    float u;
+    float v;
+} tex2_t;
+
+typedef struct {
+    int a;
+    int b;
+    int c;
+    tex2_t a_uv;
+    tex2_t b_uv;
+    tex2_t c_uv;
+    uint32_t color;
+} face_t;
+
+typedef struct {
+    vec3_t* vertices;
+    face_t* faces;
+    vec3_t rotation;
+    vec3_t scale;
+    vec3_t translation;
 } mesh_t;
 
-extern mesh_t mesh; // global variable
-
-void load_cube_mesh_data(void);
-void load_obj_file_data(char* filename);
+extern int num_faces;
+extern vec3_t vertices[];
+extern face_t faces[];
+extern mesh_t mesh;
 
 #endif
