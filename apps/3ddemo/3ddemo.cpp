@@ -151,7 +151,7 @@ static void render_mesh() {
 
     rsw::mat4 view_mat, proj_mat, model_mat, mvp_mat, rot_mat, scale_mat;
 
-    rsw::lookAt(view_mat, rsw::vec3(0.0f, 0.0f, 3.0f), rsw::vec3(0.0f, 0.0f, 0.0f), rsw::vec3(0.0f, 1.0f, 0.0f));
+    rsw::lookAt(view_mat, rsw::vec3(0.0f, 1.5f, 2.6f), rsw::vec3(0.0f, 0.0f, 0.0f), rsw::vec3(0.0f, 1.0f, 0.0f));
     rsw::make_perspective_matrix(proj_mat, DEG_TO_RAD(60.0f), win_width / (float)win_height, 0.1f, 100.0f);
 
     scale_mat = rsw::scale_mat4(0.5f, 0.5f, 0.5f);
@@ -169,7 +169,7 @@ static void render_mesh() {
 
 static void on_repaint(xwin_t* xwin, graph_t* g) {
     (void)xwin;
-    rotation += 0.02f;
+    rotation += 0.1f;
     render_mesh();
     graph_fill(g, 0, 0, win_width, win_height, 0xFF1a1a2e);
     graph_t bg;
