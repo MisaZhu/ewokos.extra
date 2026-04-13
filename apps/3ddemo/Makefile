@@ -7,7 +7,7 @@ TASK_OBJS = 3ddemo.o
 
 EXTRA_LIBS_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
-CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include -I ../../libs/glcommon/include -I ../../libs/glcommon/include/glcommon -I ../../libs/portablegl/include -I ../../libs/portablegl/include/portablegl -I ../../libs/glcommon/src -DUSING_PORTABLEGL
+CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include -I ../../libs/glcommon/include -I ../../libs/glcommon/include/glcommon -I ../../libs/portablegl/include -I ../../libs/portablegl/include/portablegl -DUSING_PORTABLEGL
 LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
 
 GLCOMMON_LIB = $(EXTRA_LIBS_DIR)/lib/libglcommon.a \

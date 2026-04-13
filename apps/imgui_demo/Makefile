@@ -35,11 +35,11 @@ all: $(TARGET)
 
 # Compile imgui_demo.cpp
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -I$(SW_ROOT_DIR)/libs/portablegl/include -I$(SW_ROOT_DIR)/libs/portablegl/include/portablegl -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -I$(SW_ROOT_DIR)/libs/external/imgui -I$(SW_ROOT_DIR)/libs/external/imgui/backends -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(SW_ROOT_DIR)/libs/portablegl/include -I$(SW_ROOT_DIR)/libs/portablegl/include/portablegl -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -I$(SW_ROOT_DIR)/libs/glcommon/src -I$(SW_ROOT_DIR)/libs/external/imgui -I$(SW_ROOT_DIR)/libs/external/imgui/backends -c $< -o $@
 
 # Compile imgui backend files
 imgui_impl_pgl_geometry.o: $(SW_ROOT_DIR)/libs/external/imgui/backends/imgui_impl_pgl_geometry.cpp
-	$(CXX) $(CXXFLAGS) -I$(SW_ROOT_DIR)/libs/portablegl/include -I$(SW_ROOT_DIR)/libs/portablegl/include/portablegl -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -I$(SW_ROOT_DIR)/libs/external/imgui -I$(SW_ROOT_DIR)/libs/external/imgui/backends -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(SW_ROOT_DIR)/libs/portablegl/include -I$(SW_ROOT_DIR)/libs/portablegl/include/portablegl -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -I$(SW_ROOT_DIR)/libs/glcommon/src -I$(SW_ROOT_DIR)/libs/external/imgui -I$(SW_ROOT_DIR)/libs/external/imgui/backends -c $< -o $@
 
 # Compile glcommon utility files
 $(SW_ROOT_DIR)/libs/glcommon/src/c_utils.o: $(SW_ROOT_DIR)/libs/glcommon/src/c_utils.c

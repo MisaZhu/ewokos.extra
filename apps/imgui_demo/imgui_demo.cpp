@@ -16,7 +16,8 @@
 #include <graph/graph.h>
 
 #define PORTABLEGL_IMPLEMENTATION
-#include "portablegl/portablegl.h"
+#define USING_PORTABLEGL
+#include "glcommon/gltools.h"
 
 #define IMGUI_IMPLEMENTATION
 #include "misc/single_file/imgui_single_file.h"
@@ -287,7 +288,7 @@ static void render_frame(void)
     the_uniforms.v_color.y = 0.0f;
     the_uniforms.v_color.z = 0.0f;
     the_uniforms.v_color.w = 1.0f;
-    pglSetUniform(&the_uniforms);
+    SetUniform(&the_uniforms);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     
     // GUI Rendering
@@ -382,8 +383,8 @@ static void on_resize(xwin_t* xwin)
     win_height = height;
     
     // Resize PortableGL framebuffer
-    pglResizeFramebuffer(win_width, win_height);
-    backbuf = (pix_t*)pglGetBackBuffer();
+    ResizeFramebuffer(win_width, win_height);
+    backbuf = (pix_t*)GetBackBuffer();
     
     // Update viewport
     glViewport(0, 0, win_width, win_height);
@@ -442,7 +443,7 @@ int main(int argc, char* argv[])
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
     
     // Create shader
-    GLuint myshader = pglCreateProgram(normal_vs, normal_fs, 0, NULL, GL_FALSE);
+    GLuint myshader = CreateProgram(normal_vs, normal_fs, 0, NULL, GL_FALSE);
     glUseProgram(myshader);
     
     // Enable depth test for proper clearing

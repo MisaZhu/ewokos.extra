@@ -68,7 +68,8 @@
 #include <graph/graph.h>
 
 #define PORTABLEGL_IMPLEMENTATION
-#include "portablegl/portablegl.h"
+#define USING_PORTABLEGL
+#include "glcommon/gltools.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -500,10 +501,10 @@ static void init_gears(void)
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
-    GLenum smooth[3] = { PGL_SMOOTH3 };
+    GLenum smooth[3] = { PGL_SMOOTH, PGL_SMOOTH, PGL_SMOOTH };
 
     /* Create the shader program using PortableGL function-based shaders */
-    program = pglCreateProgram(vertex_shader, fragment_shader, 3, smooth, GL_FALSE);
+    program = CreateProgram(vertex_shader, fragment_shader, 3, smooth, GL_FALSE);
     if (program == 0) {
         klog("init_gears: failed to create program\n");
         return;
@@ -511,7 +512,7 @@ static void init_gears(void)
     glUseProgram(program);
 
     /* Set uniform pointer */
-    pglSetUniform(&uniforms);
+    SetUniform(&uniforms);
 
     perspective(projection_matrix, 60.0f, (GLfloat)win_width / (GLfloat)win_height, 1.0f, 1024.0f);
     glViewport(0, 0, win_width, win_height);
@@ -534,8 +535,8 @@ static void reshape(int width, int height)
     win_height = height;
     
     /* Resize the PortableGL framebuffer first */
-    pglResizeFramebuffer(width, height);
-    backbuf = (pix_t*)pglGetBackBuffer();
+    ResizeFramebuffer(width, height);
+    backbuf = (pix_t*)GetBackBuffer();
     
     /* Update viewport */
     glViewport(0, 0, width, height);

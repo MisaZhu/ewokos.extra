@@ -1,253 +1,210 @@
 
 #include "Frame.h"
+#include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
-// Default position and orientation. At the origin, looking
-// down the positive Z axis (right handed coordinate system.
-Frame::Frame(bool camera, rsw::vec3 origin_)
-{
-	// At origin
-// 		origin.x= 0.0f; origin.y = 0.0f; origin.z = 0.0f;
-	origin = origin_;
-
-
-	// Up is up (+Y)
-	up.x = 0.0f; up.y = 1.0f; up.z = 0.0f;
-
-	// Forward is Z unless this is a camera frame
-	if (!camera) {
-		forward.x = 0.0f; forward.y = 0.0f; forward.z = 1.0f;
-	} else {
-		forward.x = 0.0f; forward.y = 0.0f; forward.z = -1.0f;
-	}
+// Helper functions
+static inline vec3 cross(const vec3& a, const vec3& b) {
+    return vec3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    );
 }
 
-
-
-rsw::mat4 Frame::get_matrix(bool rotation_only)
-{
-	rsw::mat4 matrix;
-
-	rsw::vec3 vXAxis = cross(up, forward);
-
-	matrix.setc1(vXAxis);
-	matrix.setc2(up);
-	matrix.setc3(forward);
-
-	// Translation (already done)
-	if(rotation_only == true)
-		matrix.setc4(rsw::vec3(0,0,0));
-	else
-		matrix.setc4(origin);
-
-	return matrix;
+static inline float dot(const vec3& a, const vec3& b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-
-
-rsw::mat4 Frame::get_camera_matrix(bool rotation_only)
-{
-	rsw::vec3 x, z;
-	rsw::mat4 mat;
-
-	// Make rotation matrix
-	// Z vector is reversed
-	//not sure this is right/necessary now that I changed forward to +Z
-	//guess I'll find out eventually
-	z = -forward;
-
-	// X vector = Y cross Z
-	x = cross(up, z);
-
-	// Matrix has no translation information and is
-	// transposed.... (rows instead of columns) TODO what does this mean?
-	mat.setx(x);
-	mat.sety(up);
-	mat.setz(z);
-	mat.setw(rsw::vec3(0,0,0));
-
-	if(rotation_only)
-		return mat;
-
-	// Apply translation too
-	rsw::mat4 trans;
-	trans.setc4(-origin);	//default constructor loads identity so this is all we need to form translation
-
-	//could instead of having the previous 2 lines just mat*(-origin) and drop the result
-	//in column 4 of mat.  I think that actually saves mult ops
-
-	return mat*trans;
+static inline float length(const vec3& v) {
+    return sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
 }
 
-
-void Frame::rotate_local_y(float fAngle)
-{
-	rsw::mat3 rotMat;
-
-	// Just Rotate around the up vector
-	// Create a rotation matrix around my Up (Y) vector
-	load_rotation_mat3(rotMat, up, fAngle);
-
-	// Rotate forward pointing vector
-	forward = rotMat*forward;
-
+static inline vec3 normalize_vec3(const vec3& v) {
+    float len = length(v);
+    if (len > 0.0001f) {
+        return vec3(v.x / len, v.y / len, v.z / len);
+    }
+    return v;
 }
 
-
-void Frame::rotate_local_z(float fAngle)
-{
-	rsw::mat3 rotMat;
-
-	// Only the up vector needs to be rotated
-	load_rotation_mat3(rotMat, forward, fAngle);
-
-	up = rotMat*up;
+static inline vec3 operator+(const vec3& a, const vec3& b) {
+    return vec3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
-
-void Frame::rotate_local_x(float fAngle)
-{
-	rsw::mat3 rotMat;
-	rsw::vec3 localX;
-	//get local x axis
-	localX = cross(up, forward);
-
-	load_rotation_mat3(rotMat, localX, fAngle);
-// 		std::cout<<rotMat<<"\n";
-// 		int x;
-// 		std::cin>>x;
-	//have to rotate both up and forward vectors
-	up = rotMat*up;
-	forward = rotMat*forward;
+static inline vec3 operator-(const vec3& a, const vec3& b) {
+    return vec3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-
-// Reset axes to make sure they are orthonormal. This should be called on occasion
-// if the matrix is long-lived and frequently transformed.
-void Frame::normalize(bool keep_forward)
-{
-	rsw::vec3 vCross;
-
-	//calculate cross product of up and forward vectors (local x axis
-	//use the result to recalculate forward vector
-	if (!keep_forward) {
-		vCross = cross(up, forward);
-		forward = cross(vCross, up);
-	} else {
-		vCross = cross(forward, up);
-		up = cross(vCross, forward);
-	}
-
-	//normalize
-	up.norm();
-	forward.norm();
+static inline vec3 operator-(const vec3& v) {
+    return vec3(-v.x, -v.y, -v.z);
 }
 
-
-// Rotate in world coordinates...
-//Rotates in place around a vector in world coordinates
-//Does NOT rotate the frame itself around the world origin (ie the pos of the frame doesn't change)
-void Frame::rotate_world(float fAngle, float x, float y, float z)
-{
-	rsw::mat3 rotMat;
-
-	// Create the Rotation matrix
-	load_rotation_mat3(rotMat, rsw::vec3(x,y,z), fAngle);
-
-	//transform up and forward axis
-	up = rotMat*up;
-	forward = rotMat*forward;
+static inline vec3 operator*(const vec3& v, float s) {
+    return vec3(v.x * s, v.y * s, v.z * s);
 }
 
-
-// Rotate around a local axis
-void Frame::rotate_local(float fAngle, float x, float y, float z)
-{
-	rsw::vec3 vWorldVect;
-	rsw::vec3 vLocalVect(x, y, z);
-
-	vWorldVect = local_to_world(vLocalVect, true);
-
-	rotate_world(fAngle, vWorldVect.x, vWorldVect.y, vWorldVect.z);
+static inline vec3 operator*(float s, const vec3& v) {
+    return v * s;
 }
 
-
-// Convert Coordinate Systems
-// This is pretty much, do the transformation represented by the rotation
-// and position on the point
-// Is it better to stick to the convention that the destination always comes
-// first, or use the conventions that "sounds" like the function...
-rsw::vec3 Frame::local_to_world(const rsw::vec3 vLocal, bool bRotOnly)
-{
-	rsw::vec3 vWorld;
-
-		// Create the rotation matrix based on the vectors
-	rsw::mat4 rotMat = get_matrix(true);
-
-	// Do the rotation (inline it, and remove 4th column...)
-	vWorld.x = rotMat[0] * vLocal.x + rotMat[4] * vLocal.y + rotMat[8] *  vLocal.z;
-	vWorld.y = rotMat[1] * vLocal.x + rotMat[5] * vLocal.y + rotMat[9] *  vLocal.z;
-	vWorld.z = rotMat[2] * vLocal.x + rotMat[6] * vLocal.y + rotMat[10] * vLocal.z;
-
-	// Translate the point
-	if(!bRotOnly)
-		vWorld += origin;
-
-	return vWorld;
+static inline vec3& operator+=(vec3& a, const vec3& b) {
+    a.x += b.x; a.y += b.y; a.z += b.z;
+    return a;
 }
 
+static inline vec3& operator-=(vec3& a, const vec3& b) {
+    a.x -= b.x; a.y -= b.y; a.z -= b.z;
+    return a;
+}
 
-	//THIS IS WHERE I AM!
-	// Change world coordinates into "local" coordinates
-//         rsw::vec3 WorldToLocal(const rsw::vec3 vWorld)
-//         {
-//
-// 			////////////////////////////////////////////////
-//             // Translate the origin
-//         	rsw::vec3 local = vWorld - origin;
-//
-//         	matrix44 rotMat = get_matrix(true);
-//
-//
-// 			M3DVector3f vNewWorld;
-//             vNewWorld[0] = vWorld[0] - origin[0];
-//             vNewWorld[1] = vWorld[1] - origin[1];
-//             vNewWorld[2] = vWorld[2] - origin[2];
-//
-//             // Create the rotation matrix based on the vectors
-// 			M3DMatrix44f rotMat;
-//             M3DMatrix44f invMat;
-// 			get_matrix(rotMat, true);
-//
-// 			// Do the rotation based on inverted matrix
-//             m3dInvertMatrix44(invMat, rotMat);
-//
-// 			vLocal[0] = invMat[0] * vNewWorld[0] + invMat[4] * vNewWorld[1] + invMat[8] *  vNewWorld[2];
-// 			vLocal[1] = invMat[1] * vNewWorld[0] + invMat[5] * vNewWorld[1] + invMat[9] *  vNewWorld[2];
-// 			vLocal[2] = invMat[2] * vNewWorld[0] + invMat[6] * vNewWorld[1] + invMat[10] * vNewWorld[2];
-//         }
-//
-//         /////////////////////////////////////////////////////////////////////////////
-//         // Transform a point by frame matrix
-//         void TransformPoint(M3DVector3f vPointSrc, M3DVector3f vPointDst)
-//             {
-//             M3DMatrix44f m;
-//             get_matrix(m, false);    // Rotate and translate
-//             vPointDst[0] = m[0] * vPointSrc[0] + m[4] * vPointSrc[1] + m[8] *  vPointSrc[2] + m[12];// * v[3];
-//             vPointDst[1] = m[1] * vPointSrc[0] + m[5] * vPointSrc[1] + m[9] *  vPointSrc[2] + m[13];// * v[3];
-//             vPointDst[2] = m[2] * vPointSrc[0] + m[6] * vPointSrc[1] + m[10] * vPointSrc[2] + m[14];// * v[3];
-//             }
-//
-//         ////////////////////////////////////////////////////////////////////////////
-//         // Rotate a vector by frame matrix
-//         void RotateVector(M3DVector3f vVectorSrc, M3DVector3f vVectorDst)
-//             {
-//             M3DMatrix44f m;
-//             get_matrix(m, true);    // Rotate only
-//
-//             vVectorDst[0] = m[0] * vVectorSrc[0] + m[4] * vVectorSrc[1] + m[8] *  vVectorSrc[2];
-//             vVectorDst[1] = m[1] * vVectorSrc[0] + m[5] * vVectorSrc[1] + m[9] *  vVectorSrc[2];
-//             vVectorDst[2] = m[2] * vVectorSrc[0] + m[6] * vVectorSrc[1] + m[10] * vVectorSrc[2];
-//             }
+static inline vec3& operator*=(vec3& v, float s) {
+    v.x *= s; v.y *= s; v.z *= s;
+    return v;
+}
 
+// Rotation matrix functions
+static void load_rotation_mat3(float* mat, const vec3& axis, float angle) {
+    float c = cosf(angle);
+    float s = sinf(angle);
+    float t = 1.0f - c;
+    
+    vec3 n = normalize_vec3(axis);
+    float x = n.x, y = n.y, z = n.z;
+    
+    mat[0] = t*x*x + c;     mat[1] = t*x*y + s*z;   mat[2] = t*x*z - s*y;
+    mat[3] = t*x*y - s*z;   mat[4] = t*y*y + c;     mat[5] = t*y*z + s*x;
+    mat[6] = t*x*z + s*y;   mat[7] = t*y*z - s*x;   mat[8] = t*z*z + c;
+}
 
+static vec3 mat3_mult_vec3(const float* mat, const vec3& v) {
+    return vec3(
+        mat[0] * v.x + mat[1] * v.y + mat[2] * v.z,
+        mat[3] * v.x + mat[4] * v.y + mat[5] * v.z,
+        mat[6] * v.x + mat[7] * v.y + mat[8] * v.z
+    );
+}
+
+Frame::Frame(bool camera, vec3 origin_) {
+    origin = origin_;
+    
+    up.x = 0.0f; up.y = 1.0f; up.z = 0.0f;
+    
+    if (!camera) {
+        forward.x = 0.0f; forward.y = 0.0f; forward.z = 1.0f;
+    } else {
+        forward.x = 0.0f; forward.y = 0.0f; forward.z = -1.0f;
+    }
+}
+
+vec3 Frame::get_x() {
+    return cross(up, forward);
+}
+
+void Frame::move_forward(float fDelta) {
+    origin += forward * fDelta;
+}
+
+void Frame::move_up(float fDelta) {
+    origin += up * fDelta;
+}
+
+void Frame::move_right(float fDelta) {
+    vec3 x = cross(up, forward);
+    origin += x * fDelta;
+}
+
+void Frame::get_matrix(float* mat, bool rotation_only) {
+    vec3 x = cross(up, forward);
+    
+    // Column-major order
+    mat[0] = x.x;     mat[4] = up.x;     mat[8] = forward.x;  mat[12] = rotation_only ? 0.0f : origin.x;
+    mat[1] = x.y;     mat[5] = up.y;     mat[9] = forward.y;  mat[13] = rotation_only ? 0.0f : origin.y;
+    mat[2] = x.z;     mat[6] = up.z;     mat[10] = forward.z; mat[14] = rotation_only ? 0.0f : origin.z;
+    mat[3] = 0.0f;    mat[7] = 0.0f;     mat[11] = 0.0f;      mat[15] = 1.0f;
+}
+
+void Frame::get_camera_matrix(float* mat, bool rotation_only) {
+    vec3 z = -forward;
+    vec3 x = cross(up, z);
+    
+    // Column-major order for rotation (transposed)
+    mat[0] = x.x;     mat[4] = x.y;     mat[8] = x.z;      mat[12] = 0.0f;
+    mat[1] = up.x;    mat[5] = up.y;    mat[9] = up.z;     mat[13] = 0.0f;
+    mat[2] = z.x;     mat[6] = z.y;     mat[10] = z.z;     mat[14] = 0.0f;
+    mat[3] = 0.0f;    mat[7] = 0.0f;    mat[11] = 0.0f;    mat[15] = 1.0f;
+    
+    if (!rotation_only) {
+        // Apply translation
+        mat[12] = -(x.x * origin.x + x.y * origin.y + x.z * origin.z);
+        mat[13] = -(up.x * origin.x + up.y * origin.y + up.z * origin.z);
+        mat[14] = -(z.x * origin.x + z.y * origin.y + z.z * origin.z);
+    }
+}
+
+void Frame::rotate_local_y(float fAngle) {
+    float mat[9];
+    load_rotation_mat3(mat, up, fAngle);
+    forward = mat3_mult_vec3(mat, forward);
+}
+
+void Frame::rotate_local_z(float fAngle) {
+    float mat[9];
+    load_rotation_mat3(mat, forward, fAngle);
+    up = mat3_mult_vec3(mat, up);
+}
+
+void Frame::rotate_local_x(float fAngle) {
+    float mat[9];
+    vec3 localX = cross(up, forward);
+    load_rotation_mat3(mat, localX, fAngle);
+    up = mat3_mult_vec3(mat, up);
+    forward = mat3_mult_vec3(mat, forward);
+}
+
+void Frame::normalize(bool keep_forward) {
+    vec3 vCross;
+    
+    if (!keep_forward) {
+        vCross = cross(up, forward);
+        forward = cross(vCross, up);
+    } else {
+        vCross = cross(forward, up);
+        up = cross(vCross, forward);
+    }
+    
+    up = normalize_vec3(up);
+    forward = normalize_vec3(forward);
+}
+
+void Frame::rotate_world(float fAngle, float x, float y, float z) {
+    float mat[9];
+    load_rotation_mat3(mat, vec3(x, y, z), fAngle);
+    up = mat3_mult_vec3(mat, up);
+    forward = mat3_mult_vec3(mat, forward);
+}
+
+void Frame::rotate_local(float fAngle, float x, float y, float z) {
+    vec3 vLocal(x, y, z);
+    vec3 vWorld = local_to_world(vLocal, true);
+    rotate_world(fAngle, vWorld.x, vWorld.y, vWorld.z);
+}
+
+vec3 Frame::local_to_world(const vec3 vLocal, bool bRotOnly) {
+    vec3 vWorld;
+    
+    float mat[16];
+    get_matrix(mat, true);
+    
+    vWorld.x = mat[0] * vLocal.x + mat[4] * vLocal.y + mat[8] * vLocal.z;
+    vWorld.y = mat[1] * vLocal.x + mat[5] * vLocal.y + mat[9] * vLocal.z;
+    vWorld.z = mat[2] * vLocal.x + mat[6] * vLocal.y + mat[10] * vLocal.z;
+    
+    if (!bRotOnly)
+        vWorld += origin;
+    
+    return vWorld;
+}

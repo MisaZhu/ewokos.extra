@@ -1,9 +1,7 @@
 
-#define PGL_PREFIX_TYPES
 #define PORTABLEGL_IMPLEMENTATION
 #define USING_PORTABLEGL
 #include "glcommon/gltools.h"
-#include "rsw_math.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,12 +30,12 @@ static GLuint program, vao, vbo;
 static GLuint texture;
 
 struct My_Uniforms {
-	pgl_mat4 mvp_mat;
+	mat4 mvp_mat;
 	GLuint tex0;
 };
 static My_Uniforms the_uniforms;
 
-void basic_transform_vp(float* vs_output, pgl_vec4* vertex_attribs, Shader_Builtins* builtins, void* uniforms) {
+void basic_transform_vp(float* vs_output, vec4* vertex_attribs, Shader_Builtins* builtins, void* uniforms) {
     (void)vs_output;
     My_Uniforms* u = (My_Uniforms*)uniforms;
     builtins->gl_Position = mult_m4_v4(u->mvp_mat, vertex_attribs[0]);
@@ -129,9 +127,9 @@ static void init_texture() {
 
 void init_gl() {
 	GLenum interpolation[2] = { PGL_SMOOTH, PGL_SMOOTH };
-	program = pglCreateProgram(basic_transform_vp, texture_frag_fp, 2, interpolation, GL_FALSE);
+	program = CreateProgram(basic_transform_vp, texture_frag_fp, 2, interpolation, GL_FALSE);
 	glUseProgram(program);
-	pglSetUniform(&the_uniforms);
+	SetUniform(&the_uniforms);
 
 	init_mesh();
 	init_texture();
@@ -149,19 +147,20 @@ static void render_mesh() {
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    rsw::mat4 view_mat, proj_mat, model_mat, mvp_mat, rot_mat, scale_mat;
+    mat4 view_mat, proj_mat, model_mat, mvp_mat, rot_mat, scale_mat;
 
-    rsw::lookAt(view_mat, rsw::vec3(0.0f, 1.5f, 2.6f), rsw::vec3(0.0f, 0.0f, 0.0f), rsw::vec3(0.0f, 1.0f, 0.0f));
-    rsw::make_perspective_matrix(proj_mat, DEG_TO_RAD(60.0f), win_width / (float)win_height, 0.1f, 100.0f);
+    lookAt(view_mat, make_v3(0.0f, 1.5f, 2.6f), make_v3(0.0f, 0.0f, 0.0f), make_v3(0.0f, 1.0f, 0.0f));
+    make_perspective_m4(proj_mat, DEG_TO_RAD(60.0f), win_width / (float)win_height, 0.1f, 100.0f);
 
-    scale_mat = rsw::scale_mat4(0.5f, 0.5f, 0.5f);
-    rsw::load_rotation_mat4(rot_mat, rsw::vec3(0, 1, 0), DEG_TO_RAD(rotation * 60.0f));
+    scale_m4(scale_mat, 0.5f, 0.5f, 0.5f);
+    load_rotation_m4(rot_mat, make_v3(0, 1, 0), DEG_TO_RAD(rotation * 60.0f));
 
-    model_mat = scale_mat * rot_mat;
+    mult_m4_m4(model_mat, scale_mat, rot_mat);
 
-    mvp_mat = proj_mat * view_mat * model_mat;
+    mult_m4_m4(mvp_mat, proj_mat, view_mat);
+    mult_m4_m4(mvp_mat, mvp_mat, model_mat);
 
-    memcpy(the_uniforms.mvp_mat, mvp_mat.matrix, sizeof(float) * 16);
+    memcpy(the_uniforms.mvp_mat, mvp_mat, sizeof(float) * 16);
 
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, num_faces * 3);
@@ -187,8 +186,8 @@ static void on_resize(xwin_t* xwin) {
     win_width = xwin->xinfo->wsr.w;
     win_height = xwin->xinfo->wsr.h;
     if (win_width <= 0 || win_height <= 0) return;
-    pglResizeFramebuffer(win_width, win_height);
-    backbuf = (pix_t*)pglGetBackBuffer();
+    ResizeFramebuffer(win_width, win_height);
+    backbuf = (pix_t*)GetBackBuffer();
     glViewport(0, 0, win_width, win_height);
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

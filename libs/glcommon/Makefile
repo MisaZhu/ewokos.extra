@@ -5,8 +5,8 @@ include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
-CFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -Irsw_math -I../external -I../portablegl/include -I../portablegl/include/portablegl -DUSING_PORTABLEGL
-CXXFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -Irsw_math -I../external -I../portablegl/include -I../portablegl/include/portablegl -DUSING_PORTABLEGL
+CFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../external -I../portablegl/include -I../portablegl/include/portablegl -DUSING_PORTABLEGL
+CXXFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../external -I../portablegl/include -I../portablegl/include/portablegl -DUSING_PORTABLEGL
 
 # C source files
 LIB_GLCOMMON_C_OBJS = \
@@ -18,13 +18,7 @@ LIB_GLCOMMON_C_OBJS = \
 
 # C++ source files
 LIB_GLCOMMON_CPP_OBJS = \
-	src/Frame.o \
-	src/controls.o \
-	src/halfedge.o \
-	src/rsw_glframe.o \
-	src/rsw_halfedge.o \
-	src/rsw_math.o \
-	src/rsw_primitives.o
+	src/Frame.o
 
 LIB_GLCOMMON_OBJS = $(LIB_GLCOMMON_C_OBJS) $(LIB_GLCOMMON_CPP_OBJS)
 
@@ -41,10 +35,6 @@ src/%.o: src/%.c
 # Compile C++ files
 src/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# Compile rsw_math C files
-rsw_math/%.o: rsw_math/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(LIB_GLCOMMON_OBJS)

@@ -90,4 +90,28 @@ GLboolean load_texture_rect(const char* filename, GLenum min_filter, GLenum mag_
 }
 #endif
 
-#endif
+//
+// OpenGL Standard Compatibility Layer for PortableGL
+// These macros provide standard OpenGL naming for PortableGL specific functions
+//
+#ifdef USING_PORTABLEGL
+
+// Program and Shader functions
+#define CreateProgram pglCreateProgram
+#define SetUniform pglSetUniform
+
+// Framebuffer functions  
+#define ResizeFramebuffer pglResizeFramebuffer
+#define GetBackBuffer pglGetBackBuffer
+#define SetBackBuffer pglSetBackBuffer
+#define SetTexBackBuffer pglSetTexBackBuffer
+
+// Texture data access
+#define GetTextureData pglGetTextureData
+
+// Geometry drawing
+#define DrawGeometryRaw pglDrawGeometryRaw
+
+#endif // USING_PORTABLEGL
+
+#endif // GLTOOLS_H
