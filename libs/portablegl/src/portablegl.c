@@ -110,6 +110,7 @@ static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, 
 // Matrix multiplication NEON optimization - AARCH64 version uses more registers
 static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 {
+#ifndef ROW_MAJOR
     // Load columns of matrix B
     float32x4_t b0 = vld1q_f32(b);
     float32x4_t b1 = vld1q_f32(b + 4);
@@ -127,11 +128,32 @@ static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 
         vst1q_f32(c + i * 4, result);
     }
+#else
+    // Row-major: C = A * B
+    // Load rows of matrix A
+    float32x4_t a0 = vld1q_f32(a);
+    float32x4_t a1 = vld1q_f32(a + 4);
+    float32x4_t a2 = vld1q_f32(a + 8);
+    float32x4_t a3 = vld1q_f32(a + 12);
+
+    for (int i = 0; i < 4; i++) {
+        float32x4_t b_vec = vld1q_f32(b + i * 4);
+
+        // Calculate dot product
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_vec, 0)), a0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_vec, 1)), a1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_vec, 2)), a2);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_vec, 3)), a3);
+
+        vst1q_f32(c + i * 4, result);
+    }
+#endif
 }
 
 // Matrix 2x2 multiplication NEON optimization
 static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
 {
+#ifndef ROW_MAJOR
     // Load columns of matrix B (2 columns, 2 floats each)
     float32x2_t b0 = vld1_f32(b);
     float32x2_t b1 = vld1_f32(b + 2);
@@ -146,11 +168,28 @@ static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
 
         vst1_f32(c + i * 2, result);
     }
+#else
+    // Row-major: C = A * B
+    // Load rows of matrix A
+    float32x2_t a0 = vld1_f32(a);
+    float32x2_t a1 = vld1_f32(a + 2);
+
+    for (int i = 0; i < 2; i++) {
+        float32x2_t b_vec = vld1_f32(b + i * 2);
+
+        // Calculate dot product
+        float32x2_t result = vmul_n_f32(a0, vget_lane_f32(b_vec, 0));
+        result = vmla_n_f32(result, a1, vget_lane_f32(b_vec, 1));
+
+        vst1_f32(c + i * 2, result);
+    }
+#endif
 }
 
 // Matrix-vector multiplication NEON optimizations
 static inline void pgl_neon_mult_m4_v4(vec4* r, const float* m, const vec4 v)
 {
+#ifndef ROW_MAJOR
     float32x4_t vx = vdupq_n_f32(v.x);
     float32x4_t vy = vdupq_n_f32(v.y);
     float32x4_t vz = vdupq_n_f32(v.z);
@@ -170,10 +209,32 @@ static inline void pgl_neon_mult_m4_v4(vec4* r, const float* m, const vec4 v)
     r->y = vgetq_lane_f32(res, 1);
     r->z = vgetq_lane_f32(res, 2);
     r->w = vgetq_lane_f32(res, 3);
+#else
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t r0 = vld1q_f32(m);
+    float32x4_t r1 = vld1q_f32(m + 4);
+    float32x4_t r2 = vld1q_f32(m + 8);
+    float32x4_t r3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, r0);
+    res = vmlaq_f32(res, vy, r1);
+    res = vmlaq_f32(res, vz, r2);
+    res = vmlaq_f32(res, vw, r3);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+    r->w = vgetq_lane_f32(res, 3);
+#endif
 }
 
 static inline void pgl_neon_mult_m3_v3(vec3* r, const float* m, const vec3 v)
 {
+#ifndef ROW_MAJOR
     float32x4_t vx = vdupq_n_f32(v.x);
     float32x4_t vy = vdupq_n_f32(v.y);
     float32x4_t vz = vdupq_n_f32(v.z);
@@ -189,10 +250,28 @@ static inline void pgl_neon_mult_m3_v3(vec3* r, const float* m, const vec3 v)
     r->x = vgetq_lane_f32(res, 0);
     r->y = vgetq_lane_f32(res, 1);
     r->z = vgetq_lane_f32(res, 2);
+#else
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+
+    float32x4_t r0 = vld1q_f32(m);
+    float32x4_t r1 = vld1q_f32(m + 3);
+    float32x4_t r2 = vld1q_f32(m + 6);
+
+    float32x4_t res = vmulq_f32(vx, r0);
+    res = vmlaq_f32(res, vy, r1);
+    res = vmlaq_f32(res, vz, r2);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+#endif
 }
 
 static inline void pgl_neon_mult_m2_v2(vec2* r, const float* m, const vec2 v)
 {
+#ifndef ROW_MAJOR
     float32x2_t vx = vdup_n_f32(v.x);
     float32x2_t vy = vdup_n_f32(v.y);
 
@@ -204,6 +283,19 @@ static inline void pgl_neon_mult_m2_v2(vec2* r, const float* m, const vec2 v)
 
     r->x = vget_lane_f32(res, 0);
     r->y = vget_lane_f32(res, 1);
+#else
+    float32x2_t vx = vdup_n_f32(v.x);
+    float32x2_t vy = vdup_n_f32(v.y);
+
+    float32x2_t r0 = vld1_f32(m);
+    float32x2_t r1 = vld1_f32(m + 1);
+
+    float32x2_t res = vmul_f32(vx, r0);
+    res = vmla_f32(res, vy, r1);
+
+    r->x = vget_lane_f32(res, 0);
+    r->y = vget_lane_f32(res, 1);
+#endif
 }
 
 // Load rotation matrix NEON optimizations
@@ -503,6 +595,7 @@ static inline void pgl_neon_extract_rotation_m4(float* dst, const float* src, in
 // Vertex transformation NEON optimization
 static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const vec4 v)
 {
+#ifndef ROW_MAJOR
     float32x4_t vx = vdupq_n_f32(v.x);
     float32x4_t vy = vdupq_n_f32(v.y);
     float32x4_t vz = vdupq_n_f32(v.z);
@@ -522,12 +615,34 @@ static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const v
     result->y = vgetq_lane_f32(res, 1);
     result->z = vgetq_lane_f32(res, 2);
     result->w = vgetq_lane_f32(res, 3);
+#else
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t r0 = vld1q_f32(m);
+    float32x4_t r1 = vld1q_f32(m + 4);
+    float32x4_t r2 = vld1q_f32(m + 8);
+    float32x4_t r3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, r0);
+    res = vmlaq_f32(res, vy, r1);
+    res = vmlaq_f32(res, vz, r2);
+    res = vmlaq_f32(res, vw, r3);
+
+    result->x = vgetq_lane_f32(res, 0);
+    result->y = vgetq_lane_f32(res, 1);
+    result->z = vgetq_lane_f32(res, 2);
+    result->w = vgetq_lane_f32(res, 3);
+#endif
 }
 
 // Batch transform 3 vertices at once - reduces function call overhead and improves cache locality
 static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, const mat4 m, 
                                                   const vec4 v0, const vec4 v1, const vec4 v2)
 {
+#ifndef ROW_MAJOR
     // Load matrix columns once
     float32x4_t c0 = vld1q_f32(m);
     float32x4_t c1 = vld1q_f32(m + 4);
@@ -561,6 +676,41 @@ static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, co
     
     r2->x = vgetq_lane_f32(res2, 0); r2->y = vgetq_lane_f32(res2, 1);
     r2->z = vgetq_lane_f32(res2, 2); r2->w = vgetq_lane_f32(res2, 3);
+#else
+    // Row-major: Load matrix rows once
+    float32x4_t m0 = vld1q_f32(m);
+    float32x4_t m1 = vld1q_f32(m + 4);
+    float32x4_t m2 = vld1q_f32(m + 8);
+    float32x4_t m3 = vld1q_f32(m + 12);
+    
+    // Transform vertex 0
+    float32x4_t res0 = vmulq_f32(vdupq_n_f32(v0.x), m0);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.y), m1);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.z), m2);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.w), m3);
+    
+    // Transform vertex 1
+    float32x4_t res1 = vmulq_f32(vdupq_n_f32(v1.x), m0);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.y), m1);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.z), m2);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.w), m3);
+    
+    // Transform vertex 2
+    float32x4_t res2 = vmulq_f32(vdupq_n_f32(v2.x), m0);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.y), m1);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.z), m2);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.w), m3);
+    
+    // Store results
+    r0->x = vgetq_lane_f32(res0, 0); r0->y = vgetq_lane_f32(res0, 1); 
+    r0->z = vgetq_lane_f32(res0, 2); r0->w = vgetq_lane_f32(res0, 3);
+    
+    r1->x = vgetq_lane_f32(res1, 0); r1->y = vgetq_lane_f32(res1, 1);
+    r1->z = vgetq_lane_f32(res1, 2); r1->w = vgetq_lane_f32(res1, 3);
+    
+    r2->x = vgetq_lane_f32(res2, 0); r2->y = vgetq_lane_f32(res2, 1);
+    r2->z = vgetq_lane_f32(res2, 2); r2->w = vgetq_lane_f32(res2, 3);
+#endif
 }
 
 // NEON optimized perspective-correct interpolation for 4 vertices at once
@@ -800,6 +950,7 @@ static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, 
 // ARM 32-bit matrix multiplication
 static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 {
+#ifndef ROW_MAJOR
     float32x4_t b0 = vld1q_f32(b);
     float32x4_t b1 = vld1q_f32(b + 4);
     float32x4_t b2 = vld1q_f32(b + 8);
@@ -815,11 +966,29 @@ static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 
         vst1q_f32(c + i * 4, result);
     }
+#else
+    float32x4_t a0 = vld1q_f32(a);
+    float32x4_t a1 = vld1q_f32(a + 4);
+    float32x4_t a2 = vld1q_f32(a + 8);
+    float32x4_t a3 = vld1q_f32(a + 12);
+
+    for (int i = 0; i < 4; i++) {
+        float32x4_t b_vec = vld1q_f32(b + i * 4);
+
+        float32x4_t result = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_vec, 0)), a0);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_vec, 1)), a1);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_vec, 2)), a2);
+        result = vmlaq_f32(result, vdupq_n_f32(vgetq_lane_f32(b_vec, 3)), a3);
+
+        vst1q_f32(c + i * 4, result);
+    }
+#endif
 }
 
 // ARM 32-bit matrix 2x2 multiplication
 static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
 {
+#ifndef ROW_MAJOR
     float32x2_t b0 = vld1_f32(b);
     float32x2_t b1 = vld1_f32(b + 2);
 
@@ -831,6 +1000,19 @@ static inline void pgl_neon_mult_m2_m2(float* c, const float* a, const float* b)
 
         vst1_f32(c + i * 2, result);
     }
+#else
+    float32x2_t a0 = vld1_f32(a);
+    float32x2_t a1 = vld1_f32(a + 2);
+
+    for (int i = 0; i < 2; i++) {
+        float32x2_t b_vec = vld1_f32(b + i * 2);
+
+        float32x2_t result = vmul_n_f32(a0, vget_lane_f32(b_vec, 0));
+        result = vmla_n_f32(result, a1, vget_lane_f32(b_vec, 1));
+
+        vst1_f32(c + i * 2, result);
+    }
+#endif
 }
 
 // ARM 32-bit load rotation matrix NEON optimizations
@@ -1065,6 +1247,7 @@ static inline void pgl_neon_extract_rotation_m4(float* dst, const float* src, in
 // ARM 32-bit matrix-vector multiplication
 static inline void pgl_neon_mult_m4_v4(vec4* r, const float* m, const vec4 v)
 {
+#ifndef ROW_MAJOR
     float32x4_t vx = vdupq_n_f32(v.x);
     float32x4_t vy = vdupq_n_f32(v.y);
     float32x4_t vz = vdupq_n_f32(v.z);
@@ -1084,10 +1267,32 @@ static inline void pgl_neon_mult_m4_v4(vec4* r, const float* m, const vec4 v)
     r->y = vgetq_lane_f32(res, 1);
     r->z = vgetq_lane_f32(res, 2);
     r->w = vgetq_lane_f32(res, 3);
+#else
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t r0 = vld1q_f32(m);
+    float32x4_t r1 = vld1q_f32(m + 4);
+    float32x4_t r2 = vld1q_f32(m + 8);
+    float32x4_t r3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, r0);
+    res = vmlaq_f32(res, vy, r1);
+    res = vmlaq_f32(res, vz, r2);
+    res = vmlaq_f32(res, vw, r3);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+    r->w = vgetq_lane_f32(res, 3);
+#endif
 }
 
 static inline void pgl_neon_mult_m3_v3(vec3* r, const float* m, const vec3 v)
 {
+#ifndef ROW_MAJOR
     float32x4_t vx = vdupq_n_f32(v.x);
     float32x4_t vy = vdupq_n_f32(v.y);
     float32x4_t vz = vdupq_n_f32(v.z);
@@ -1103,10 +1308,28 @@ static inline void pgl_neon_mult_m3_v3(vec3* r, const float* m, const vec3 v)
     r->x = vgetq_lane_f32(res, 0);
     r->y = vgetq_lane_f32(res, 1);
     r->z = vgetq_lane_f32(res, 2);
+#else
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+
+    float32x4_t r0 = vld1q_f32(m);
+    float32x4_t r1 = vld1q_f32(m + 3);
+    float32x4_t r2 = vld1q_f32(m + 6);
+
+    float32x4_t res = vmulq_f32(vx, r0);
+    res = vmlaq_f32(res, vy, r1);
+    res = vmlaq_f32(res, vz, r2);
+
+    r->x = vgetq_lane_f32(res, 0);
+    r->y = vgetq_lane_f32(res, 1);
+    r->z = vgetq_lane_f32(res, 2);
+#endif
 }
 
 static inline void pgl_neon_mult_m2_v2(vec2* r, const float* m, const vec2 v)
 {
+#ifndef ROW_MAJOR
     float32x2_t vx = vdup_n_f32(v.x);
     float32x2_t vy = vdup_n_f32(v.y);
 
@@ -1118,10 +1341,24 @@ static inline void pgl_neon_mult_m2_v2(vec2* r, const float* m, const vec2 v)
 
     r->x = vget_lane_f32(res, 0);
     r->y = vget_lane_f32(res, 1);
+#else
+    float32x2_t vx = vdup_n_f32(v.x);
+    float32x2_t vy = vdup_n_f32(v.y);
+
+    float32x2_t r0 = vld1_f32(m);
+    float32x2_t r1 = vld1_f32(m + 1);
+
+    float32x2_t res = vmul_f32(vx, r0);
+    res = vmla_f32(res, vy, r1);
+
+    r->x = vget_lane_f32(res, 0);
+    r->y = vget_lane_f32(res, 1);
+#endif
 }
 
 static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const vec4 v)
 {
+#ifndef ROW_MAJOR
     float32x4_t vx = vdupq_n_f32(v.x);
     float32x4_t vy = vdupq_n_f32(v.y);
     float32x4_t vz = vdupq_n_f32(v.z);
@@ -1141,12 +1378,34 @@ static inline void pgl_neon_transform_vertex(vec4* result, const mat4 m, const v
     result->y = vgetq_lane_f32(res, 1);
     result->z = vgetq_lane_f32(res, 2);
     result->w = vgetq_lane_f32(res, 3);
+#else
+    float32x4_t vx = vdupq_n_f32(v.x);
+    float32x4_t vy = vdupq_n_f32(v.y);
+    float32x4_t vz = vdupq_n_f32(v.z);
+    float32x4_t vw = vdupq_n_f32(v.w);
+
+    float32x4_t r0 = vld1q_f32(m);
+    float32x4_t r1 = vld1q_f32(m + 4);
+    float32x4_t r2 = vld1q_f32(m + 8);
+    float32x4_t r3 = vld1q_f32(m + 12);
+
+    float32x4_t res = vmulq_f32(vx, r0);
+    res = vmlaq_f32(res, vy, r1);
+    res = vmlaq_f32(res, vz, r2);
+    res = vmlaq_f32(res, vw, r3);
+
+    result->x = vgetq_lane_f32(res, 0);
+    result->y = vgetq_lane_f32(res, 1);
+    result->z = vgetq_lane_f32(res, 2);
+    result->w = vgetq_lane_f32(res, 3);
+#endif
 }
 
 // Batch transform 3 vertices at once for ARM32
 static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, const mat4 m,
                                                   const vec4 v0, const vec4 v1, const vec4 v2)
 {
+#ifndef ROW_MAJOR
     float32x4_t c0 = vld1q_f32(m);
     float32x4_t c1 = vld1q_f32(m + 4);
     float32x4_t c2 = vld1q_f32(m + 8);
@@ -1166,6 +1425,35 @@ static inline void pgl_neon_transform_3vertices(vec4* r0, vec4* r1, vec4* r2, co
     res2 = vmlaq_f32(res2, vdupq_n_f32(v2.y), c1);
     res2 = vmlaq_f32(res2, vdupq_n_f32(v2.z), c2);
     res2 = vmlaq_f32(res2, vdupq_n_f32(v2.w), c3);
+
+    r0->x = vgetq_lane_f32(res0, 0); r0->y = vgetq_lane_f32(res0, 1);
+    r0->z = vgetq_lane_f32(res0, 2); r0->w = vgetq_lane_f32(res0, 3);
+
+    r1->x = vgetq_lane_f32(res1, 0); r1->y = vgetq_lane_f32(res1, 1);
+    r1->z = vgetq_lane_f32(res1, 2); r1->w = vgetq_lane_f32(res1, 3);
+
+    r2->x = vgetq_lane_f32(res2, 0); r2->y = vgetq_lane_f32(res2, 1);
+    r2->z = vgetq_lane_f32(res2, 2); r2->w = vgetq_lane_f32(res2, 3);
+#else
+    float32x4_t m0 = vld1q_f32(m);
+    float32x4_t m1 = vld1q_f32(m + 4);
+    float32x4_t m2 = vld1q_f32(m + 8);
+    float32x4_t m3 = vld1q_f32(m + 12);
+
+    float32x4_t res0 = vmulq_f32(vdupq_n_f32(v0.x), m0);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.y), m1);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.z), m2);
+    res0 = vmlaq_f32(res0, vdupq_n_f32(v0.w), m3);
+
+    float32x4_t res1 = vmulq_f32(vdupq_n_f32(v1.x), m0);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.y), m1);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.z), m2);
+    res1 = vmlaq_f32(res1, vdupq_n_f32(v1.w), m3);
+
+    float32x4_t res2 = vmulq_f32(vdupq_n_f32(v2.x), m0);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.y), m1);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.z), m2);
+    res2 = vmlaq_f32(res2, vdupq_n_f32(v2.w), m3);
 
     r0->x = vgetq_lane_f32(res0, 0); r0->y = vgetq_lane_f32(res0, 1);
     r0->z = vgetq_lane_f32(res0, 2); r0->w = vgetq_lane_f32(res0, 3);

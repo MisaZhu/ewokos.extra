@@ -168,7 +168,7 @@ static void render_mesh() {
 
 static void on_repaint(xwin_t* xwin, graph_t* g) {
     (void)xwin;
-    rotation += 0.1f;
+    rotation += 0.01f;
     render_mesh();
     graph_fill(g, 0, 0, win_width, win_height, 0xFF1a1a2e);
     graph_t bg;
