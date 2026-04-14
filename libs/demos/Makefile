@@ -7,8 +7,8 @@ BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 ROOTFS_BIN = $(BUILD_DIR)/rootfs/bin/x
 
 # Common flags
-CFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -DUSING_PORTABLEGL -D__ewokos__
-CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -I../glcommon/include -I../glcommon/include/glcommon -DUSING_PORTABLEGL -D__ewokos__ -fno-threadsafe-statics
+CFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -D__ewokos__
+CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -I../glcommon/include -I../glcommon/include/glcommon -D__ewokos__ -fno-threadsafe-statics
 
 # Common LDFLAGS
 LDFLAGS += -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lm -lopenlibm -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
