@@ -3,17 +3,17 @@ EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-TASK_OBJS = 3ddemo.o
+TASK_OBJS = matrix.o
 
 EXTRA_LIBS_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
 CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include -I $(EXTRA_LIBS_DIR)/include/glcommon
-LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
+LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 
 
 GLCOMMON_LIB = $(EXTRA_LIBS_DIR)/lib/libglcommon.a \
 	$(EXTRA_LIBS_DIR)/lib/libportablegl.a
 
-TASK = 3ddemo
+TASK = matrix
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
 all: $(TASK)
