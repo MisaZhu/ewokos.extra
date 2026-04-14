@@ -480,10 +480,10 @@ static void draw_gears(void)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Camera orbits around the gears
-    // Calculate camera position on a circular path
-    float cam_x = sinf(camera_angle * M_PI / 180.0f) * 25.0f;
-    float cam_y = 10.0f;  // Slightly above the gears
-    float cam_z = cosf(camera_angle * M_PI / 180.0f) * 25.0f;
+    // Calculate camera position on a circular path - closer for larger appearance
+    float cam_x = sinf(camera_angle * M_PI / 180.0f) * 16.0f;
+    float cam_y = 6.0f;  // Slightly above the gears
+    float cam_z = cosf(camera_angle * M_PI / 180.0f) * 16.0f;
     
     // Build look-at matrix to always face the center (0, 0, 0)
     look_at(transform, cam_x, cam_y, cam_z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
