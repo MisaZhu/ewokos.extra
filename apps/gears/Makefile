@@ -9,7 +9,7 @@ BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
 EXTRA_LIBS_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
-CFLAGS += -I $(EXTRA_LIBS_DIR)/include -I ../../libs/glcommon/include -I ../../libs/glcommon/include/glcommon -I ../../libs/portablegl/include -I ../../libs/portablegl/include/portablegl -I ../../libs/glcommon/src -DUSING_PORTABLEGL
+CFLAGS += -I $(EXTRA_LIBS_DIR)/include -I $(EXTRA_LIBS_DIR)/include/glcommon
 LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
 
 GLCOMMON_LIB = $(EXTRA_LIBS_DIR)/lib/libglcommon.a \

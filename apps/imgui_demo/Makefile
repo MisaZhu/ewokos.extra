@@ -7,22 +7,17 @@ BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 ROOTFS_APPS = $(BUILD_DIR)/rootfs/apps
 
 # Common flags - removed SDL includes
-CFLAGS += -I.. -I$(SW_ROOT_DIR)/libs/external -DUSING_PORTABLEGL -D__ewokos__
-CXXFLAGS += -I.. -I$(SW_ROOT_DIR)/libs/external -DUSING_PORTABLEGL -D__ewokos__ -fno-threadsafe-statics
+CFLAGS += -I.. -I$(BUILD_DIR)/include/glcommon -I$(BUILD_DIR)/include/imgui -D__ewokos__
+CXXFLAGS += -I.. -I$(BUILD_DIR)/include/glcommon -I$(BUILD_DIR)/include/imgui -D__ewokos__ -fno-threadsafe-statics
 
 # Common LDFLAGS - removed SDL libraries, added xwin libraries
-LDFLAGS += -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
-
-# glcommon utility sources
-GLCOMMON_UTILS = $(SW_ROOT_DIR)/libs/glcommon/src/c_utils.o $(SW_ROOT_DIR)/libs/glcommon/src/gltools.o
+LDFLAGS += -lglcommon -limgui -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
 
 # Source files - removed SDL backend
-SRCS = imgui_demo.cpp
-IMGUI_BACKEND_SRCS = $(SW_ROOT_DIR)/libs/imgui/backends/imgui_impl_pgl_geometry.cpp
+SRCS = imgui_demo.cpp imgui_main.cpp
 
 # Object files
 OBJS = $(patsubst %.cpp,%.o,$(SRCS))
-IMGUI_BACKEND_OBJS = imgui_impl_pgl_geometry.o
 
 # Target
 TASK = imgui_demo
@@ -35,25 +30,14 @@ all: $(TARGET)
 
 # Compile imgui_demo.cpp
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -I$(SW_ROOT_DIR)/libs/portablegl/include -I$(SW_ROOT_DIR)/libs/portablegl/include/portablegl -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -I$(SW_ROOT_DIR)/libs/glcommon/src -I$(SW_ROOT_DIR)/libs/imgui -I$(SW_ROOT_DIR)/libs/imgui/backends -c $< -o $@
-
-# Compile imgui backend files
-imgui_impl_pgl_geometry.o: $(SW_ROOT_DIR)/libs/imgui/backends/imgui_impl_pgl_geometry.cpp
-	$(CXX) $(CXXFLAGS) -I$(SW_ROOT_DIR)/libs/portablegl/include -I$(SW_ROOT_DIR)/libs/portablegl/include/portablegl -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -I$(SW_ROOT_DIR)/libs/glcommon/src -I$(SW_ROOT_DIR)/libs/imgui -I$(SW_ROOT_DIR)/libs/imgui/backends -c $< -o $@
-
-# Compile glcommon utility files
-$(SW_ROOT_DIR)/libs/glcommon/src/c_utils.o: $(SW_ROOT_DIR)/libs/glcommon/src/c_utils.c
-	$(CC) $(CFLAGS) -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -c $< -o $@
-
-$(SW_ROOT_DIR)/libs/glcommon/src/gltools.o: $(SW_ROOT_DIR)/libs/glcommon/src/gltools.c
-	$(CC) $(CFLAGS) -I$(SW_ROOT_DIR)/libs/glcommon/include -I$(SW_ROOT_DIR)/libs/glcommon/include/glcommon -DNO_TLS -c $< -o $@
+	$(CXX) $(CXXFLAGS)   -c $< -o $@
 
 # Link
-$(TARGET): $(OBJS) $(IMGUI_BACKEND_OBJS) $(GLCOMMON_UTILS)
+$(TARGET): $(OBJS) 
 	mkdir -p $(TARGET_DIR)
-	$(LD) -Ttext=100 $(OBJS) $(IMGUI_BACKEND_OBJS) $(GLCOMMON_UTILS) -o $@ $(LDFLAGS)
+	$(LD) -Ttext=100 $(OBJS)  -o $@ $(LDFLAGS)
 	cp -r res $(TARGET_DIR)
 
 clean:
-	rm -f $(OBJS) $(IMGUI_BACKEND_OBJS)
+	rm -f $(OBJS) 
 	rm -f $(TARGET)

@@ -220,6 +220,7 @@ int main(int argc, char** argv) {
     xwin->on_event = on_event;
     xwin->on_resize = on_resize;
 
+    pgl_set_max_vertices(PGL_TINY_MAX_VERTICES);
     if (!init_glContext(&the_Context, (u32**)&backbuf, win_width, win_height)) {
         printf("Failed to initialize glContext\n");
         return 1;

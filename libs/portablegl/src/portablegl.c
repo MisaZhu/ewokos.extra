@@ -10,6 +10,26 @@
 #define M33(m, row, col) m[row*3 + col]
 #endif
 
+// Runtime configurable vertex limits
+static int _pgl_max_vertices = PGL_DEF_MAX_VERTICES;
+
+// Function to set max vertices before init_glContext()
+void pgl_set_max_vertices(int max_vertices)
+{
+    if (max_vertices > 0) {
+        _pgl_max_vertices = max_vertices;
+    }
+}
+
+// Helper function to get actual max vertices
+static int get_max_vertices(void)
+{
+    if (_pgl_max_vertices > 0) {
+        return _pgl_max_vertices;
+    }
+    return PGL_DEF_MAX_VERTICES;
+}
+
 // Define PGL_NEON_ENABLED early so texture conversion functions can use it
 #ifdef BSP_BOOST
 #if defined(__aarch64__) || defined(__ARM_NEON) || defined(ARCH_ARM)
@@ -4663,7 +4683,7 @@ static void run_pipeline(GLenum mode, const GLvoid* indices, GLsizei count, GLsi
 	GLsizei i;
 	int provoke;
 
-	PGL_ASSERT(count <= PGL_MAX_VERTICES);
+	PGL_ASSERT(count <= get_max_vertices());
 
 	vertex_stage(indices, count, instance, base_instance, use_elements);
 
@@ -6606,7 +6626,8 @@ PGLDEF GLboolean init_glContext(glContext* context, pix_t** back, GLsizei w, GLs
 	cvec_glVertex(&c->glverts, 0, 10);
 
 	// If not pre-allocating max, need to track size and edit glUseProgram and pglSetInterp
-	c->vs_output.output_buf = (float*)PGL_MALLOC(PGL_MAX_VERTICES * GL_MAX_VERTEX_OUTPUT_COMPONENTS * sizeof(float));
+	int max_vertices = get_max_vertices();
+	c->vs_output.output_buf = (float*)PGL_MALLOC(max_vertices * GL_MAX_VERTEX_OUTPUT_COMPONENTS * sizeof(float));
 	PGL_ERR_RET_VAL(!c->vs_output.output_buf, GL_OUT_OF_MEMORY, GL_FALSE);
 
 	c->clear_color = 0;
@@ -10847,7 +10868,7 @@ PGLDEF void pgl_draw_geometry_raw(int tex, const float* xy, int xy_stride, const
 
 	if (n_verts < 3) return;
 
-	PGL_ASSERT((PGL_MAX_VERTICES * GL_MAX_VERTEX_OUTPUT_COMPONENTS * sizeof(float))/sizeof(pgl_copy_data) >= (size_t)count);
+	PGL_ASSERT((get_max_vertices() * GL_MAX_VERTEX_OUTPUT_COMPONENTS * sizeof(float))/sizeof(pgl_copy_data) >= (size_t)count);
 	// Allow default texture 0?  many implementations return black (0,0,0,1) when sampling
 	// tex 0
 	if (tex > 0) {

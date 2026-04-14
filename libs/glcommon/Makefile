@@ -5,8 +5,8 @@ include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
-CFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../external -I../portablegl/include -I../portablegl/include/portablegl -DUSING_PORTABLEGL
-CXXFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../external -I../portablegl/include -I../portablegl/include/portablegl -DUSING_PORTABLEGL
+CFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../external -I../portablegl/include -I../portablegl/include/portablegl
+CXXFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../external -I../portablegl/include -I../portablegl/include/portablegl
 
 # C source files
 LIB_GLCOMMON_C_OBJS = \
