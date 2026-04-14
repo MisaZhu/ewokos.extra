@@ -1325,6 +1325,683 @@ static inline void pgl_neon_convert_rg_to_rgba(u8* out, u8* input, int w, int h,
     }
 }
 
+// NEON optimized vertex data type conversion
+// Convert packed vertex attributes to float vectors using NEON
+static inline void pgl_neon_convert_u8_to_float(float* out, const u8* in, int count, int normalized)
+{
+    int i = 0;
+    if (normalized) {
+        float inv_255 = 1.0f / 255.0f;
+        float32x4_t scale = vdupq_n_f32(inv_255);
+        for (; i + 16 <= count; i += 16) {
+            uint8x16_t input = vld1q_u8(in + i);
+            // Process lower 8 bytes
+            uint8x8_t low = vget_low_u8(input);
+            uint16x8_t low16 = vmovl_u8(low);
+            uint16x4_t low16_low = vget_low_u16(low16);
+            uint16x4_t low16_high = vget_high_u16(low16);
+            float32x4_t out0 = vmulq_f32(vcvtq_f32_u32(vmovl_u16(low16_low)), scale);
+            float32x4_t out1 = vmulq_f32(vcvtq_f32_u32(vmovl_u16(low16_high)), scale);
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+            // Process upper 8 bytes
+            uint8x8_t high = vget_high_u8(input);
+            uint16x8_t high16 = vmovl_u8(high);
+            uint16x4_t high16_low = vget_low_u16(high16);
+            uint16x4_t high16_high = vget_high_u16(high16);
+            float32x4_t out2 = vmulq_f32(vcvtq_f32_u32(vmovl_u16(high16_low)), scale);
+            float32x4_t out3 = vmulq_f32(vcvtq_f32_u32(vmovl_u16(high16_high)), scale);
+            vst1q_f32(out + i + 8, out2);
+            vst1q_f32(out + i + 12, out3);
+        }
+        for (; i < count; i++) {
+            out[i] = in[i] * inv_255;
+        }
+    } else {
+        for (; i + 16 <= count; i += 16) {
+            uint8x16_t input = vld1q_u8(in + i);
+            uint8x8_t low = vget_low_u8(input);
+            uint16x8_t low16 = vmovl_u8(low);
+            float32x4_t out0 = vcvtq_f32_u32(vmovl_u16(vget_low_u16(low16)));
+            float32x4_t out1 = vcvtq_f32_u32(vmovl_u16(vget_high_u16(low16)));
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+            uint8x8_t high = vget_high_u8(input);
+            uint16x8_t high16 = vmovl_u8(high);
+            float32x4_t out2 = vcvtq_f32_u32(vmovl_u16(vget_low_u16(high16)));
+            float32x4_t out3 = vcvtq_f32_u32(vmovl_u16(vget_high_u16(high16)));
+            vst1q_f32(out + i + 8, out2);
+            vst1q_f32(out + i + 12, out3);
+        }
+        for (; i < count; i++) {
+            out[i] = (float)in[i];
+        }
+    }
+}
+
+// NEON optimized buffer clear functions
+static inline void pgl_neon_clear_color_buffer(uint32_t* buf, uint32_t color, int count)
+{
+    uint32x4_t color_vec = vdupq_n_u32(color);
+    int i = 0;
+#if defined(__aarch64__)
+    for (; i + 16 <= count; i += 16) {
+        vst1q_u32(buf + i, color_vec);
+        vst1q_u32(buf + i + 4, color_vec);
+        vst1q_u32(buf + i + 8, color_vec);
+        vst1q_u32(buf + i + 12, color_vec);
+    }
+#else
+    for (; i + 8 <= count; i += 8) {
+        vst1q_u32(buf + i, color_vec);
+        vst1q_u32(buf + i + 4, color_vec);
+    }
+#endif
+    for (; i < count; i++) {
+        buf[i] = color;
+    }
+}
+
+static inline void pgl_neon_clear_depth_buffer(uint32_t* buf, uint32_t depth, int count)
+{
+    uint32x4_t depth_vec = vdupq_n_u32(depth);
+    int i = 0;
+#if defined(__aarch64__)
+    for (; i + 16 <= count; i += 16) {
+        vst1q_u32(buf + i, depth_vec);
+        vst1q_u32(buf + i + 4, depth_vec);
+        vst1q_u32(buf + i + 8, depth_vec);
+        vst1q_u32(buf + i + 12, depth_vec);
+    }
+#else
+    for (; i + 8 <= count; i += 8) {
+        vst1q_u32(buf + i, depth_vec);
+        vst1q_u32(buf + i + 4, depth_vec);
+    }
+#endif
+    for (; i < count; i++) {
+        buf[i] = depth;
+    }
+}
+
+// NEON optimized pixel blend function
+// Blend a batch of pixels with the same source color
+static inline void pgl_neon_blend_pixels(uint32_t* dst, uint32_t src_color, int count)
+{
+    uint8_t src_a = (src_color >> 24) & 0xFF;
+    if (src_a == 255) {
+        pgl_neon_clear_color_buffer(dst, src_color, count);
+        return;
+    }
+    if (src_a == 0) return;
+
+    uint8_t src_r = (src_color >> 16) & 0xFF;
+    uint8_t src_g = (src_color >> 8) & 0xFF;
+    uint8_t src_b = src_color & 0xFF;
+    uint16_t inv_src_a = 255 - src_a;
+
+    // Precompute source contributions
+    uint16_t src_r_contrib = src_a * src_r;
+    uint16_t src_g_contrib = src_a * src_g;
+    uint16_t src_b_contrib = src_a * src_b;
+    uint16_t src_a_contrib = src_a * 255;
+
+    int i = 0;
+    for (; i + 8 <= count; i += 8) {
+        uint32x4_t dst0 = vld1q_u32(dst + i);
+        uint32x4_t dst1 = vld1q_u32(dst + i + 4);
+
+        // Extract channels using table lookup would be ideal but complex
+        // Use scalar fallback for now
+        for (int k = 0; k < 8; k++) {
+            uint32_t d = dst[i + k];
+            uint8_t da = (d >> 24) & 0xFF;
+            uint8_t dr = (d >> 16) & 0xFF;
+            uint8_t dg = (d >> 8) & 0xFF;
+            uint8_t db = d & 0xFF;
+
+            uint8_t r = (src_r_contrib + inv_src_a * dr) >> 8;
+            uint8_t g = (src_g_contrib + inv_src_a * dg) >> 8;
+            uint8_t b = (src_b_contrib + inv_src_a * db) >> 8;
+            uint8_t a = (src_a_contrib + inv_src_a * da) >> 8;
+
+            dst[i + k] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+        }
+    }
+    for (; i < count; i++) {
+        uint32_t d = dst[i];
+        uint8_t da = (d >> 24) & 0xFF;
+        uint8_t dr = (d >> 16) & 0xFF;
+        uint8_t dg = (d >> 8) & 0xFF;
+        uint8_t db = d & 0xFF;
+
+        uint8_t r = (src_r_contrib + inv_src_a * dr) >> 8;
+        uint8_t g = (src_g_contrib + inv_src_a * dg) >> 8;
+        uint8_t b = (src_b_contrib + inv_src_a * db) >> 8;
+        uint8_t a = (src_a_contrib + inv_src_a * da) >> 8;
+
+        dst[i] = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+    }
+}
+
+// NEON optimized barycentric interpolation for triangle rasterization
+// Interpolate a single attribute across a triangle
+static inline float pgl_neon_interpolate_attribute(float alpha, float beta, float gamma,
+                                                    float v0, float v1, float v2,
+                                                    float inv_w_sum)
+{
+    float32x4_t weights = {alpha, beta, gamma, 0.0f};
+    float32x4_t values = {v0, v1, v2, 0.0f};
+    float32x4_t prod = vmulq_f32(weights, values);
+    float32x2_t sum_low = vpadd_f32(vget_low_f32(prod), vget_high_f32(prod));
+    float32x2_t sum = vpadd_f32(sum_low, sum_low);
+    return vget_lane_f32(sum, 0) * inv_w_sum;
+}
+
+// NEON optimized depth interpolation
+static inline float pgl_neon_interpolate_depth(float alpha, float beta, float gamma,
+                                                float z0, float z1, float z2)
+{
+    float32x4_t weights = {alpha, beta, gamma, 0.0f};
+    float32x4_t depths = {z0, z1, z2, 0.0f};
+    float32x4_t prod = vmulq_f32(weights, depths);
+    float32x2_t sum_low = vpadd_f32(vget_low_f32(prod), vget_high_f32(prod));
+    float32x2_t sum = vpadd_f32(sum_low, sum_low);
+    return vget_lane_f32(sum, 0);
+}
+
+// NEON optimized vector operations for triangle setup
+static inline void pgl_neon_compute_barycentric(float* alpha, float* beta, float* gamma,
+                                                 float x, float y,
+                                                 float x0, float y0,
+                                                 float x1, float y1,
+                                                 float x2, float y2,
+                                                 float denom)
+{
+    float32x4_t px = vdupq_n_f32(x);
+    float32x4_t py = vdupq_n_f32(y);
+    float32x4_t p0 = {x0, x1, x2, 0.0f};
+    float32x4_t p1 = {y0, y1, y2, 0.0f};
+
+    // Compute areas using cross products
+    float32x4_t v0x = vsubq_f32(p0, px);
+    float32x4_t v0y = vsubq_f32(p1, py);
+
+    // Simplified barycentric computation
+    *alpha = ((x1 - x) * (y2 - y) - (x2 - x) * (y1 - y)) / denom;
+    *beta = ((x2 - x) * (y0 - y) - (x0 - x) * (y2 - y)) / denom;
+    *gamma = 1.0f - *alpha - *beta;
+}
+
+// NEON optimized texture coordinate interpolation
+static inline void pgl_neon_interpolate_texcoord(float* s, float* t,
+                                                  float alpha, float beta, float gamma,
+                                                  float s0, float t0,
+                                                  float s1, float t1,
+                                                  float s2, float t2,
+                                                  float inv_w_sum)
+{
+    float32x4_t weights = {alpha, beta, gamma, 0.0f};
+    float32x4_t s_vals = {s0, s1, s2, 0.0f};
+    float32x4_t t_vals = {t0, t1, t2, 0.0f};
+
+    float32x4_t s_prod = vmulq_f32(weights, s_vals);
+    float32x4_t t_prod = vmulq_f32(weights, t_vals);
+
+    float32x2_t s_sum_low = vpadd_f32(vget_low_f32(s_prod), vget_high_f32(s_prod));
+    float32x2_t s_sum = vpadd_f32(s_sum_low, s_sum_low);
+    *s = vget_lane_f32(s_sum, 0) * inv_w_sum;
+
+    float32x2_t t_sum_low = vpadd_f32(vget_low_f32(t_prod), vget_high_f32(t_prod));
+    float32x2_t t_sum = vpadd_f32(t_sum_low, t_sum_low);
+    *t = vget_lane_f32(t_sum, 0) * inv_w_sum;
+}
+
+// NEON optimized color interpolation
+static inline void pgl_neon_interpolate_color(uint8_t* out_r, uint8_t* out_g, uint8_t* out_b, uint8_t* out_a,
+                                               float alpha, float beta, float gamma,
+                                               uint8_t r0, uint8_t g0, uint8_t b0, uint8_t a0,
+                                               uint8_t r1, uint8_t g1, uint8_t b1, uint8_t a1,
+                                               uint8_t r2, uint8_t g2, uint8_t b2, uint8_t a2)
+{
+    float32x4_t weights = {alpha, beta, gamma, 0.0f};
+
+    float32x4_t r_vals = {(float)r0, (float)r1, (float)r2, 0.0f};
+    float32x4_t g_vals = {(float)g0, (float)g1, (float)g2, 0.0f};
+    float32x4_t b_vals = {(float)b0, (float)b1, (float)b2, 0.0f};
+    float32x4_t a_vals = {(float)a0, (float)a1, (float)a2, 0.0f};
+
+    float32x4_t r_prod = vmulq_f32(weights, r_vals);
+    float32x4_t g_prod = vmulq_f32(weights, g_vals);
+    float32x4_t b_prod = vmulq_f32(weights, b_vals);
+    float32x4_t a_prod = vmulq_f32(weights, a_vals);
+
+    float32x2_t r_sum = vpadd_f32(vpadd_f32(vget_low_f32(r_prod), vget_high_f32(r_prod)), vdup_n_f32(0));
+    float32x2_t g_sum = vpadd_f32(vpadd_f32(vget_low_f32(g_prod), vget_high_f32(g_prod)), vdup_n_f32(0));
+    float32x2_t b_sum = vpadd_f32(vpadd_f32(vget_low_f32(b_prod), vget_high_f32(b_prod)), vdup_n_f32(0));
+    float32x2_t a_sum = vpadd_f32(vpadd_f32(vget_low_f32(a_prod), vget_high_f32(a_prod)), vdup_n_f32(0));
+
+    *out_r = (uint8_t)vget_lane_f32(r_sum, 0);
+    *out_g = (uint8_t)vget_lane_f32(g_sum, 0);
+    *out_b = (uint8_t)vget_lane_f32(b_sum, 0);
+    *out_a = (uint8_t)vget_lane_f32(a_sum, 0);
+}
+
+// NEON optimized memcpy for large blocks
+static inline void pgl_neon_memcpy(void* dst, const void* src, size_t n)
+{
+    u8* d = (u8*)dst;
+    const u8* s = (const u8*)src;
+    size_t i = 0;
+
+    // Align to 16 bytes first
+    while (i < n && ((uintptr_t)(d + i) & 15)) {
+        d[i] = s[i];
+        i++;
+    }
+
+    // Copy 64 bytes at a time
+    for (; i + 64 <= n; i += 64) {
+        uint8x16_t v0 = vld1q_u8(s + i);
+        uint8x16_t v1 = vld1q_u8(s + i + 16);
+        uint8x16_t v2 = vld1q_u8(s + i + 32);
+        uint8x16_t v3 = vld1q_u8(s + i + 48);
+        vst1q_u8(d + i, v0);
+        vst1q_u8(d + i + 16, v1);
+        vst1q_u8(d + i + 32, v2);
+        vst1q_u8(d + i + 48, v3);
+    }
+
+    // Copy remaining 16 byte blocks
+    for (; i + 16 <= n; i += 16) {
+        vst1q_u8(d + i, vld1q_u8(s + i));
+    }
+
+    // Copy remaining bytes
+    for (; i < n; i++) {
+        d[i] = s[i];
+    }
+}
+
+// NEON optimized memset for large blocks
+static inline void pgl_neon_memset(void* dst, int c, size_t n)
+{
+    u8* d = (u8*)dst;
+    uint8x16_t val = vdupq_n_u8((u8)c);
+    size_t i = 0;
+
+    // Align to 16 bytes first
+    while (i < n && ((uintptr_t)(d + i) & 15)) {
+        d[i] = (u8)c;
+        i++;
+    }
+
+    // Set 64 bytes at a time
+    for (; i + 64 <= n; i += 64) {
+        vst1q_u8(d + i, val);
+        vst1q_u8(d + i + 16, val);
+        vst1q_u8(d + i + 32, val);
+        vst1q_u8(d + i + 48, val);
+    }
+
+    // Set remaining 16 byte blocks
+    for (; i + 16 <= n; i += 16) {
+        vst1q_u8(d + i, val);
+    }
+
+    // Set remaining bytes
+    for (; i < n; i++) {
+        d[i] = (u8)c;
+    }
+}
+
+// NEON optimized vertex attribute conversion for all integer types
+static inline void pgl_neon_convert_i8_to_float(float* out, const i8* in, int count, int normalized)
+{
+    int i = 0;
+    if (normalized) {
+        float scale = 1.0f / 127.0f;
+        float32x4_t scale_vec = vdupq_n_f32(scale);
+        for (; i + 16 <= count; i += 16) {
+            int8x16_t input = vld1q_s8(in + i);
+            // Process lower 8 bytes
+            int8x8_t low = vget_low_s8(input);
+            int16x8_t low16 = vmovl_s8(low);
+            float32x4_t out0 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(low16))), scale_vec);
+            float32x4_t out1 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(low16))), scale_vec);
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+            // Process upper 8 bytes
+            int8x8_t high = vget_high_s8(input);
+            int16x8_t high16 = vmovl_s8(high);
+            float32x4_t out2 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(high16))), scale_vec);
+            float32x4_t out3 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(high16))), scale_vec);
+            vst1q_f32(out + i + 8, out2);
+            vst1q_f32(out + i + 12, out3);
+        }
+        for (; i < count; i++) {
+            out[i] = in[i] * scale;
+        }
+    } else {
+        for (; i + 16 <= count; i += 16) {
+            int8x16_t input = vld1q_s8(in + i);
+            int8x8_t low = vget_low_s8(input);
+            int16x8_t low16 = vmovl_s8(low);
+            float32x4_t out0 = vcvtq_f32_s32(vmovl_s16(vget_low_s16(low16)));
+            float32x4_t out1 = vcvtq_f32_s32(vmovl_s16(vget_high_s16(low16)));
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+            int8x8_t high = vget_high_s8(input);
+            int16x8_t high16 = vmovl_s8(high);
+            float32x4_t out2 = vcvtq_f32_s32(vmovl_s16(vget_low_s16(high16)));
+            float32x4_t out3 = vcvtq_f32_s32(vmovl_s16(vget_high_s16(high16)));
+            vst1q_f32(out + i + 8, out2);
+            vst1q_f32(out + i + 12, out3);
+        }
+        for (; i < count; i++) {
+            out[i] = (float)in[i];
+        }
+    }
+}
+
+static inline void pgl_neon_convert_i16_to_float(float* out, const i16* in, int count, int normalized)
+{
+    int i = 0;
+    if (normalized) {
+        float scale = 1.0f / 32767.0f;
+        float32x4_t scale_vec = vdupq_n_f32(scale);
+        for (; i + 8 <= count; i += 8) {
+            int16x8_t input = vld1q_s16(in + i);
+            float32x4_t out0 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(input))), scale_vec);
+            float32x4_t out1 = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(input))), scale_vec);
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+        }
+        for (; i < count; i++) {
+            out[i] = in[i] * scale;
+        }
+    } else {
+        for (; i + 8 <= count; i += 8) {
+            int16x8_t input = vld1q_s16(in + i);
+            float32x4_t out0 = vcvtq_f32_s32(vmovl_s16(vget_low_s16(input)));
+            float32x4_t out1 = vcvtq_f32_s32(vmovl_s16(vget_high_s16(input)));
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+        }
+        for (; i < count; i++) {
+            out[i] = (float)in[i];
+        }
+    }
+}
+
+static inline void pgl_neon_convert_u16_to_float(float* out, const u16* in, int count, int normalized)
+{
+    int i = 0;
+    if (normalized) {
+        float scale = 1.0f / 65535.0f;
+        float32x4_t scale_vec = vdupq_n_f32(scale);
+        for (; i + 8 <= count; i += 8) {
+            uint16x8_t input = vld1q_u16(in + i);
+            float32x4_t out0 = vmulq_f32(vcvtq_f32_u32(vmovl_u16(vget_low_u16(input))), scale_vec);
+            float32x4_t out1 = vmulq_f32(vcvtq_f32_u32(vmovl_u16(vget_high_u16(input))), scale_vec);
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+        }
+        for (; i < count; i++) {
+            out[i] = in[i] * scale;
+        }
+    } else {
+        for (; i + 8 <= count; i += 8) {
+            uint16x8_t input = vld1q_u16(in + i);
+            float32x4_t out0 = vcvtq_f32_u32(vmovl_u16(vget_low_u16(input)));
+            float32x4_t out1 = vcvtq_f32_u32(vmovl_u16(vget_high_u16(input)));
+            vst1q_f32(out + i, out0);
+            vst1q_f32(out + i + 4, out1);
+        }
+        for (; i < count; i++) {
+            out[i] = (float)in[i];
+        }
+    }
+}
+
+static inline void pgl_neon_convert_i32_to_float(float* out, const i32* in, int count, int normalized)
+{
+    int i = 0;
+    if (normalized) {
+        float scale = 1.0f / 2147483647.0f;
+        float32x4_t scale_vec = vdupq_n_f32(scale);
+        for (; i + 4 <= count; i += 4) {
+            int32x4_t input = vld1q_s32(in + i);
+            float32x4_t result = vmulq_f32(vcvtq_f32_s32(input), scale_vec);
+            vst1q_f32(out + i, result);
+        }
+        for (; i < count; i++) {
+            out[i] = in[i] * scale;
+        }
+    } else {
+        for (; i + 4 <= count; i += 4) {
+            int32x4_t input = vld1q_s32(in + i);
+            float32x4_t result = vcvtq_f32_s32(input);
+            vst1q_f32(out + i, result);
+        }
+        for (; i < count; i++) {
+            out[i] = (float)in[i];
+        }
+    }
+}
+
+static inline void pgl_neon_convert_u32_to_float(float* out, const u32* in, int count, int normalized)
+{
+    int i = 0;
+    if (normalized) {
+        float scale = 1.0f / 4294967295.0f;
+        float32x4_t scale_vec = vdupq_n_f32(scale);
+        for (; i + 4 <= count; i += 4) {
+            uint32x4_t input = vld1q_u32(in + i);
+            float32x4_t result = vmulq_f32(vcvtq_f32_u32(input), scale_vec);
+            vst1q_f32(out + i, result);
+        }
+        for (; i < count; i++) {
+            out[i] = in[i] * scale;
+        }
+    } else {
+        for (; i + 4 <= count; i += 4) {
+            uint32x4_t input = vld1q_u32(in + i);
+            float32x4_t result = vcvtq_f32_u32(input);
+            vst1q_f32(out + i, result);
+        }
+        for (; i < count; i++) {
+            out[i] = (float)in[i];
+        }
+    }
+}
+
+// NEON optimized 3D texture conversion
+static inline void pgl_neon_convert_3d_texture_slices(u8* out, const u8* in, int width, int height, int depth,
+                                                       int padded_row_len, int components,
+                                                       void (*convert_row)(u8*, const u8*, int, int, int))
+{
+    for (int z = 0; z < depth; ++z) {
+        for (int y = 0; y < height; ++y) {
+            u8* out_row = out + (z * height + y) * width * 4;
+            const u8* in_row = in + (z * height + y) * padded_row_len;
+            convert_row(out_row, in_row, width, 1, padded_row_len);
+        }
+    }
+}
+
+// NEON optimized vector batch operations
+static inline void pgl_neon_add_v3_batch(vec3* out, const vec3* a, const vec3* b, int count)
+{
+    int i = 0;
+    for (; i + 4 <= count; i += 4) {
+        float32x4_t ax = {a[i].x, a[i+1].x, a[i+2].x, a[i+3].x};
+        float32x4_t ay = {a[i].y, a[i+1].y, a[i+2].y, a[i+3].y};
+        float32x4_t az = {a[i].z, a[i+1].z, a[i+2].z, a[i+3].z};
+        float32x4_t bx = {b[i].x, b[i+1].x, b[i+2].x, b[i+3].x};
+        float32x4_t by = {b[i].y, b[i+1].y, b[i+2].y, b[i+3].y};
+        float32x4_t bz = {b[i].z, b[i+1].z, b[i+2].z, b[i+3].z};
+
+        float32x4_t rx = vaddq_f32(ax, bx);
+        float32x4_t ry = vaddq_f32(ay, by);
+        float32x4_t rz = vaddq_f32(az, bz);
+
+        out[i].x = vgetq_lane_f32(rx, 0); out[i].y = vgetq_lane_f32(ry, 0); out[i].z = vgetq_lane_f32(rz, 0);
+        out[i+1].x = vgetq_lane_f32(rx, 1); out[i+1].y = vgetq_lane_f32(ry, 1); out[i+1].z = vgetq_lane_f32(rz, 1);
+        out[i+2].x = vgetq_lane_f32(rx, 2); out[i+2].y = vgetq_lane_f32(ry, 2); out[i+2].z = vgetq_lane_f32(rz, 2);
+        out[i+3].x = vgetq_lane_f32(rx, 3); out[i+3].y = vgetq_lane_f32(ry, 3); out[i+3].z = vgetq_lane_f32(rz, 3);
+    }
+    for (; i < count; i++) {
+        out[i] = add_v3s(a[i], b[i]);
+    }
+}
+
+static inline void pgl_neon_scale_v3_batch(vec3* out, const vec3* v, float s, int count)
+{
+    float32x4_t scale = vdupq_n_f32(s);
+    int i = 0;
+    for (; i + 4 <= count; i += 4) {
+        float32x4_t vx = {v[i].x, v[i+1].x, v[i+2].x, v[i+3].x};
+        float32x4_t vy = {v[i].y, v[i+1].y, v[i+2].y, v[i+3].y};
+        float32x4_t vz = {v[i].z, v[i+1].z, v[i+2].z, v[i+3].z};
+
+        float32x4_t rx = vmulq_f32(vx, scale);
+        float32x4_t ry = vmulq_f32(vy, scale);
+        float32x4_t rz = vmulq_f32(vz, scale);
+
+        out[i].x = vgetq_lane_f32(rx, 0); out[i].y = vgetq_lane_f32(ry, 0); out[i].z = vgetq_lane_f32(rz, 0);
+        out[i+1].x = vgetq_lane_f32(rx, 1); out[i+1].y = vgetq_lane_f32(ry, 1); out[i+1].z = vgetq_lane_f32(rz, 1);
+        out[i+2].x = vgetq_lane_f32(rx, 2); out[i+2].y = vgetq_lane_f32(ry, 2); out[i+2].z = vgetq_lane_f32(rz, 2);
+        out[i+3].x = vgetq_lane_f32(rx, 3); out[i+3].y = vgetq_lane_f32(ry, 3); out[i+3].z = vgetq_lane_f32(rz, 3);
+    }
+    for (; i < count; i++) {
+        out[i] = scale_v3(v[i], s);
+    }
+}
+
+// NEON optimized dot product batch
+static inline void pgl_neon_dot_v3_batch(float* out, const vec3* a, const vec3* b, int count)
+{
+    int i = 0;
+    for (; i + 4 <= count; i += 4) {
+        float32x4_t ax = {a[i].x, a[i+1].x, a[i+2].x, a[i+3].x};
+        float32x4_t ay = {a[i].y, a[i+1].y, a[i+2].y, a[i+3].y};
+        float32x4_t az = {a[i].z, a[i+1].z, a[i+2].z, a[i+3].z};
+        float32x4_t bx = {b[i].x, b[i+1].x, b[i+2].x, b[i+3].x};
+        float32x4_t by = {b[i].y, b[i+1].y, b[i+2].y, b[i+3].y};
+        float32x4_t bz = {b[i].z, b[i+1].z, b[i+2].z, b[i+3].z};
+
+        float32x4_t rx = vmulq_f32(ax, bx);
+        float32x4_t ry = vmulq_f32(ay, by);
+        float32x4_t rz = vmulq_f32(az, bz);
+
+        float32x4_t sum = vaddq_f32(vaddq_f32(rx, ry), rz);
+
+        out[i] = vgetq_lane_f32(sum, 0);
+        out[i+1] = vgetq_lane_f32(sum, 1);
+        out[i+2] = vgetq_lane_f32(sum, 2);
+        out[i+3] = vgetq_lane_f32(sum, 3);
+    }
+    for (; i < count; i++) {
+        out[i] = dot_v3s(a[i], b[i]);
+    }
+}
+
+// NEON optimized matrix-vector multiplication batch
+static inline void pgl_neon_mult_m4_v4_batch(vec4* out, const mat4 m, const vec4* v, int count)
+{
+    int i = 0;
+    for (; i + 4 <= count; i += 4) {
+        pgl_neon_mult_m4_v4(&out[i], m, v[i]);
+        pgl_neon_mult_m4_v4(&out[i+1], m, v[i+1]);
+        pgl_neon_mult_m4_v4(&out[i+2], m, v[i+2]);
+        pgl_neon_mult_m4_v4(&out[i+3], m, v[i+3]);
+    }
+    for (; i < count; i++) {
+        pgl_neon_mult_m4_v4(&out[i], m, v[i]);
+    }
+}
+
+// NEON optimized instance matrix computation
+static inline void pgl_neon_compute_instance_matrices(mat4* out, const mat4* base_mats, const mat4 mvp, int count)
+{
+    for (int i = 0; i < count; i++) {
+        pgl_neon_mult_m4_m4(out[i], mvp, base_mats[i]);
+    }
+}
+
+// NEON optimized fullscreen pixel processing
+static inline void pgl_neon_prepare_fragcoords(float* out_x, float* out_y, int start_x, int start_y, int width, int height)
+{
+    for (int y = 0; y < height; ++y) {
+        float y_coord = start_y + y + 0.5f;
+        float32x4_t y_vec = vdupq_n_f32(y_coord);
+
+        int x = 0;
+        for (; x + 4 <= width; x += 4) {
+            float32x4_t x_vec = {(float)(start_x + x) + 0.5f, (float)(start_x + x + 1) + 0.5f,
+                                 (float)(start_x + x + 2) + 0.5f, (float)(start_x + x + 3) + 0.5f};
+            vst1q_f32(out_x + y * width + x, x_vec);
+            vst1q_f32(out_y + y * width + x, y_vec);
+        }
+        for (; x < width; x++) {
+            out_x[y * width + x] = start_x + x + 0.5f;
+            out_y[y * width + x] = y_coord;
+        }
+    }
+}
+
+// NEON optimized scissor test batch
+static inline uint32_t pgl_neon_scissor_test_batch(int* results, int x, int y, int width, int height, int count)
+{
+    uint32_t pass_mask = 0;
+    int i = 0;
+
+    for (; i + 4 <= count; i += 4) {
+        // Load 4 positions and test against scissor rect
+        // Results stored in lower bits of mask
+        for (int k = 0; k < 4; k++) {
+            int px = results[i + k] & 0xFFFF;
+            int py = (results[i + k] >> 16) & 0xFFFF;
+            if (px >= x && px < x + width && py >= y && py < y + height) {
+                pass_mask |= (1 << (i + k));
+            }
+        }
+    }
+
+    for (; i < count; i++) {
+        int px = results[i] & 0xFFFF;
+        int py = (results[i] >> 16) & 0xFFFF;
+        if (px >= x && px < x + width && py >= y && py < y + height) {
+            pass_mask |= (1 << i);
+        }
+    }
+
+    return pass_mask;
+}
+
+// NEON optimized line drawing
+static inline void pgl_neon_draw_line_pixels(uint32_t* buf, int* xs, int* ys, uint32_t color, int count, int stride)
+{
+    for (int i = 0; i < count; i++) {
+        buf[ys[i] * stride + xs[i]] = color;
+    }
+}
+
+// NEON optimized point sprite expansion
+static inline void pgl_neon_expand_points_to_quads(vec4* out_verts, const vec4* in_points, float size, int count)
+{
+    float half_size = size * 0.5f;
+    for (int i = 0; i < count; i++) {
+        vec4 p = in_points[i];
+        // Create 4 corners of the quad
+        out_verts[i*4 + 0] = make_v4(p.x - half_size, p.y - half_size, p.z, p.w);
+        out_verts[i*4 + 1] = make_v4(p.x + half_size, p.y - half_size, p.z, p.w);
+        out_verts[i*4 + 2] = make_v4(p.x + half_size, p.y + half_size, p.z, p.w);
+        out_verts[i*4 + 3] = make_v4(p.x - half_size, p.y + half_size, p.z, p.w);
+    }
+}
+
 #endif //endif ARM/AARCH64
 
 #else
