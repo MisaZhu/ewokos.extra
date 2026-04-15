@@ -11,7 +11,7 @@
 #define WIDTH 1024
 #define HEIGHT 768
 #define PIX_FORMAT SDL_PIXELFORMAT_ARGB8888
-#define MAX_PARTICLES 6000
+#define MAX_PARTICLES 5000
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -80,9 +80,18 @@ void setup_context() {
 
 void cleanup() {
     free_glContext(&the_Context);
-    if (tex) SDL_DestroyTexture(tex);
-    if (ren) SDL_DestroyRenderer(ren);
-    if (window) SDL_DestroyWindow(window);
+    if (tex) {
+        SDL_DestroyTexture(tex);
+        tex = NULL;
+    }
+    if (ren) {
+        SDL_DestroyRenderer(ren);
+        ren = NULL;
+    }
+    if (window) {
+        SDL_DestroyWindow(window);
+        window = NULL;
+    }
     SDL_Quit();
 }
 
@@ -135,6 +144,9 @@ void launch_firework() {
 
 // 创建爆炸 - 范围更小更自然
 void create_explosion(float x, float y, float r, float g, float b) {
+    // 检查粒子数组是否已满
+    if (num_particles >= MAX_PARTICLES - 500) return;
+    
     int streams = 20 + rand() % 12; // 20-32条射线
     
     for (int s = 0; s < streams; s++) {
@@ -145,7 +157,9 @@ void create_explosion(float x, float y, float r, float g, float b) {
         // 每条射线上的粒子数减少
         int particles_per_stream = 12 + rand() % 8;
         
-        for (int i = 0; i < particles_per_stream && num_particles < MAX_PARTICLES; i++) {
+        for (int i = 0; i < particles_per_stream; i++) {
+            if (num_particles >= MAX_PARTICLES) break;
+            
             Particle* p = &particles[num_particles++];
             
             float angle = base_angle + angle_var + random_float(-0.08f, 0.08f);
@@ -173,7 +187,9 @@ void create_explosion(float x, float y, float r, float g, float b) {
     
     // 中心粒子减少
     int center_particles = 15;
-    for (int i = 0; i < center_particles && num_particles < MAX_PARTICLES; i++) {
+    for (int i = 0; i < center_particles; i++) {
+        if (num_particles >= MAX_PARTICLES) break;
+        
         Particle* p = &particles[num_particles++];
         
         float angle = random_float(0, M_PI * 2);
@@ -403,6 +419,12 @@ int handle_events() {
             break;
         case SDL_MOUSEBUTTONDOWN:
             return 1;
+        case SDL_WINDOWEVENT:
+            // 处理窗口关闭事件（xwin关闭时）
+            if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+                return 1;
+            }
+            break;
         case SDL_QUIT:
             return 1;
         }
