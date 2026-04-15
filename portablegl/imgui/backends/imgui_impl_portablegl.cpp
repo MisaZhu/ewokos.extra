@@ -75,7 +75,7 @@ struct ImGui_ImplPortableGL_Data
     GLuint          AttribLocationVtxPos;    // Vertex attributes location
     GLuint          AttribLocationVtxUV;
     GLuint          AttribLocationVtxColor;
-    unsigned int    VboHandle, ElementsHandle;
+    GLuint          VboHandle, ElementsHandle;
     GLsizeiptr      VertexBufferSize;
     GLsizeiptr      IndexBufferSize;
     bool            HasClipOrigin;

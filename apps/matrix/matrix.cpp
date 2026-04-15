@@ -181,12 +181,15 @@ int main(int argc, char** argv) {
     unsigned int last_time = SDL_GetTicks();
     int frame_count = 0;
     unsigned int fps_time = 0;
+    float accumulator = 0.0f;
+    const float FIXED_DT = 1.0f / 60.0f;  // 固定时间步长 60 FPS
 
     while (1) {
         unsigned int current_time = SDL_GetTicks();
         float dt = (current_time - last_time) / 1000.0f;
-        if (dt > 0.5f) dt = 0.016f;
+        if (dt > 0.1f) dt = 0.1f;  // 限制最大时间步长，防止卡顿后跳跃
         last_time = current_time;
+        accumulator += dt;
 
         if (handle_events()) break;
         frame_count++;
@@ -207,9 +210,16 @@ int main(int argc, char** argv) {
             bbufpix[i] = 0xFF000000;
         }
 
+        // 使用固定时间步长更新，确保动画速度一致
+        while (accumulator >= FIXED_DT) {
+            for (size_t ci = 0; ci < columns.size(); ci++) {
+                columns[ci].update(FIXED_DT);
+            }
+            accumulator -= FIXED_DT;
+        }
+
         if (is_font_loaded) {
             for (size_t ci = 0; ci < columns.size(); ci++) {
-                columns[ci].update(dt);
 
                 Column& col = columns[ci];
                 int col_x = (int)(ci * FONT_SIZE);
@@ -282,8 +292,8 @@ int handle_events() {
             if (event.key.keysym.sym == SDLK_ESCAPE) return 1;
             break;
 
-        //case SDL_MOUSEBUTTONDOWN:
-            //return 1;
+        case SDL_MOUSEBUTTONDOWN:
+            return 1;
 
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
