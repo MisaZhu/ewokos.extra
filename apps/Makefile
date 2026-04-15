@@ -12,6 +12,7 @@ all:
 	cd gears; make
 	cd imgui_demo; make
 	cd matrix; make
+	cd waterdrops; make
 
 clean:
 	cd 3ddemo;make clean
@@ -26,3 +27,4 @@ clean:
 	cd gears; make clean
 	cd imgui_demo; make clean
 	cd matrix; make clean
+	cd waterdrops; make clean
