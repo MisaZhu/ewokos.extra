@@ -154,181 +154,97 @@ static inline void pgl_neon_blend_pixel_line(uint32_t* dst, uint32_t src_color, 
     }
 }
 
-// Matrix multiplication NEON optimization - AARCH64 version uses more registers
+// Matrix multiplication NEON optimization - efficient version
 static inline void pgl_neon_mult_m4_m4(float* c, const float* a, const float* b)
 {
 #ifndef ROW_MAJOR
     // Column Major: C = A * B
-    // In column major, element (row, col) is at index col*4 + row
-    // C[row][col] = dot(A的第row行, B的第col列)
-    // 
-    // C的存储: c[0..3]=第0列, c[4..7]=第1列, c[8..11]=第2列, c[12..15]=第3列
-    // 
-    // C[0][0] = dot(A[0], B[0]) = a[0]*b[0] + a[4]*b[1] + a[8]*b[2] + a[12]*b[3]  -> c[0]
-    // C[1][0] = dot(A[1], B[0]) = a[1]*b[0] + a[5]*b[1] + a[9]*b[2] + a[13]*b[3]  -> c[1]
-    // C[2][0] = dot(A[2], B[0]) = a[2]*b[0] + a[6]*b[1] + a[10]*b[2] + a[14]*b[3] -> c[2]
-    // C[3][0] = dot(A[3], B[0]) = a[3]*b[0] + a[7]*b[1] + a[11]*b[2] + a[15]*b[3] -> c[3]
-    
-    // Load B columns
-    float32x4_t b_col0 = vld1q_f32(b);      // b[0], b[1], b[2], b[3] - B第0列
-    float32x4_t b_col1 = vld1q_f32(b + 4);  // b[4], b[5], b[6], b[7] - B第1列
-    float32x4_t b_col2 = vld1q_f32(b + 8);  // b[8], b[9], b[10], b[11] - B第2列
-    float32x4_t b_col3 = vld1q_f32(b + 12); // b[12], b[13], b[14], b[15] - B第3列
-    
-    // For each column of C
-    for (int col = 0; col < 4; col++) {
-        // Load B[col] column
-        float32x4_t b_col;
-        if (col == 0) b_col = b_col0;
-        else if (col == 1) b_col = b_col1;
-        else if (col == 2) b_col = b_col2;
-        else b_col = b_col3;
-        
-        // Compute C[0][col], C[1][col], C[2][col], C[3][col]
-        // For each row of A, compute dot with B[col]
-        float32x4_t col_result;
-        for (int row = 0; row < 4; row++) {
-            // A[row] = {a[row], a[row+4], a[row+8], a[row+12]}
-            float32x4_t a_row = {a[row], a[row + 4], a[row + 8], a[row + 12]};
-            
-            float32x4_t prod = vmulq_f32(a_row, b_col);
-            float32x2_t sum_low = vpadd_f32(vget_low_f32(prod), vget_high_f32(prod));
-            float32x2_t sum = vpadd_f32(sum_low, sum_low);
-            
-            // Store to appropriate position in column result
-            // Note: This is inefficient but correct. Can be optimized.
-            switch(row) {
-                case 0: col_result = vsetq_lane_f32(vget_lane_f32(sum, 0), col_result, 0); break;
-                case 1: col_result = vsetq_lane_f32(vget_lane_f32(sum, 0), col_result, 1); break;
-                case 2: col_result = vsetq_lane_f32(vget_lane_f32(sum, 0), col_result, 2); break;
-                case 3: col_result = vsetq_lane_f32(vget_lane_f32(sum, 0), col_result, 3); break;
-            }
-        }
-        
-        // Store column to c[col*4..col*4+3]
-        vst1q_f32(c + col * 4, col_result);
-    }
+    // C[row][col] = dot(A[row], B[col])
+    // A[row] = {a[row], a[row+4], a[row+8], a[row+12]} in column-major storage
+
+    // Load B columns once
+    float32x4_t b_col0 = vld1q_f32(b);
+    float32x4_t b_col1 = vld1q_f32(b + 4);
+    float32x4_t b_col2 = vld1q_f32(b + 8);
+    float32x4_t b_col3 = vld1q_f32(b + 12);
+
+    // Load A rows (each row is spread across columns in column-major)
+    float32x4_t a_row0 = vld1q_f32(a);
+    float32x4_t a_row1 = vld1q_f32(a + 4);
+    float32x4_t a_row2 = vld1q_f32(a + 8);
+    float32x4_t a_row3 = vld1q_f32(a + 12);
+
+    // Compute column 0: C[0..3][0] = A * b_col0
+    float32x4_t c_col0 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_col0, 0)), a_row0);
+    c_col0 = vmlaq_f32(c_col0, vdupq_n_f32(vgetq_lane_f32(b_col0, 1)), a_row1);
+    c_col0 = vmlaq_f32(c_col0, vdupq_n_f32(vgetq_lane_f32(b_col0, 2)), a_row2);
+    c_col0 = vmlaq_f32(c_col0, vdupq_n_f32(vgetq_lane_f32(b_col0, 3)), a_row3);
+    vst1q_f32(c, c_col0);
+
+    // Compute column 1: C[0..3][1] = A * b_col1
+    float32x4_t c_col1 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_col1, 0)), a_row0);
+    c_col1 = vmlaq_f32(c_col1, vdupq_n_f32(vgetq_lane_f32(b_col1, 1)), a_row1);
+    c_col1 = vmlaq_f32(c_col1, vdupq_n_f32(vgetq_lane_f32(b_col1, 2)), a_row2);
+    c_col1 = vmlaq_f32(c_col1, vdupq_n_f32(vgetq_lane_f32(b_col1, 3)), a_row3);
+    vst1q_f32(c + 4, c_col1);
+
+    // Compute column 2: C[0..3][2] = A * b_col2
+    float32x4_t c_col2 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_col2, 0)), a_row0);
+    c_col2 = vmlaq_f32(c_col2, vdupq_n_f32(vgetq_lane_f32(b_col2, 1)), a_row1);
+    c_col2 = vmlaq_f32(c_col2, vdupq_n_f32(vgetq_lane_f32(b_col2, 2)), a_row2);
+    c_col2 = vmlaq_f32(c_col2, vdupq_n_f32(vgetq_lane_f32(b_col2, 3)), a_row3);
+    vst1q_f32(c + 8, c_col2);
+
+    // Compute column 3: C[0..3][3] = A * b_col3
+    float32x4_t c_col3 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(b_col3, 0)), a_row0);
+    c_col3 = vmlaq_f32(c_col3, vdupq_n_f32(vgetq_lane_f32(b_col3, 1)), a_row1);
+    c_col3 = vmlaq_f32(c_col3, vdupq_n_f32(vgetq_lane_f32(b_col3, 2)), a_row2);
+    c_col3 = vmlaq_f32(c_col3, vdupq_n_f32(vgetq_lane_f32(b_col3, 3)), a_row3);
+    vst1q_f32(c + 12, c_col3);
 #else
     // Row-major: C = A * B
-    // For row-major, C[i][j] = dot(A的第i行, B的第j列)
-    // We need to compute 4 dot products for each row of C
-    
-    // Load rows of A
-    float32x4_t a0 = vld1q_f32(a);      // A[0][0], A[0][1], A[0][2], A[0][3]
-    float32x4_t a1 = vld1q_f32(a + 4);  // A[1][0], A[1][1], A[1][2], A[1][3]
-    float32x4_t a2 = vld1q_f32(a + 8);  // A[2][0], A[2][1], A[2][2], A[2][3]
-    float32x4_t a3 = vld1q_f32(a + 12); // A[3][0], A[3][1], A[3][2], A[3][3]
-    
-    // For row-major output, we compute each element separately
-    // C[0][0] = A[0][0]*B[0][0] + A[0][1]*B[1][0] + A[0][2]*B[2][0] + A[0][3]*B[3][0]
-    // C[0][1] = A[0][0]*B[0][1] + A[0][1]*B[1][1] + A[0][2]*B[2][1] + A[0][3]*B[3][1]
-    // etc.
-    
-    // Load B columns (transposed from row-major storage)
-    float32x4_t b_col0 = {b[0], b[4], b[8], b[12]};   // B[0][0], B[1][0], B[2][0], B[3][0]
-    float32x4_t b_col1 = {b[1], b[5], b[9], b[13]};   // B[0][1], B[1][1], B[2][1], B[3][1]
-    float32x4_t b_col2 = {b[2], b[6], b[10], b[14]};  // B[0][2], B[1][2], B[2][2], B[3][2]
-    float32x4_t b_col3 = {b[3], b[7], b[11], b[15]};  // B[0][3], B[1][3], B[2][3], B[3][3]
-    
-    // Compute C row 0: dot products of A[0] with each B column
-    float32x4_t a0_broadcast = vdupq_n_f32(vgetq_lane_f32(a0, 0));
-    float32x4_t c0_vec = vmulq_f32(a0_broadcast, b_col0);
-    a0_broadcast = vdupq_n_f32(vgetq_lane_f32(a0, 1));
-    c0_vec = vmlaq_f32(c0_vec, a0_broadcast, b_col1);
-    a0_broadcast = vdupq_n_f32(vgetq_lane_f32(a0, 2));
-    c0_vec = vmlaq_f32(c0_vec, a0_broadcast, b_col2);
-    a0_broadcast = vdupq_n_f32(vgetq_lane_f32(a0, 3));
-    c0_vec = vmlaq_f32(c0_vec, a0_broadcast, b_col3);
-    
-    // Now c0_vec contains [C[0][0], C[0][1], C[0][2], C[0][3]] - but wait, this is wrong
-    // We need: C[0][0] = dot(A[0], B_col0), C[0][1] = dot(A[0], B_col1), etc.
-    // The above computes element-wise products, not dot products
-    
-    // Correct approach: compute dot products using pairwise addition
-    // C[0][0] = a[0]*b[0] + a[1]*b[4] + a[2]*b[8] + a[3]*b[12]
-    float32x4_t a0_b0 = vmulq_f32(a0, b_col0);
-    float32x2_t sum0_low = vpadd_f32(vget_low_f32(a0_b0), vget_high_f32(a0_b0));
-    float32x2_t sum0 = vpadd_f32(sum0_low, sum0_low);
-    
-    float32x4_t a0_b1 = vmulq_f32(a0, b_col1);
-    float32x2_t sum1_low = vpadd_f32(vget_low_f32(a0_b1), vget_high_f32(a0_b1));
-    float32x2_t sum1 = vpadd_f32(sum1_low, sum1_low);
-    
-    float32x4_t a0_b2 = vmulq_f32(a0, b_col2);
-    float32x2_t sum2_low = vpadd_f32(vget_low_f32(a0_b2), vget_high_f32(a0_b2));
-    float32x2_t sum2 = vpadd_f32(sum2_low, sum2_low);
-    
-    float32x4_t a0_b3 = vmulq_f32(a0, b_col3);
-    float32x2_t sum3_low = vpadd_f32(vget_low_f32(a0_b3), vget_high_f32(a0_b3));
-    float32x2_t sum3 = vpadd_f32(sum3_low, sum3_low);
-    
-    // Combine into c[0..3]
-    float32x4_t c0 = {vget_lane_f32(sum0, 0), vget_lane_f32(sum1, 0), 
-                      vget_lane_f32(sum2, 0), vget_lane_f32(sum3, 0)};
-    vst1q_f32(c, c0);
-    
-    // Compute C row 1
-    float32x4_t a1_b0 = vmulq_f32(a1, b_col0);
-    sum0_low = vpadd_f32(vget_low_f32(a1_b0), vget_high_f32(a1_b0));
-    sum0 = vpadd_f32(sum0_low, sum0_low);
-    
-    float32x4_t a1_b1 = vmulq_f32(a1, b_col1);
-    sum1_low = vpadd_f32(vget_low_f32(a1_b1), vget_high_f32(a1_b1));
-    sum1 = vpadd_f32(sum1_low, sum1_low);
-    
-    float32x4_t a1_b2 = vmulq_f32(a1, b_col2);
-    sum2_low = vpadd_f32(vget_low_f32(a1_b2), vget_high_f32(a1_b2));
-    sum2 = vpadd_f32(sum2_low, sum2_low);
-    
-    float32x4_t a1_b3 = vmulq_f32(a1, b_col3);
-    sum3_low = vpadd_f32(vget_low_f32(a1_b3), vget_high_f32(a1_b3));
-    sum3 = vpadd_f32(sum3_low, sum3_low);
-    
-    float32x4_t c1 = {vget_lane_f32(sum0, 0), vget_lane_f32(sum1, 0), 
-                      vget_lane_f32(sum2, 0), vget_lane_f32(sum3, 0)};
-    vst1q_f32(c + 4, c1);
-    
-    // Compute C row 2
-    float32x4_t a2_b0 = vmulq_f32(a2, b_col0);
-    sum0_low = vpadd_f32(vget_low_f32(a2_b0), vget_high_f32(a2_b0));
-    sum0 = vpadd_f32(sum0_low, sum0_low);
-    
-    float32x4_t a2_b1 = vmulq_f32(a2, b_col1);
-    sum1_low = vpadd_f32(vget_low_f32(a2_b1), vget_high_f32(a2_b1));
-    sum1 = vpadd_f32(sum1_low, sum1_low);
-    
-    float32x4_t a2_b2 = vmulq_f32(a2, b_col2);
-    sum2_low = vpadd_f32(vget_low_f32(a2_b2), vget_high_f32(a2_b2));
-    sum2 = vpadd_f32(sum2_low, sum2_low);
-    
-    float32x4_t a2_b3 = vmulq_f32(a2, b_col3);
-    sum3_low = vpadd_f32(vget_low_f32(a2_b3), vget_high_f32(a2_b3));
-    sum3 = vpadd_f32(sum3_low, sum3_low);
-    
-    float32x4_t c2 = {vget_lane_f32(sum0, 0), vget_lane_f32(sum1, 0), 
-                      vget_lane_f32(sum2, 0), vget_lane_f32(sum3, 0)};
-    vst1q_f32(c + 8, c2);
-    
-    // Compute C row 3
-    float32x4_t a3_b0 = vmulq_f32(a3, b_col0);
-    sum0_low = vpadd_f32(vget_low_f32(a3_b0), vget_high_f32(a3_b0));
-    sum0 = vpadd_f32(sum0_low, sum0_low);
-    
-    float32x4_t a3_b1 = vmulq_f32(a3, b_col1);
-    sum1_low = vpadd_f32(vget_low_f32(a3_b1), vget_high_f32(a3_b1));
-    sum1 = vpadd_f32(sum1_low, sum1_low);
-    
-    float32x4_t a3_b2 = vmulq_f32(a3, b_col2);
-    sum2_low = vpadd_f32(vget_low_f32(a3_b2), vget_high_f32(a3_b2));
-    sum2 = vpadd_f32(sum2_low, sum2_low);
-    
-    float32x4_t a3_b3 = vmulq_f32(a3, b_col3);
-    sum3_low = vpadd_f32(vget_low_f32(a3_b3), vget_high_f32(a3_b3));
-    sum3 = vpadd_f32(sum3_low, sum3_low);
-    
-    float32x4_t c3 = {vget_lane_f32(sum0, 0), vget_lane_f32(sum1, 0), 
-                      vget_lane_f32(sum2, 0), vget_lane_f32(sum3, 0)};
-    vst1q_f32(c + 12, c3);
+    // C[row][col] = dot(A[row], B[col])
+    // A[row] = {a[row*4], a[row*4+1], a[row*4+2], a[row*4+3]}
+
+    // Load A rows
+    float32x4_t a_row0 = vld1q_f32(a);
+    float32x4_t a_row1 = vld1q_f32(a + 4);
+    float32x4_t a_row2 = vld1q_f32(a + 8);
+    float32x4_t a_row3 = vld1q_f32(a + 12);
+
+    // Load B columns
+    float32x4_t b_col0 = vld1q_f32(b);
+    float32x4_t b_col1 = vld1q_f32(b + 4);
+    float32x4_t b_col2 = vld1q_f32(b + 8);
+    float32x4_t b_col3 = vld1q_f32(b + 12);
+
+    // Compute row 0: C[0][0..3] = dot(A[0], B[j])
+    float32x4_t c_row0 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_row0, 0)), b_col0);
+    c_row0 = vmlaq_f32(c_row0, vdupq_n_f32(vgetq_lane_f32(a_row0, 1)), b_col1);
+    c_row0 = vmlaq_f32(c_row0, vdupq_n_f32(vgetq_lane_f32(a_row0, 2)), b_col2);
+    c_row0 = vmlaq_f32(c_row0, vdupq_n_f32(vgetq_lane_f32(a_row0, 3)), b_col3);
+    vst1q_f32(c, c_row0);
+
+    // Compute row 1
+    float32x4_t c_row1 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_row1, 0)), b_col0);
+    c_row1 = vmlaq_f32(c_row1, vdupq_n_f32(vgetq_lane_f32(a_row1, 1)), b_col1);
+    c_row1 = vmlaq_f32(c_row1, vdupq_n_f32(vgetq_lane_f32(a_row1, 2)), b_col2);
+    c_row1 = vmlaq_f32(c_row1, vdupq_n_f32(vgetq_lane_f32(a_row1, 3)), b_col3);
+    vst1q_f32(c + 4, c_row1);
+
+    // Compute row 2
+    float32x4_t c_row2 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_row2, 0)), b_col0);
+    c_row2 = vmlaq_f32(c_row2, vdupq_n_f32(vgetq_lane_f32(a_row2, 1)), b_col1);
+    c_row2 = vmlaq_f32(c_row2, vdupq_n_f32(vgetq_lane_f32(a_row2, 2)), b_col2);
+    c_row2 = vmlaq_f32(c_row2, vdupq_n_f32(vgetq_lane_f32(a_row2, 3)), b_col3);
+    vst1q_f32(c + 8, c_row2);
+
+    // Compute row 3
+    float32x4_t c_row3 = vmulq_f32(vdupq_n_f32(vgetq_lane_f32(a_row3, 0)), b_col0);
+    c_row3 = vmlaq_f32(c_row3, vdupq_n_f32(vgetq_lane_f32(a_row3, 1)), b_col1);
+    c_row3 = vmlaq_f32(c_row3, vdupq_n_f32(vgetq_lane_f32(a_row3, 2)), b_col2);
+    c_row3 = vmlaq_f32(c_row3, vdupq_n_f32(vgetq_lane_f32(a_row3, 3)), b_col3);
+    vst1q_f32(c + 12, c_row3);
 #endif
 }
 
