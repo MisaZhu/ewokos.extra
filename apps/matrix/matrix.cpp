@@ -55,6 +55,10 @@ void init_glyph_cache() {
     memset(glyph_cache, 0, sizeof(glyph_cache));
 }
 
+extern int width;
+extern int height;
+extern pix_t* bbufpix;
+
 GlyphCacheEntry* get_glyph_cache(char c) {
     unsigned char uc = (unsigned char)c;
     GlyphCacheEntry* entry = &glyph_cache[uc];
@@ -79,6 +83,293 @@ GlyphCacheEntry* get_glyph_cache(char c) {
     }
     entry->valid = 1;
     return entry;
+}
+
+#define DIGIT_HEIGHT 14
+#define DIGIT_WIDTH 9
+#define DIGIT_SPACING 1
+
+static const char* DIGIT_PATTERNS[10] = {
+    "#########"
+    "#########"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "#########"
+    "#########",
+    "   ##    "
+    "  ###    "
+    " ####    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    "   ##    "
+    " ########"
+    " ########",
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "#########"
+    "#########"
+    "###      "
+    "###      "
+    "###      "
+    "###      "
+    "#########"
+    "#########",
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "#########"
+    "#########",
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###",
+    "#########"
+    "#########"
+    "###      "
+    "###      "
+    "###      "
+    "###      "
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "#########"
+    "#########",
+    "#########"
+    "#########"
+    "###      "
+    "###      "
+    "###      "
+    "###      "
+    "#########"
+    "#########"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "#########"
+    "#########",
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "    ###  "
+    "    ###  "
+    "  ###    "
+    "  ###    "
+    "###      "
+    "###      "
+    "###      "
+    "###      ",
+    "#########"
+    "#########"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "#########"
+    "#########"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "#########"
+    "#########",
+    "#########"
+    "#########"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "##     ##"
+    "#########"
+    "#########"
+    "      ###"
+    "      ###"
+    "      ###"
+    "      ###"
+    "#########"
+    "#########"
+};
+
+static const char* COLON_PATTERN =
+    "         "
+    "         "
+    "   ###   "
+    "   ###   "
+    "   ###   "
+    "   ###   "
+    "         "
+    "         "
+    "   ###   "
+    "   ###   "
+    "   ###   "
+    "   ###   "
+    "         "
+    "         ";
+
+static bool get_time_string(char* buf, size_t buf_size) {
+    time_t now = time(NULL);
+    if(now < 100000)
+        return false;
+    struct tm time_info;
+    localtime_r(&now, &time_info);
+    snprintf(buf, buf_size, "%02d:%02d:%02d", time_info.tm_hour, time_info.tm_min, time_info.tm_sec);
+    return true;
+}
+
+int g_char_scale = 6;
+
+char get_random_matrix_char() {
+    size_t char_count = strlen(MATRIX_CHARS);
+    if (char_count == 0) return 'A';
+    return MATRIX_CHARS[rand() % char_count];
+}
+
+void render_digit_with_chars(int digit, int x, int y, int char_scale, uint32_t color) {
+    const char* pattern = DIGIT_PATTERNS[digit];
+    for (int row = 0; row < DIGIT_HEIGHT; row++) {
+        for (int col = 0; col < DIGIT_WIDTH; col++) {
+            if (pattern[row * DIGIT_WIDTH + col] == '#') {
+                int screen_x = x + col * char_scale;
+                int screen_y = y + row * char_scale;
+                char c = get_random_matrix_char();
+                GlyphCacheEntry* glyph = get_glyph_cache(c);
+                if (glyph->w > 0 && glyph->h > 0) {
+                    int baseline_y = screen_y + (int)(font_ascent * font_scale) + glyph->y0;
+                    for (int gy = 0; gy < glyph->h; gy++) {
+                        int py = baseline_y + gy;
+                        if (py < 0 || py >= height) continue;
+                        for (int gx = 0; gx < glyph->w; gx++) {
+                            int px = screen_x + gx;
+                            if (px < 0 || px >= width) continue;
+                            unsigned char alpha = glyph->bitmap[gy * glyph->w + gx];
+                            if (alpha > 0) {
+                                long idx = ((long)py * width) + px;
+                                bbufpix[idx] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void render_colon_with_chars(int x, int y, int char_scale, uint32_t color) {
+    for (int row = 0; row < DIGIT_HEIGHT; row++) {
+        for (int col = 0; col < DIGIT_WIDTH; col++) {
+            if (COLON_PATTERN[row * DIGIT_WIDTH + col] == '#') {
+                int screen_x = x + col * char_scale;
+                int screen_y = y + row * char_scale;
+                char c = get_random_matrix_char();
+                GlyphCacheEntry* glyph = get_glyph_cache(c);
+                if (glyph->w > 0 && glyph->h > 0) {
+                    int baseline_y = screen_y + (int)(font_ascent * font_scale) + glyph->y0;
+                    for (int gy = 0; gy < glyph->h; gy++) {
+                        int py = baseline_y + gy;
+                        if (py < 0 || py >= height) continue;
+                        for (int gx = 0; gx < glyph->w; gx++) {
+                            int px = screen_x + gx;
+                            if (px < 0 || px >= width) continue;
+                            unsigned char alpha = glyph->bitmap[gy * glyph->w + gx];
+                            if (alpha > 0) {
+                                long idx = ((long)py * width) + px;
+                                bbufpix[idx] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void render_matrix_time(const char* time_str, int start_x, int start_y, int char_scale, uint32_t color) {
+    int x = start_x;
+    int digit_w = DIGIT_WIDTH * char_scale;
+    int spacing = DIGIT_SPACING * char_scale;
+
+    for (int i = 0; time_str[i] != 0; i++) {
+        char c = time_str[i];
+        if (c == ':') {
+            render_colon_with_chars(x, start_y, char_scale, color);
+            x += digit_w + spacing;
+        } else if (c >= '0' && c <= '9') {
+            render_digit_with_chars(c - '0', x, start_y, char_scale, color);
+            x += digit_w + spacing;
+        }
+    }
+}
+
+void render_time_overlay() {
+    char time_str[16];
+    if(!get_time_string(time_str, sizeof(time_str)))
+        return;
+
+    int num_digits = 6;
+    int num_colons = 2;
+    int num_gaps = num_digits + num_colons - 1;
+    int time_chars_w = num_digits * DIGIT_WIDTH + num_colons * DIGIT_WIDTH + num_gaps * DIGIT_SPACING;
+    int time_chars_h = DIGIT_HEIGHT;
+
+    int target_time_width = width * 2 / 3;
+    int target_time_height = height / 2;
+
+    int char_scale_x = target_time_width / time_chars_w;
+    int char_scale_y = target_time_height / time_chars_h;
+    int char_scale = char_scale_x < char_scale_y ? char_scale_x : char_scale_y;
+    if (char_scale < 4) char_scale = 4;
+    if (char_scale > 30) char_scale = 30;
+
+    int digit_w = DIGIT_WIDTH * char_scale;
+    int spacing = DIGIT_SPACING * char_scale;
+    int actual_time_width = num_digits * digit_w + num_colons * digit_w + num_gaps * spacing;
+    int actual_time_height = time_chars_h * char_scale;
+    int time_x = (width - actual_time_width) / 2;
+    int time_y = (height - actual_time_height) / 2;
+
+    render_matrix_time(time_str, time_x, time_y, char_scale, 0xFF00FF00);
 }
 
 struct Column {
@@ -299,6 +590,9 @@ int main(int argc, char** argv) {
                 }
             }
         }
+
+        render_time_overlay();
+
         SDL_UpdateTexture(tex, NULL, bbufpix, width * sizeof(pix_t));
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
         SDL_RenderFillRect(ren, NULL);
