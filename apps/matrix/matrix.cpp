@@ -36,11 +36,13 @@ static unsigned char char_bitmap_buf[MAX_CHAR_BITMAP_SIZE * MAX_CHAR_BITMAP_SIZE
 
 int is_font_loaded = 0;
 
+#define MAX_COLUMN_LENGTH 100
+
 struct Column {
     float y;
     float speed;
     int length;
-    std::vector<char> chars;
+    char chars[MAX_COLUMN_LENGTH];
 
     Column() {
         reset();
@@ -49,12 +51,12 @@ struct Column {
     void reset() {
         y = (float)(rand() % HEIGHT) - HEIGHT;
         speed = 2.0f + (float)(rand() % 100) / 50.0f;
-        length = 5 + rand() % 20;
-        chars.clear();
+        length = 10 + rand() % 40;
+        if (length > MAX_COLUMN_LENGTH) length = MAX_COLUMN_LENGTH;
         size_t char_count = strlen(MATRIX_CHARS);
         if (char_count == 0) char_count = 1;
         for (int i = 0; i < length; i++) {
-            chars.push_back(MATRIX_CHARS[rand() % char_count]);
+            chars[i] = MATRIX_CHARS[rand() % char_count];
         }
     }
 
@@ -67,22 +69,22 @@ struct Column {
             size_t char_count = strlen(MATRIX_CHARS);
             if (char_count == 0) char_count = 1;
 
-            int idx = rand() % chars.size();
+            int idx = rand() % length;
             chars[idx] = MATRIX_CHARS[rand() % char_count];
         }
     }
 };
 
-SDL_Window* window;
-SDL_Renderer* ren;
-SDL_Texture* tex;
-glContext the_Context;
-pix_t* bbufpix;
+SDL_Window* window = nullptr;
+SDL_Renderer* ren = nullptr;
+SDL_Texture* tex = nullptr;
+glContext the_Context = {};
+pix_t* bbufpix = nullptr;
 
-int width, height;
-int buf_width, buf_height;
+int width = 0, height = 0;
+int buf_width = 0, buf_height = 0;
 
-volatile int needs_resize_skip;
+volatile int needs_resize_skip = 0;
 
 std::vector<Column> columns;
 
@@ -95,7 +97,7 @@ void setup_context() {
     width = WIDTH;
     height = HEIGHT;
 
-    window = SDL_CreateWindow("Matrix Rain", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    window = SDL_CreateWindow("Matrix Rain", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN);
     if (!window) exit(0);
 
     ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
@@ -157,8 +159,6 @@ int load_font() {
     stbtt_GetFontVMetrics(&font, &font_ascent, &font_descent, &font_linegap);
     font_scale = stbtt_ScaleForPixelHeight(&font, FONT_SIZE);
     is_font_loaded = 1;
-    klog("Font loaded OK\n");
-
     return 1;
 }
 
@@ -188,11 +188,7 @@ int main(int argc, char** argv) {
         if (dt > 0.5f) dt = 0.016f;
         last_time = current_time;
 
-        klog("handle_events\n");
         if (handle_events()) break;
-        klog("handle_events done\n");
-
-
         frame_count++;
         if (current_time - fps_time > 3000) {
             klog("%d FPS (%dx%d)\n", frame_count * 1000 / (current_time - fps_time), width, height);
@@ -210,7 +206,6 @@ int main(int argc, char** argv) {
         for (long i = 0; i < total_pixels; ++i) {
             bbufpix[i] = 0xFF000000;
         }
-        klog("update columns\n");
 
         if (is_font_loaded) {
             for (size_t ci = 0; ci < columns.size(); ci++) {
@@ -267,10 +262,6 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        klog("render columns\n");
-
-
-
         SDL_UpdateTexture(tex, NULL, bbufpix, width * sizeof(pix_t));
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
         SDL_RenderFillRect(ren, NULL);
@@ -291,42 +282,31 @@ int handle_events() {
             if (event.key.keysym.sym == SDLK_ESCAPE) return 1;
             break;
 
+        //case SDL_MOUSEBUTTONDOWN:
+            //return 1;
+
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                klog("window resized\n");
                 width = event.window.data1;
                 height = event.window.data2;
-                klog("width: %d, height: %d\n", width, height);
 
                 ResizeFramebuffer(width, height);
-                klog("ResizeFramebuffer done\n");
                 bbufpix = (pix_t*)GetBackBuffer();
-                klog("GetBackBuffer done\n");
                 glViewport(0, 0, width, height);
-                klog("glViewport done\n");
                 SDL_DestroyTexture(tex);
-                klog("SDL_DestroyTexture done\n");
                 tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, width, height);
                 needs_resize_skip = 0;
-                klog("SDL_CreateTexture done\n");
             
                 int num_cols = width / FONT_SIZE;
                 if (num_cols <= 0) num_cols = 1;
-                klog("width=%d, num_cols=%d\n", width, num_cols);
                 if (num_cols > 10000) {
-                    klog("ERROR: num_cols too large, skipping resize\n");
                     needs_resize_skip = 0;
                     break;
                 }
-                klog("num_cols: %d\n", num_cols);
                 columns.resize(num_cols);
-                klog("columns resize done\n");
                 for (size_t k = 0; k < columns.size(); k++) {
-                    klog("columns[%d].reset()\n", k);
                     columns[k].reset();
-                    klog("columns[%d].reset() done\n", k);
                 }
-                klog("columns reset\n");
             }
             break;
 

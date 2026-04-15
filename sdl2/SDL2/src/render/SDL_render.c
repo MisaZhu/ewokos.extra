@@ -1843,6 +1843,9 @@ SDL_DestroyRenderer(SDL_Renderer * renderer)
 {
     CHECK_RENDERER_MAGIC(renderer, );
 
+    if (renderer->window) //TODO
+        SDL_SetWindowFullscreen(renderer->window, 0);
+
     SDL_DelEventWatch(SDL_RendererEventWatch, renderer);
 
     /* Free existing textures for this renderer */
