@@ -62,7 +62,7 @@ void setup_context() {
     screen_height = HEIGHT;
 
     window = SDL_CreateWindow("Fireworks", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                              WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+                              WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN);
     if (!window) exit(0);
 
     ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
