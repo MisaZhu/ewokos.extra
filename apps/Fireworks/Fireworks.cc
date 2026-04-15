@@ -58,21 +58,23 @@ void setup_context() {
         exit(0);
     }
 
-    screen_width = WIDTH;
-    screen_height = HEIGHT;
-
+    // 创建窗口时使用默认大小，稍后会调整为实际屏幕大小
     window = SDL_CreateWindow("Fireworks", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN);
     if (!window) exit(0);
 
+    // 获取实际窗口大小（全屏模式下是屏幕分辨率）
+    SDL_GetWindowSize(window, &screen_width, &screen_height);
+    klog("Fireworks: window size %dx%d\n", screen_width, screen_height);
+
     ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     if (!ren) exit(0);
 
-    tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+    tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
     if (!tex) exit(0);
 
     pgl_set_max_vertices(PGL_SMALL_MAX_VERTICES);
-    if (!init_glContext(&the_Context, &bbufpix, WIDTH, HEIGHT)) {
+    if (!init_glContext(&the_Context, &bbufpix, screen_width, screen_height)) {
         puts("Failed to initialize glContext");
         exit(0);
     }
@@ -345,31 +347,30 @@ void draw_dotted_trail(float x0, float y0, float x1, float y1,
     }
 }
 
-// 绘制所有粒子 - 点阵烟花效果，拖影更明显
+// 绘制所有粒子 - 点阵烟花效果，与屏幕比例无关
 void draw_particles() {
     if (!bbufpix) return;
-    
+
     for (int i = 0; i < num_particles; i++) {
         Particle* p = &particles[i];
         if (!p->active) continue;
-        
-        // 计算拖尾 - 适中的拖影
+
+        // 计算拖尾 - 只与速度有关，与屏幕比例无关
         float speed = sqrtf(p->vx * p->vx + p->vy * p->vy);
-        // 速度适中，拖尾不要过长
-        float tail_len = speed * 3.5f + fabsf(p->vy) * 1.5f;
-        if (tail_len > 25.0f) tail_len = 25.0f;
-        if (tail_len < 5.0f) tail_len = 5.0f;
-        
+        float tail_len = speed * 3.0f;
+        if (tail_len > 18.0f) tail_len = 18.0f;
+        if (tail_len < 3.0f) tail_len = 3.0f;
+
         float x0 = p->x;
         float y0 = p->y;
-        // 拖尾方向与速度相反，但向下偏移（重力效果）
-        float x1 = p->x - p->vx * tail_len * 0.4f;
-        float y1 = p->y - p->vy * tail_len * 0.4f + tail_len * 0.3f;
-        
+        // 拖尾方向只与速度方向相反，保持各向同性
+        float x1 = p->x - p->vx * tail_len * 0.5f;
+        float y1 = p->y - p->vy * tail_len * 0.5f;
+
         uint8_t r = (uint8_t)(p->r * 255 * p->brightness);
         uint8_t g = (uint8_t)(p->g * 255 * p->brightness);
         uint8_t b = (uint8_t)(p->b * 255 * p->brightness);
-        
+
         // 绘制点阵拖尾
         draw_dotted_trail(x0, y0, x1, y1, r, g, b, p->life);
     }
