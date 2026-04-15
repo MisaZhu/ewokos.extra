@@ -50,6 +50,8 @@ Ripple ripples[MAX_RIPPLES];
 WaterDrop drops[5];
 float time_val = 0;
 int next_drop_time = 0;
+int wireframe_mode = 0;  // 0 = filled, 1 = wireframe
+int last_mode_switch_time = 0;  // For automatic mode switching
 
 // Shader program
 GLuint water_program = 0;
@@ -417,11 +419,16 @@ void draw_water_gl() {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, water_vertices);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, water_colors);
     
-    glDrawArrays(GL_TRIANGLES, 0, water_vertex_count);
-    
+    // Draw filled triangles or wireframe lines based on mode
+    if (wireframe_mode) {
+        glDrawArrays(GL_LINES, 0, water_vertex_count);
+    } else {
+        glDrawArrays(GL_TRIANGLES, 0, water_vertex_count);
+    }
+
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
-    
+
     glDisable(GL_BLEND);
 }
 
@@ -530,6 +537,9 @@ int handle_events() {
         switch (event.type) {
         case SDL_KEYDOWN:
             if (event.key.keysym.sym == SDLK_ESCAPE) return 1;
+            if (event.key.keysym.sym == SDLK_a) {
+                wireframe_mode = !wireframe_mode;  // Toggle wireframe mode
+            }
             break;
         case SDL_MOUSEBUTTONDOWN:
             return 1;
@@ -556,6 +566,12 @@ int main(int argc, char** argv) {
 
     while (1) {
         if (handle_events()) break;
+
+        // Auto switch mode every 2 seconds (assuming 60fps, 120 frames)
+        if (frame_count - last_mode_switch_time >= 120) {
+            wireframe_mode = !wireframe_mode;
+            last_mode_switch_time = frame_count;
+        }
 
         if (frame_count >= next_drop_time) {
             // Create a single drop at a time for more natural rain effect
