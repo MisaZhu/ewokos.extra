@@ -285,31 +285,33 @@ void blend_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 // 绘制发光点 - 更大更亮
 void draw_glow_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, float alpha) {
     if (alpha <= 0) return;
-    
+
     // 提高亮度
-    uint8_t bright_r = (uint8_t)fminf(255, r * 1.4f);
-    uint8_t bright_g = (uint8_t)fminf(255, g * 1.4f);
-    uint8_t bright_b = (uint8_t)fminf(255, b * 1.4f);
-    
+    uint8_t bright_r = (uint8_t)fminf(255, r * 1.5f);
+    uint8_t bright_g = (uint8_t)fminf(255, g * 1.5f);
+    uint8_t bright_b = (uint8_t)fminf(255, b * 1.5f);
+
     uint8_t a = (uint8_t)(alpha * 255);
-    
-    // 中心点 - 更大
-    blend_pixel(x, y, bright_r, bright_g, bright_b, a);
-    blend_pixel(x+1, y, bright_r, bright_g, bright_b, a * 0.8f);
-    blend_pixel(x-1, y, bright_r, bright_g, bright_b, a * 0.8f);
-    blend_pixel(x, y+1, bright_r, bright_g, bright_b, a * 0.8f);
-    blend_pixel(x, y-1, bright_r, bright_g, bright_b, a * 0.8f);
-    
-    // 周围发光 - 更大范围
+
+    // 中心点 - 更大 3x3
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            float factor = (dx == 0 && dy == 0) ? 1.0f : 0.85f;
+            blend_pixel(x+dx, y+dy, bright_r, bright_g, bright_b, (uint8_t)(a * factor));
+        }
+    }
+
+    // 周围发光 - 更大范围 5x5
     uint8_t glow_a = a / 2;
-    blend_pixel(x+2, y, bright_r, bright_g, bright_b, glow_a);
-    blend_pixel(x-2, y, bright_r, bright_g, bright_b, glow_a);
-    blend_pixel(x, y+2, bright_r, bright_g, bright_b, glow_a);
-    blend_pixel(x, y-2, bright_r, bright_g, bright_b, glow_a);
-    blend_pixel(x+1, y+1, bright_r, bright_g, bright_b, glow_a * 0.7f);
-    blend_pixel(x-1, y+1, bright_r, bright_g, bright_b, glow_a * 0.7f);
-    blend_pixel(x+1, y-1, bright_r, bright_g, bright_b, glow_a * 0.7f);
-    blend_pixel(x-1, y-1, bright_r, bright_g, bright_b, glow_a * 0.7f);
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            if (abs(dx) <= 1 && abs(dy) <= 1) continue; // 跳过中心3x3
+            float factor = 1.0f - (abs(dx) + abs(dy)) * 0.15f;
+            if (factor > 0) {
+                blend_pixel(x+dx, y+dy, bright_r, bright_g, bright_b, (uint8_t)(glow_a * factor));
+            }
+        }
+    }
 }
 
 // 绘制点阵拖尾效果 - 更长的拖影
