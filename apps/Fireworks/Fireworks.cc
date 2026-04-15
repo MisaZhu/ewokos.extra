@@ -1,268 +1,461 @@
-#include <Widget/WidgetWin.h>
-#include <Widget/WidgetX.h>
-#include <x++/X.h>
-#include <unistd.h>
+#define SDL_MAIN_HANDLED
+#include <SDL2/SDL.h>
+#include "glcommon/gltools.h"
+#include <stdio.h>
 #include <stdlib.h>
-#include <font/font.h>
-#include <graph/graph_png.h>
-#include <ewoksys/ewokdef.h>
-#include <ewoksys/kernel_tic.h>
-#include <ewoksys/basic_math.h>
-#include <openlibm.h>
+#include <string.h>
 #include <time.h>
+#include <math.h>
+#include <ewoksys/klog.h>
 
-using namespace Ewok;
+#define WIDTH 1024
+#define HEIGHT 768
+#define PIX_FORMAT SDL_PIXELFORMAT_ARGB8888
+#define MAX_PARTICLES 6000
 
-// 烟花粒子结构体
-struct Particle {
-    int x, y;
-    int vx, vy;
-    uint32_t color;
-    int lifetime;
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
-    // 添加默认构造函数
-    Particle() : x(0), y(0), vx(0), vy(0), color(0), lifetime(0) {}
+// 粒子结构体 - 点阵拖尾效果
+typedef struct {
+    float x, y;
+    float vx, vy;
+    float life;
+    float maxLife;
+    float r, g, b;
+    float brightness;
+    int active;
+} Particle;
 
-    Particle(int _x, int _y, int _vx, int _vy, uint32_t _color, int _lifetime)
-        : x(_x), y(_y), vx(_vx), vy(_vy), color(_color), lifetime(_lifetime) {}
-};
+// 烟花火箭
+typedef struct {
+    float x, y;
+    float vx, vy;
+    float r, g, b;
+    int active;
+} Firework;
 
-// 烟花结构体
-struct Firework {
-    int x, y;
-    int vy;
-    uint32_t color;
-    bool exploded;
+// 全局变量
+SDL_Window* window = NULL;
+SDL_Renderer* ren = NULL;
+SDL_Texture* tex = NULL;
+glContext the_Context;
+pix_t* bbufpix = NULL;
+int screen_width, screen_height;
 
-    // 添加默认构造函数
-    Firework() : x(0), y(0), vy(0), color(0), exploded(false) {}
+Particle particles[MAX_PARTICLES];
+int num_particles = 0;
 
-    Firework(int _x, int _y, int _vy, uint32_t _color)
-        : x(_x), y(_y), vy(_vy), color(_color), exploded(false) {}
-};
+#define MAX_FIREWORKS 5
+Firework fireworks[MAX_FIREWORKS];
+int next_firework_time = 0;
 
-// 定义最大烟花和粒子数量
-const int MAX_FIREWORKS = 16;
-const int MAX_PARTICLES = 512;
-
-// 自定义静态数组模板类
-template <typename T, int MaxSize>
-class StaticArray {
-private:
-    T* data;
-    int size;
-
-public:
-    StaticArray() : size(0) {
-        data =  (T*)malloc(MaxSize*sizeof(T));
-    }
-    ~StaticArray() {
-        free(data);
-    }
-
-    void push_back(const T& value) {
-        if (size < MaxSize) {
-            data[size++] = value;
-        }
+// 初始化
+void setup_context() {
+    if (SDL_Init(SDL_INIT_VIDEO)) {
+        klog("SDL_Init error: %s\n", SDL_GetError());
+        exit(0);
     }
 
-    T& operator[](int index) {
-        return data[index];
-    }
+    screen_width = WIDTH;
+    screen_height = HEIGHT;
 
-    const T& operator[](int index) const {
-        return data[index];
-    }
+    window = SDL_CreateWindow("Fireworks", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                              WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    if (!window) exit(0);
 
-    int getSize() const {
-        return size;
-    }
+    ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    if (!ren) exit(0);
 
-    void erase(int index) {
-        for (int i = index; i < size - 1; ++i) {
-            data[i] = data[i + 1];
-        }
-        --size;
-    }
-};
+    tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+    if (!tex) exit(0);
 
-// 自定义 min 函数
-template<typename T>
-T myMin(T a, T b) {
-    return a < b ? a : b;
+    pgl_set_max_vertices(PGL_SMALL_MAX_VERTICES);
+    if (!init_glContext(&the_Context, &bbufpix, WIDTH, HEIGHT)) {
+        puts("Failed to initialize glContext");
+        exit(0);
+    }
 }
 
-class FireworksWidget : public Widget {
-    StaticArray<Firework, MAX_FIREWORKS> fireworks;
-    StaticArray<Particle, MAX_PARTICLES> particles;
-    char dateTimeStr[32];
-    uint32_t xOffset = 0;
-    uint32_t yOffset = 0;
+void cleanup() {
+    free_glContext(&the_Context);
+    if (tex) SDL_DestroyTexture(tex);
+    if (ren) SDL_DestroyRenderer(ren);
+    if (window) SDL_DestroyWindow(window);
+    SDL_Quit();
+}
 
-    // 生成随机颜色
-    uint32_t randomColor() {
-        return 0xff000000 | (rand() % 256) << 16 | (rand() % 256) << 8 | (rand() % 256);
+float random_float(float min, float max) {
+    return min + (float)rand() / RAND_MAX * (max - min);
+}
+
+// HSV转RGB
+void hsv_to_rgb(float h, float s, float v, float* r, float* g, float* b) {
+    int i = (int)(h * 6);
+    float f = h * 6 - i;
+    float p = v * (1 - s);
+    float q = v * (1 - f * s);
+    float t = v * (1 - (1 - f) * s);
+
+    switch (i % 6) {
+        case 0: *r = v; *g = t; *b = p; break;
+        case 1: *r = q; *g = v; *b = p; break;
+        case 2: *r = p; *g = v; *b = t; break;
+        case 3: *r = p; *g = q; *b = v; break;
+        case 4: *r = t; *g = p; *b = v; break;
+        case 5: *r = v; *g = p; *b = q; break;
     }
+}
 
-    // 发射新烟花
-    void launchFirework() {
-        int x = rand() % area.w;
-        int vy = -(rand() % 10 + 10);
-        uint32_t color = randomColor();
-        fireworks.push_back(Firework(x, area.h, vy, color));
-    }
-
-    void drawDateTime(graph_t* g, XTheme* theme, const grect_t& r) {
-        uint32_t fontSize = 42;
-        if(fontSize > (r.w / 24))
-            fontSize = r.w / 24;
-        
-        xOffset  %= (r.w - fontSize*strlen(dateTimeStr));
-        yOffset  %= (r.h - fontSize*2);
-
-        graph_draw_text_font(g, r.x+1+xOffset, r.y+1+yOffset,
-                    dateTimeStr, theme->getFont(), fontSize, 0xff222222);
-        graph_draw_text_font(g, r.x+xOffset, r.y+yOffset,
-                    dateTimeStr, theme->getFont(), fontSize, 0xffdddddd);
-    }
-
-protected:
-    void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
-        // 清空背景
-        graph_fill(g, r.x, r.y, r.w, r.h, 0xff000000);
-        
-        // 绘制日期时间
-        drawDateTime(g, theme, r);
-
-        // 更新并绘制烟花
-        for (int i = 0; i < fireworks.getSize();) {
-            fireworks[i].y += fireworks[i].vy;
-            if (fireworks[i].y < (area.h / 3) || rand() % 100 == 0) {
-                // 烟花爆炸
-                fireworks[i].exploded = true;
-                for (int j = 0; j < 100; ++j) {
-                    int angle = rand() % 360;
-                    int speed = rand() % 5 + 1;
-                    int vx = speed * cos(angle * 3.1415926 / 180);
-                    int vy = speed * sin(angle * 3.1415926 / 180);
-                    // 爆炸粒子使用随机颜色
-                    particles.push_back(Particle(fireworks[i].x, fireworks[i].y, vx, vy, randomColor(), rand() % 40 + 10));
-                }
-                fireworks.erase(i);
-            } else {
-                // 增加上升粒子大小
-                uint32_t brighterColor = adjustBrightness(fireworks[i].color, 1.5f);
-                int radius = 2; // 增大粒子半径
-                graph_fill_circle(g, fireworks[i].x, fireworks[i].y, radius, brighterColor);
-                
-                // 添加尾巴轨迹
-                for (int t = 1; t <= 3; t++) {
-                    float alpha = 1.0f - t * 0.3f;
-                    uint32_t tailColor = adjustAlpha(brighterColor, alpha);
-                    graph_fill_circle(g, 
-                        fireworks[i].x, 
-                        fireworks[i].y + t*radius*3, 
-                        radius - t, tailColor);
-                }
-                ++i;
-            }
+// 发射烟花 - 随机高度，支持多个同时存在
+void launch_firework() {
+    // 找一个空闲的烟花槽
+    int slot = -1;
+    for (int i = 0; i < MAX_FIREWORKS; i++) {
+        if (!fireworks[i].active) {
+            slot = i;
+            break;
         }
+    }
+    if (slot < 0) return; // 没有空闲槽位
     
-        // 更新并绘制粒子
-        for (int i = 0; i < particles.getSize();) {
-            particles[i].x += particles[i].vx;
-            particles[i].y += particles[i].vy;
-            particles[i].lifetime--;
-            if (particles[i].lifetime <= 0) {
-                particles.erase(i);
-            } else {
-                // 保留原有大小和渐变效果
-                float alpha = (float)particles[i].lifetime / 30.0f;
-                uint32_t fadedColor = adjustAlpha(particles[i].color, alpha);
-                // 绘制圆形粒子
-                int radius = 3;
-                graph_fill_circle(g, particles[i].x, particles[i].y, radius, fadedColor);
-                
-                // 添加尾巴轨迹
-                for (int t = 1; t <= 2; t++) {
-                    float tailAlpha = alpha * (1.0f - t * 0.3f);
-                    uint32_t tailColor = adjustAlpha(particles[i].color, tailAlpha);
-                    graph_fill_circle(g, 
-                        particles[i].x - particles[i].vx * t,
-                        particles[i].y - particles[i].vy * t,
-                        radius - t, tailColor);
+    Firework* fw = &fireworks[slot];
+    fw->x = random_float(screen_width * 0.1f, screen_width * 0.9f);
+    fw->y = screen_height;
+    fw->vx = random_float(-0.5f, 0.5f);
+    // 速度根据目标高度调整，越高速度越快
+    fw->vy = random_float(-12.0f, -18.0f);
+    
+    float hue = random_float(0.0f, 1.0f);
+    hsv_to_rgb(hue, 1.0f, 1.0f, &fw->r, &fw->g, &fw->b);
+    
+    fw->active = 1;
+}
+
+// 创建爆炸 - 范围更小更自然
+void create_explosion(float x, float y, float r, float g, float b) {
+    int streams = 20 + rand() % 12; // 20-32条射线
+    
+    for (int s = 0; s < streams; s++) {
+        float base_angle = (M_PI * 2 * s) / streams;
+        // 添加自然随机角度
+        float angle_var = random_float(-0.15f, 0.15f);
+        
+        // 每条射线上的粒子数减少
+        int particles_per_stream = 12 + rand() % 8;
+        
+        for (int i = 0; i < particles_per_stream && num_particles < MAX_PARTICLES; i++) {
+            Particle* p = &particles[num_particles++];
+            
+            float angle = base_angle + angle_var + random_float(-0.08f, 0.08f);
+            // 速度减慢，范围更紧凑
+            float base_speed = 1.2f + (float)i * 0.25f;
+            float speed = base_speed * random_float(0.9f, 1.1f);
+            
+            p->x = x + random_float(-2.0f, 2.0f); // 起始位置略有随机
+            p->y = y + random_float(-2.0f, 2.0f);
+            p->vx = cos(angle) * speed;
+            p->vy = sin(angle) * speed;
+            p->life = 1.0f;
+            p->maxLife = random_float(50.0f, 90.0f);
+            p->brightness = 1.0f - (float)i / particles_per_stream * 0.25f;
+            
+            // 颜色渐变
+            float fade = 1.0f - (float)i / particles_per_stream * 0.35f;
+            p->r = r * fade;
+            p->g = g * fade;
+            p->b = b * fade;
+            
+            p->active = 1;
+        }
+    }
+    
+    // 中心粒子减少
+    int center_particles = 15;
+    for (int i = 0; i < center_particles && num_particles < MAX_PARTICLES; i++) {
+        Particle* p = &particles[num_particles++];
+        
+        float angle = random_float(0, M_PI * 2);
+        float speed = random_float(0.3f, 1.5f);
+        
+        p->x = x;
+        p->y = y;
+        p->vx = cos(angle) * speed;
+        p->vy = sin(angle) * speed;
+        p->life = 1.0f;
+        p->maxLife = random_float(30.0f, 60.0f);
+        p->brightness = 1.0f;
+        p->r = r;
+        p->g = g;
+        p->b = b;
+        p->active = 1;
+    }
+}
+
+// 更新烟花 - 随机爆炸高度
+void update_fireworks() {
+    for (int i = 0; i < MAX_FIREWORKS; i++) {
+        Firework* fw = &fireworks[i];
+        if (!fw->active) continue;
+
+        fw->x += fw->vx;
+        fw->y += fw->vy;
+        fw->vy += 0.1f;
+
+        // 随机爆炸高度：屏幕高度的10%-50%（Y轴向下，数值越小越高）
+        float explode_height = screen_height * random_float(0.1f, 0.3f);
+
+        if (fw->vy > -1.0f || fw->y < explode_height) {
+            create_explosion(fw->x, fw->y, fw->r, fw->g, fw->b);
+            fw->active = 0;
+        }
+    }
+}
+
+// 更新粒子 - 增强重力效果
+void update_particles() {
+    int i = 0;
+    while (i < num_particles) {
+        Particle* p = &particles[i];
+        if (!p->active) {
+            i++;
+            continue;
+        }
+        
+        p->x += p->vx;
+        p->y += p->vy;
+        p->vy += 0.12f; // 增强重力
+        p->life -= 1.0f / p->maxLife;
+        
+        // 空气阻力
+        p->vx *= 0.985f;
+        p->vy *= 0.985f;
+        
+        if (p->life <= 0) {
+            p->active = 0;
+            particles[i] = particles[--num_particles];
+        } else {
+            i++;
+        }
+    }
+}
+
+// 绘制像素
+void set_pixel(int x, int y, uint32_t color) {
+    if (x >= 0 && x < screen_width && y >= 0 && y < screen_height) {
+        bbufpix[y * screen_width + x] = color;
+    }
+}
+
+// 绘制带透明度的像素
+void blend_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    if (x < 0 || x >= screen_width || y < 0 || y >= screen_height) return;
+    
+    long idx = (long)y * screen_width + x;
+    uint32_t dst = bbufpix[idx];
+    
+    uint8_t dstR = (dst >> 16) & 0xFF;
+    uint8_t dstG = (dst >> 8) & 0xFF;
+    uint8_t dstB = dst & 0xFF;
+    
+    uint8_t outR = (r * a + dstR * (255 - a)) / 255;
+    uint8_t outG = (g * a + dstG * (255 - a)) / 255;
+    uint8_t outB = (b * a + dstB * (255 - a)) / 255;
+    
+    bbufpix[idx] = 0xFF000000 | (outR << 16) | (outG << 8) | outB;
+}
+
+// 绘制发光点 - 更大更亮
+void draw_glow_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, float alpha) {
+    if (alpha <= 0) return;
+    
+    // 提高亮度
+    uint8_t bright_r = (uint8_t)fminf(255, r * 1.4f);
+    uint8_t bright_g = (uint8_t)fminf(255, g * 1.4f);
+    uint8_t bright_b = (uint8_t)fminf(255, b * 1.4f);
+    
+    uint8_t a = (uint8_t)(alpha * 255);
+    
+    // 中心点 - 更大
+    blend_pixel(x, y, bright_r, bright_g, bright_b, a);
+    blend_pixel(x+1, y, bright_r, bright_g, bright_b, a * 0.8f);
+    blend_pixel(x-1, y, bright_r, bright_g, bright_b, a * 0.8f);
+    blend_pixel(x, y+1, bright_r, bright_g, bright_b, a * 0.8f);
+    blend_pixel(x, y-1, bright_r, bright_g, bright_b, a * 0.8f);
+    
+    // 周围发光 - 更大范围
+    uint8_t glow_a = a / 2;
+    blend_pixel(x+2, y, bright_r, bright_g, bright_b, glow_a);
+    blend_pixel(x-2, y, bright_r, bright_g, bright_b, glow_a);
+    blend_pixel(x, y+2, bright_r, bright_g, bright_b, glow_a);
+    blend_pixel(x, y-2, bright_r, bright_g, bright_b, glow_a);
+    blend_pixel(x+1, y+1, bright_r, bright_g, bright_b, glow_a * 0.7f);
+    blend_pixel(x-1, y+1, bright_r, bright_g, bright_b, glow_a * 0.7f);
+    blend_pixel(x+1, y-1, bright_r, bright_g, bright_b, glow_a * 0.7f);
+    blend_pixel(x-1, y-1, bright_r, bright_g, bright_b, glow_a * 0.7f);
+}
+
+// 绘制点阵拖尾效果 - 更长的拖影
+void draw_dotted_trail(float x0, float y0, float x1, float y1,
+                       uint8_t r, uint8_t g, uint8_t b, float alpha) {
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    float dist = sqrtf(dx * dx + dy * dy);
+    
+    if (dist < 1.0f) {
+        draw_glow_pixel((int)x0, (int)y0, r, g, b, alpha);
+        return;
+    }
+    
+    // 点阵间隔 - 3-4像素一个点，颗粒更大
+    float dot_spacing = 3.5f;
+    int num_dots = (int)(dist / dot_spacing);
+    if (num_dots < 1) num_dots = 1;
+    if (num_dots > 30) num_dots = 30; // 限制最大点数
+    
+    for (int i = 0; i <= num_dots; i++) {
+        float t = (float)i / num_dots;
+        float x = x0 + dx * t;
+        float y = y0 + dy * t;
+        
+        // 头部亮，尾部淡，但尾部更亮（拖影明显）
+        float dot_alpha = alpha * (0.6f + 0.4f * (1.0f - t));
+        if (dot_alpha > 0.05f) {
+            draw_glow_pixel((int)x, (int)y, r, g, b, dot_alpha);
+        }
+    }
+}
+
+// 绘制所有粒子 - 点阵烟花效果，拖影更明显
+void draw_particles() {
+    if (!bbufpix) return;
+    
+    for (int i = 0; i < num_particles; i++) {
+        Particle* p = &particles[i];
+        if (!p->active) continue;
+        
+        // 计算拖尾 - 适中的拖影
+        float speed = sqrtf(p->vx * p->vx + p->vy * p->vy);
+        // 速度适中，拖尾不要过长
+        float tail_len = speed * 3.5f + fabsf(p->vy) * 1.5f;
+        if (tail_len > 25.0f) tail_len = 25.0f;
+        if (tail_len < 5.0f) tail_len = 5.0f;
+        
+        float x0 = p->x;
+        float y0 = p->y;
+        // 拖尾方向与速度相反，但向下偏移（重力效果）
+        float x1 = p->x - p->vx * tail_len * 0.4f;
+        float y1 = p->y - p->vy * tail_len * 0.4f + tail_len * 0.3f;
+        
+        uint8_t r = (uint8_t)(p->r * 255 * p->brightness);
+        uint8_t g = (uint8_t)(p->g * 255 * p->brightness);
+        uint8_t b = (uint8_t)(p->b * 255 * p->brightness);
+        
+        // 绘制点阵拖尾
+        draw_dotted_trail(x0, y0, x1, y1, r, g, b, p->life);
+    }
+}
+
+// 绘制所有火箭
+void draw_fireworks() {
+    if (!bbufpix) return;
+
+    for (int i = 0; i < MAX_FIREWORKS; i++) {
+        Firework* fw = &fireworks[i];
+        if (!fw->active) continue;
+
+        int px = (int)fw->x;
+        int py = (int)fw->y;
+
+        uint8_t r = (uint8_t)(fw->r * 255);
+        uint8_t g = (uint8_t)(fw->g * 255);
+        uint8_t b = (uint8_t)(fw->b * 255);
+
+        // 火箭头部发光
+        for (int dy = -2; dy <= 2; dy++) {
+            for (int dx = -2; dx <= 2; dx++) {
+                int dist = dx*dx + dy*dy;
+                if (dist <= 4) {
+                    uint8_t alpha = 255 - dist * 40;
+                    blend_pixel(px + dx, py + dy, r, g, b, alpha);
                 }
-                ++i;
             }
         }
-    }
 
-    // 辅助函数：调整颜色亮度
-    uint32_t adjustBrightness(uint32_t color, float factor) {
-        uint8_t r = (color >> 16) & 0xff;
-        uint8_t g = (color >> 8) & 0xff;
-        uint8_t b = color & 0xff;
-
-        r = static_cast<uint8_t>(myMin(255, static_cast<int>(r * factor)));
-        g = static_cast<uint8_t>(myMin(255, static_cast<int>(g * factor)));
-        b = static_cast<uint8_t>(myMin(255, static_cast<int>(b * factor)));
-
-        return 0xff000000 | (r << 16) | (g << 8) | b;
-    }
-
-    // 辅助函数：调整颜色透明度
-    uint32_t adjustAlpha(uint32_t color, float alpha) {
-        uint8_t r = (color >> 16) & 0xff;
-        uint8_t g = (color >> 8) & 0xff;
-        uint8_t b = color & 0xff;
-        uint8_t a = static_cast<uint8_t>(alpha * 255);
-
-        return (a << 24) | (r << 16) | (g << 8) | b;
-    }
-
-    void onTimer(uint32_t timerFPS, uint32_t timerStep) {
-        if (timerStep % (timerFPS) == 0) {
-            launchFirework();
-            time_t now = time(NULL);
-			struct tm time_info;
-            localtime_r(&now, &time_info);
-            strftime(dateTimeStr, sizeof(dateTimeStr), "%Y-%m-%d %H:%M:%S", &time_info);
-            if (timerStep % (timerFPS*3) == 0) {
-                xOffset = rand();
-                yOffset = rand();
-            }
+        // 火箭点阵拖尾
+        for (int j = 1; j <= 12; j++) {
+            float t = j * 0.8f;
+            int tx = (int)(fw->x - fw->vx * t);
+            int ty = (int)(fw->y - fw->vy * t);
+            uint8_t alpha = (uint8_t)(200 - j * 15);
+            draw_glow_pixel(tx, ty, r, g, b, alpha / 255.0f);
         }
-        update();
     }
+}
 
-    bool onMouse(xevent_t* ev) {
-        if (ev->state == MOUSE_STATE_CLICK) {
-            getWin()->close();
+int handle_events() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+        case SDL_KEYDOWN:
+            if (event.key.keysym.sym == SDLK_ESCAPE) return 1;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            return 1;
+        case SDL_QUIT:
+            return 1;
         }
-        return true;
     }
-
-public:
-    FireworksWidget() {}
-    ~FireworksWidget() {}
-};
+    return 0;
+}
 
 int main(int argc, char** argv) {
-    X x;
-    WidgetWin win;
-    RootWidget *root = new RootWidget();
-    win.setRoot(root);
-    root->setType(Container::HORIZONTAL);
-    
+    (void)argc; (void)argv;
+    srand((unsigned int)time(NULL));
 
-    FireworksWidget* fireworks = new FireworksWidget();
-    root->add(fireworks);
+    setup_context();
 
-    //win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NORMAL);
-    win.open(&x, -1, -1, -1, 0, 0, "Fireworks", XWIN_STYLE_NO_TITLE);
-    win.max();
-    win.setTimer(30);
+    // 随机种子初始化发射时间
+    next_firework_time = rand() % 30 + 10;
 
-    widgetXRun(&x, &win);
+    int frame_count = 0;
+
+    while (1) {
+        if (handle_events()) break;
+
+        // 随机发射时机，不用等上一个结束
+        if (frame_count >= next_firework_time) {
+            launch_firework();
+            // 下一次发射时间：10-60帧后（约0.16-1秒）
+            next_firework_time = frame_count + rand() % 50 + 10;
+        }
+
+        update_fireworks();
+        update_particles();
+
+        // 清屏 - 纯黑背景
+        if (bbufpix) {
+            long total_pixels = (long)screen_width * screen_height;
+            for (long i = 0; i < total_pixels; ++i) {
+                bbufpix[i] = 0xFF000000;
+            }
+
+            draw_fireworks();
+            draw_particles();
+
+            SDL_UpdateTexture(tex, NULL, bbufpix, screen_width * sizeof(pix_t));
+        }
+
+        SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
+        SDL_RenderClear(ren);
+        SDL_RenderCopy(ren, tex, NULL, NULL);
+        SDL_RenderPresent(ren);
+
+        frame_count++;
+        SDL_Delay(16);
+    }
+
+    cleanup();
     return 0;
 }

@@ -1,21 +1,26 @@
 SW_ROOT_DIR=../..
+EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-EXTRA_LIBS_DIR = $(SW_ROOT_DIR)/build/$(HW)
-
-CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include 
-LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib
-
 TASK_OBJS = Fireworks.o
+
+EXTRA_LIBS_DIR = $(SYS_ROOT_DIR)/build/$(HW)
+
+CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include -I $(EXTRA_LIBS_DIR)/include/glcommon
+LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2
+
+GLCOMMON_LIB = $(EXTRA_LIBS_DIR)/lib/libglcommon.a \
+	$(EXTRA_LIBS_DIR)/lib/libportablegl.a
 
 TASK = Fireworks
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 
 all: $(TASK)
 
-$(TASK): $(TASK_OBJS) 
+$(TASK): $(TASK_OBJS) $(GLCOMMON_LIB)
 	mkdir -p $(BUILD_DIR)
-	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) -lopenlibm $(EWOK_LIBC)  -lcxx
+	$(LD) -Ttext=100 $(TASK_OBJS) $(GLCOMMON_LIB) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) -lopenlibm $(EWOK_LIBC) -lcxx
 	cp -r res $(BUILD_DIR)
 
 clean:

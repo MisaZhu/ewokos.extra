@@ -21,6 +21,8 @@ GLCOMMON_LIB = $(BUILD_DIR)/lib/libglcommon.a \
 # Now all demos compile with C-style code using pgl_compat.h
 CPP_SRCS = shadertoy.cpp sphere.cpp cubemap.cpp grass.cpp
 
+C_SRCS = balls.c
+
 # Object files
 C_OBJS = $(patsubst %.c,%.o,$(C_SRCS))
 CPP_OBJS = $(patsubst %.cpp,%.o,$(CPP_SRCS))
