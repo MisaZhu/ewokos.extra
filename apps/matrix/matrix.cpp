@@ -32,11 +32,54 @@ stbtt_fontinfo font;
 int font_ascent, font_descent, font_linegap;
 float font_scale = 0;
 #define MAX_CHAR_BITMAP_SIZE 64
-static unsigned char char_bitmap_buf[MAX_CHAR_BITMAP_SIZE * MAX_CHAR_BITMAP_SIZE];
 
 int is_font_loaded = 0;
 
 #define MAX_COLUMN_LENGTH 100
+
+struct GlyphCacheEntry {
+    unsigned char bitmap[MAX_CHAR_BITMAP_SIZE * MAX_CHAR_BITMAP_SIZE];
+    int w;
+    int h;
+    int x0, y0;
+    int valid;
+};
+
+#define MAX_GLYPH_CACHE 256
+static GlyphCacheEntry glyph_cache[MAX_GLYPH_CACHE];
+static int glyph_cache_initialized = 0;
+
+void init_glyph_cache() {
+    if (glyph_cache_initialized) return;
+    glyph_cache_initialized = 1;
+    memset(glyph_cache, 0, sizeof(glyph_cache));
+}
+
+GlyphCacheEntry* get_glyph_cache(char c) {
+    unsigned char uc = (unsigned char)c;
+    GlyphCacheEntry* entry = &glyph_cache[uc];
+    if (entry->valid) {
+        return entry;
+    }
+
+    int x0, y0, x1, y1;
+    stbtt_GetCodepointBitmapBox(&font, uc, font_scale, font_scale, &x0, &y0, &x1, &y1);
+
+    int w = x1 - x0;
+    int h = y1 - y0;
+
+    entry->w = w;
+    entry->h = h;
+    entry->x0 = x0;
+    entry->y0 = y0;
+
+    if (w > 0 && h > 0 && w <= MAX_CHAR_BITMAP_SIZE && h <= MAX_CHAR_BITMAP_SIZE) {
+        memset(entry->bitmap, 0, sizeof(entry->bitmap));
+        stbtt_MakeCodepointBitmap(&font, entry->bitmap, w, h, w, font_scale, font_scale, uc);
+    }
+    entry->valid = 1;
+    return entry;
+}
 
 struct Column {
     float y;
@@ -65,7 +108,7 @@ struct Column {
         if (y - length * FONT_SIZE > HEIGHT) {
             reset();
         }
-        if (rand() % 10 == 0) {
+        if (rand() % 3 == 0) {
             size_t char_count = strlen(MATRIX_CHARS);
             if (char_count == 0) char_count = 1;
 
@@ -83,8 +126,6 @@ pix_t* bbufpix = nullptr;
 
 int width = 0, height = 0;
 int buf_width = 0, buf_height = 0;
-
-volatile int needs_resize_skip = 0;
 
 std::vector<Column> columns;
 
@@ -114,7 +155,6 @@ void setup_context() {
 
     buf_width = WIDTH;
     buf_height = HEIGHT;
-    needs_resize_skip = 0;
 }
 
 void cleanup() {
@@ -169,6 +209,7 @@ int main(int argc, char** argv) {
     setup_context();
 
     load_font();
+    init_glyph_cache();
 
     int num_columns = width / FONT_SIZE;
     if (num_columns <= 0) num_columns = 1;
@@ -199,12 +240,6 @@ int main(int argc, char** argv) {
             fps_time = current_time;
         }
 
-        if (needs_resize_skip > 0) {
-            needs_resize_skip--;
-            SDL_Delay(16);
-            continue;
-        }
-
         long total_pixels = (long)width * height;
         for (long i = 0; i < total_pixels; ++i) {
             bbufpix[i] = 0xFF000000;
@@ -231,18 +266,10 @@ int main(int argc, char** argv) {
 
                     char c = col.chars[j];
 
-                    int advance, lsb, x0, y0, x1, y1;
-                    stbtt_GetCodepointHMetrics(&font, c, &advance, &lsb);
-                    stbtt_GetCodepointBitmapBox(&font, c, font_scale, font_scale, &x0, &y0, &x1, &y1);
+                    GlyphCacheEntry* glyph = get_glyph_cache(c);
+                    if (glyph->w <= 0 || glyph->h <= 0) continue;
 
-                    int w = x1 - x0;
-                    int h = y1 - y0;
-                    if (w <= 0 || h <= 0) continue;
-                    if (w > MAX_CHAR_BITMAP_SIZE || h > MAX_CHAR_BITMAP_SIZE) continue;
-
-                    stbtt_MakeCodepointBitmap(&font, char_bitmap_buf, w, h, w, font_scale, font_scale, c);
-
-                    int baseline_y = char_y + (int)(font_ascent * font_scale) + y0;
+                    int baseline_y = char_y + (int)(font_ascent * font_scale) + glyph->y0;
 
                     float brightness = 1.0f - (float)j / col.length;
                     uint32_t color;
@@ -254,15 +281,15 @@ int main(int argc, char** argv) {
                         color = 0xFF000000 | ((uint32_t)r_val << 16) | ((uint32_t)g_val << 8);
                     }
 
-                    for (int row = 0; row < h; row++) {
+                    for (int row = 0; row < glyph->h; row++) {
                         int py = baseline_y + row;
                         if (py < 0 || py >= height) continue;
 
-                        for (int col_idx = 0; col_idx < w; col_idx++) {
+                        for (int col_idx = 0; col_idx < glyph->w; col_idx++) {
                             int px = col_x + col_idx;
                             if (px < 0 || px >= width) continue;
 
-                            unsigned char alpha = char_bitmap_buf[row * w + col_idx];
+                            unsigned char alpha = glyph->bitmap[row * glyph->w + col_idx];
                             if (alpha > 0) {
                                 long idx = ((long)py * width) + px;
                                 bbufpix[idx] = color;
@@ -277,6 +304,7 @@ int main(int argc, char** argv) {
         SDL_RenderFillRect(ren, NULL);
         SDL_RenderCopy(ren, tex, NULL, NULL);
         SDL_RenderPresent(ren);
+        SDL_Delay(16);
     }
 
     cleanup();
@@ -305,12 +333,10 @@ int handle_events() {
                 glViewport(0, 0, width, height);
                 SDL_DestroyTexture(tex);
                 tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, width, height);
-                needs_resize_skip = 0;
             
                 int num_cols = width / FONT_SIZE;
                 if (num_cols <= 0) num_cols = 1;
                 if (num_cols > 10000) {
-                    needs_resize_skip = 0;
                     break;
                 }
                 columns.resize(num_cols);
