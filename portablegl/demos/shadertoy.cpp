@@ -15,6 +15,15 @@
 #include <x/xwin.h>
 #include <graph/graph.h>
 
+#define sinf pgl_fast_sin
+#define cosf pgl_fast_cos
+#define sqrtf pgl_fast_sqrt
+#define tanf pgl_fast_tan
+#define acosf pgl_fast_acos
+#define asinf pgl_fast_asin
+#define atanf pgl_fast_atan
+#define atanf2 pgl_fast_atan2
+
 // Window dimensions (can be resized)
 static int win_width = 640;
 static int win_height = 480;

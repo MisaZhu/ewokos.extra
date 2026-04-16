@@ -423,6 +423,20 @@ IN THE SOFTWARE.
 extern "C" {
 #endif
 
+// Fast math approximations
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+// Fast math function declarations
+float pgl_fast_sin(float x);
+float pgl_fast_cos(float x);
+float pgl_fast_sqrt(float x);
+float pgl_fast_tan(float x);
+float pgl_fast_acos(float x);
+float pgl_fast_atan(float x);
+float pgl_fast_atan2(float y, float x);
+
 
 #ifndef PGLDEF
 #ifdef PGL_STATIC
@@ -2088,12 +2102,12 @@ static inline double degrees(double radians) { return RAD_TO_DEG(radians); }
 
 PGL_STATIC_VECTORIZE_VEC(radiansf)
 PGL_STATIC_VECTORIZE_VEC(degreesf)
-PGL_VECTORIZE_VEC(sinf)
-PGL_VECTORIZE_VEC(cosf)
-PGL_VECTORIZE_VEC(tanf)
+PGL_VECTORIZE_VEC(pgl_fast_sin)
+PGL_VECTORIZE_VEC(pgl_fast_cos)
+PGL_VECTORIZE_VEC(pgl_fast_tan)
 PGL_VECTORIZE_VEC(asinf)
-PGL_VECTORIZE_VEC(acosf)
-PGL_VECTORIZE_VEC(atanf)
+PGL_VECTORIZE_VEC(pgl_fast_acos)
+PGL_VECTORIZE_VEC(pgl_fast_atan)
 PGL_VECTORIZE2_VEC(atan2f)
 PGL_VECTORIZE_VEC(sinhf)
 PGL_VECTORIZE_VEC(coshf)
@@ -2106,7 +2120,7 @@ PGL_VECTORIZE_VEC(atanhf)
 
 static inline float inversesqrtf(float x)
 {
-	return 1/sqrtf(x);
+	return 1/pgl_fast_sqrt(x);
 }
 
 PGL_VECTORIZE2_VEC(powf)
@@ -2114,7 +2128,7 @@ PGL_VECTORIZE_VEC(expf)
 PGL_VECTORIZE_VEC(exp2f)
 PGL_VECTORIZE_VEC(logf)
 PGL_VECTORIZE_VEC(log2f)
-PGL_VECTORIZE_VEC(sqrtf)
+PGL_VECTORIZE_VEC(pgl_fast_sqrt)
 PGL_STATIC_VECTORIZE_VEC(inversesqrtf)
 
 // 8.3 Common Functions

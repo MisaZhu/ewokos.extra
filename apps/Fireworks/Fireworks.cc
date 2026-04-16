@@ -13,6 +13,15 @@
 #define PIX_FORMAT SDL_PIXELFORMAT_ARGB8888
 #define MAX_PARTICLES 5000
 
+#define sinf pgl_fast_sin
+#define cosf pgl_fast_cos
+#define sqrtf pgl_fast_sqrt
+#define tanf pgl_fast_tan
+#define acosf pgl_fast_acos
+#define asinf pgl_fast_asin
+#define atanf pgl_fast_atan
+#define atanf2 pgl_fast_atan2
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif

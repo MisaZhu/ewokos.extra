@@ -1,6 +1,198 @@
 #define PGLDEF
 #include "../include/portablegl/portablegl.h"
 
+// Fast math function implementations
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+
+// Fast sine approximation using lookup table with linear interpolation
+#define SIN_TABLE_SIZE 1024
+static float sin_table[SIN_TABLE_SIZE];
+static int sin_table_initialized = 0;
+
+static void init_sin_table(void) {
+    if (sin_table_initialized) return;
+    for (int i = 0; i < SIN_TABLE_SIZE; i++) {
+        float x = (float)i / SIN_TABLE_SIZE * 2.0f * M_PI;
+        sin_table[i] = (float)sin(x);
+    }
+    sin_table_initialized = 1;
+}
+
+inline float pgl_fast_sin(float x) {
+    if (!sin_table_initialized) init_sin_table();
+    
+    // Normalize to [0, 2*PI)
+    float x_norm = x / (2.0f * M_PI);
+    x_norm = x_norm - (int)x_norm;
+    if (x_norm < 0) x_norm += 1.0f;
+    
+    // Lookup with linear interpolation
+    float idx = x_norm * SIN_TABLE_SIZE;
+    int i0 = (int)idx;
+    int i1 = (i0 + 1) & (SIN_TABLE_SIZE - 1);
+    float t = idx - i0;
+    
+    return sin_table[i0] * (1.0f - t) + sin_table[i1] * t;
+}
+
+// Fast cosine using lookup table with linear interpolation
+#define COS_TABLE_SIZE 1024
+static float cos_table[COS_TABLE_SIZE];
+static int cos_table_initialized = 0;
+
+static void init_cos_table(void) {
+    if (cos_table_initialized) return;
+    for (int i = 0; i < COS_TABLE_SIZE; i++) {
+        float x = (float)i / COS_TABLE_SIZE * 2.0f * M_PI;
+        cos_table[i] = (float)cos(x);
+    }
+    cos_table_initialized = 1;
+}
+
+inline float pgl_fast_cos(float x) {
+    if (!cos_table_initialized) init_cos_table();
+    
+    // Normalize to [0, 2*PI)
+    float x_norm = x / (2.0f * M_PI);
+    x_norm = x_norm - (int)x_norm;
+    if (x_norm < 0) x_norm += 1.0f;
+    
+    // Lookup with linear interpolation
+    float idx = x_norm * COS_TABLE_SIZE;
+    int i0 = (int)idx;
+    int i1 = (i0 + 1) & (COS_TABLE_SIZE - 1);
+    float t = idx - i0;
+    
+    return cos_table[i0] * (1.0f - t) + cos_table[i1] * t;
+}
+
+// Fast sqrt using Quake III Arena method with Newton iterations for better precision
+inline float pgl_fast_sqrt(float x) {
+    if (x <= 0.0f) return 0.0f;
+    union { float f; int i; } u;
+    u.f = x;
+    u.i = 0x5f3759df - (u.i >> 1);
+    float x2 = x * 0.5f;
+    float y = u.f;
+    // First Newton iteration
+    y = y * (1.5f - (x2 * y * y));
+    // Second iteration for better precision
+    //y = y * (1.5f - (x2 * y * y));
+    // Third iteration for maximum precision
+    //y = y * (1.5f - (x2 * y * y));
+    return y * x;
+}
+
+// Fast tan using sin/cos ratio
+inline float pgl_fast_tan(float x) {
+    float sx = pgl_fast_sin(x);
+    float cx = pgl_fast_cos(x);
+    if (cx == 0.0f) return 0.0f;
+    return sx / cx;
+}
+
+// Fast acos approximation using lookup table with linear interpolation
+// Valid for [-1, 1], returns [0, PI]
+#define ACOS_TABLE_SIZE 1024
+static float acos_table[ACOS_TABLE_SIZE + 1];
+static int acos_table_initialized = 0;
+
+static void init_acos_table(void) {
+    if (acos_table_initialized) return;
+    for (int i = 0; i <= ACOS_TABLE_SIZE; i++) {
+        float x = (float)i / ACOS_TABLE_SIZE * 2.0f - 1.0f; // Map [0, 1024] to [-1, 1]
+        acos_table[i] = (float)acos(x);
+    }
+    acos_table_initialized = 1;
+}
+
+inline float pgl_fast_acos(float x) {
+    if (!acos_table_initialized) init_acos_table();
+    
+    // Clamp input to [-1, 1]
+    if (x < -1.0f) x = -1.0f;
+    if (x > 1.0f) x = 1.0f;
+    
+    // Map [-1, 1] to [0, ACOS_TABLE_SIZE]
+    float idx = (x + 1.0f) * 0.5f * ACOS_TABLE_SIZE;
+    int i0 = (int)idx;
+    int i1 = i0 + 1;
+    if (i1 > ACOS_TABLE_SIZE) i1 = ACOS_TABLE_SIZE;
+    float t = idx - i0;
+    
+    return acos_table[i0] * (1.0f - t) + acos_table[i1] * t;
+}
+
+// Fast asin using acos: asin(x) = PI/2 - acos(x)
+inline float pgl_fast_asin(float x) {
+    return M_PI / 2.0f - pgl_fast_acos(x);
+}
+
+// Fast atan approximation using lookup table with linear interpolation
+// Valid for all real numbers, returns [-PI/2, PI/2]
+#define ATAN_TABLE_SIZE 1024
+static float atan_table[ATAN_TABLE_SIZE + 1];
+static int atan_table_initialized = 0;
+
+static void init_atan_table(void) {
+    if (atan_table_initialized) return;
+    for (int i = 0; i <= ATAN_TABLE_SIZE; i++) {
+        // Map [0, 1024] to [-8, 8] for good coverage
+        float x = ((float)i / ATAN_TABLE_SIZE * 16.0f) - 8.0f;
+        atan_table[i] = (float)atan(x);
+    }
+    atan_table_initialized = 1;
+}
+
+inline float pgl_fast_atan(float x) {
+    if (!atan_table_initialized) init_atan_table();
+    
+    // Handle special cases
+    if (x < -8.0f) return -M_PI / 2.0f;
+    if (x > 8.0f) return M_PI / 2.0f;
+    
+    // Map [-8, 8] to [0, ATAN_TABLE_SIZE]
+    float idx = (x + 8.0f) / 16.0f * ATAN_TABLE_SIZE;
+    int i0 = (int)idx;
+    int i1 = i0 + 1;
+    if (i1 > ATAN_TABLE_SIZE) i1 = ATAN_TABLE_SIZE;
+    float t = idx - i0;
+    
+    return atan_table[i0] * (1.0f - t) + atan_table[i1] * t;
+}
+
+// Fast atan2 using atan: atan2(y, x) = atan(y/x) with quadrant correction
+inline float pgl_fast_atan2(float y, float x) {
+    if (x == 0.0f) {
+        if (y > 0.0f) return M_PI / 2.0f;
+        if (y < 0.0f) return -M_PI / 2.0f;
+        return 0.0f;
+    }
+    
+    float atan_val = pgl_fast_atan(y / x);
+    
+    // Correct quadrant
+    if (x < 0.0f) {
+        if (y >= 0.0f) return atan_val + M_PI;
+        else return atan_val - M_PI;
+    }
+    
+    return atan_val;
+}
+
+// Use fast math functions
+#define sinf pgl_fast_sin
+#define cosf pgl_fast_cos
+#define sqrtf pgl_fast_sqrt
+#define tanf pgl_fast_tan
+#define acosf pgl_fast_acos
+#define asinf pgl_fast_asin
+#define atanf pgl_fast_atan
+#define atan2f pgl_fast_atan2
+
 // Matrix access macros for extract_rotation_m4
 #ifndef ROW_MAJOR
 #define M44(m, row, col) m[col*4 + row]
