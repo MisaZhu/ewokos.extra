@@ -16,7 +16,6 @@ TASK_OBJS = \
 CXXFLAGS += -nostdinc++ -I libs/litehtml/include -I $(SDK_DIR)/include/SDL2 -D__EWOKOS__
 
 CPP_OBJS = src/CBrowserWnd.o src/SDLContainer.o src/el_input.o src/main.o 
-$(CPP_OBJS): $(STL_HEADERS_STAMP)
 
 CFLAGS += -I $(SDK_DIR)/include/SDL2 -D__EWOKOS__
 LDFLAGS += -llitehtml -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lopenlibm
