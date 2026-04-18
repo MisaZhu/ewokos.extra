@@ -29,7 +29,8 @@ int main(int argc, char* argv[])
     if(argc > 1) {
         editline->disable();
         editline->setContent(argv[1]);
-        webview->load(argv[1]);
+        webview->loadCSS(X::getResFullName("css/default.css"));
+        webview->loadHtml(argv[1]);
     }
     else {
         editline->enable();
