@@ -67,6 +67,10 @@ litehtml::uint_ptr SDLContainer::create_font( const litehtml::tchar_t* faceName,
         font = m_fonts[key];
     } else {
         font = TTF_OpenFont((fontPath + fontName + ".ttf").c_str(), size);
+        if (font == nullptr) {
+            m_fonts[key] = nullptr;
+            return 0;
+        }
         m_fonts[key] = font;
     }
 
@@ -135,6 +139,10 @@ int SDLContainer::text_width( const litehtml::tchar_t* text, litehtml::uint_ptr 
         return 0;
     }
 
+    if(!text) {
+        return 0;
+    }
+
     int iWidth = 0, iHeight = 0;
     TTF_SizeText(font, text, &iWidth, &iHeight);
     return iWidth;
@@ -144,6 +152,10 @@ void SDLContainer::draw_text( litehtml::uint_ptr hdc, const litehtml::tchar_t* t
 {
     TTF_Font* font = (TTF_Font*)hFont;
     if (!font) {
+        return;
+    }
+
+    if (!text) {
         return;
     }
 
@@ -157,14 +169,17 @@ void SDLContainer::draw_text( litehtml::uint_ptr hdc, const litehtml::tchar_t* t
     int height = info->h;
 
     SDL_Texture* texture = SDL_CreateTextureFromSurface(m_renderer, info);
-    SDL_FreeSurface(info);  // 立即释放 surface，避免内存泄漏
-
-    if (texture) {
-        SDL_Rect src = { 0, 0, width, height };
-        SDL_Rect dst = { pos.x, pos.y, width, height };
-        SDL_RenderCopy(m_renderer, texture, &src, &dst);
-        SDL_DestroyTexture(texture);  // 释放纹理，避免内存泄漏
+    if (!texture) {
+        SDL_FreeSurface(info);
+        return;
     }
+
+    SDL_FreeSurface(info);
+
+    SDL_Rect src = { 0, 0, width, height };
+    SDL_Rect dst = { pos.x, pos.y, width, height };
+    SDL_RenderCopy(m_renderer, texture, &src, &dst);
+    SDL_DestroyTexture(texture);
 }
 
 int SDLContainer::pt_to_px( int pt )

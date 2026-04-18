@@ -50,6 +50,10 @@ litehtml::element_position el_input::get_element_position(litehtml::css_offsets*
 
 void el_input::draw(litehtml::uint_ptr hdc, int x, int y, const litehtml::position* clip)
 {
+    if (!m_renderer) {
+        return;
+    }
+
     litehtml::position pos = m_pos;
     pos.x += x;
     pos.y += y;
@@ -69,9 +73,13 @@ void el_input::draw(litehtml::uint_ptr hdc, int x, int y, const litehtml::positi
     SDL_SetRenderDrawColor(m_renderer, r, g, b, a);
 }
 
-int el_input::line_height() const
+int	el_input::line_height() const
 {
-    return height();
+    int h = height();
+    if (h <= 0) {
+        return 24;
+    }
+    return h;
 }
 
 bool el_input::is_replaced() const

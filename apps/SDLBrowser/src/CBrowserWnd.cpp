@@ -35,6 +35,8 @@ SDL_Texture* gTexture = NULL;
 CBrowserWnd::CBrowserWnd()
     : m_windowWidth(SCREEN_WIDTH)
     , m_windowHeight(SCREEN_HEIGHT)
+    , m_container(nullptr)
+    , m_doc(nullptr)
 {
 	// Create window
 	if (!init()) {
