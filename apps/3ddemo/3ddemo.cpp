@@ -183,7 +183,7 @@ static void on_repaint(xwin_t* xwin, graph_t* g) {
     (void)xwin;
     camera_angle += 0.05f;
     render_mesh();
-    graph_fill(g, 0, 0, win_width, win_height, 0xFF1a1a2e);
+    graph_fill_rect(g, 0, 0, win_width, win_height, 0xFF1a1a2e);
     graph_t bg;
     graph_init(&bg, backbuf, win_width, win_height);
     graph_blt(&bg, 0, 0, win_width, win_height, g, 0, 0, win_width, win_height);

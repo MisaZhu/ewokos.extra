@@ -223,7 +223,7 @@ static void on_repaint(xwin_t* xwin, graph_t* g)
 	pglDrawFrame2(frag_funcs[cur_shader], &the_uniforms);
 
 	// Clear destination graph with black before blitting
-	graph_fill(g, 0, 0, win_width, win_height, 0xFF000000);
+	graph_fill_rect(g, 0, 0, win_width, win_height, 0xFF000000);
 	
 	// Blit to screen
 	graph_t bg;

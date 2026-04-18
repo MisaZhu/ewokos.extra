@@ -8,7 +8,7 @@ all:
 	cd imgui_demo; make
 	cd matrix; make
 	cd waterdrops; make
-	cd SDLBrowser; make
+	cd xBrowser; make
 
 clean:
 	cd 3ddemo;make clean
@@ -19,4 +19,4 @@ clean:
 	cd imgui_demo; make clean
 	cd matrix; make clean
 	cd waterdrops; make clean
-	cd SDLBrowser; make clean
+	cd xBrowser; make clean

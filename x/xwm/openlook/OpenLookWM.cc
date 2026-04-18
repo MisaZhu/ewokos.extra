@@ -52,15 +52,15 @@ void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* frame_g, graph_t* ws_g, 
 	int w = r->w;
 	int h = r->h;
 
-	graph_fill(frame_g, x, y, w, xwm.theme.frameW, bg);
-	graph_fill(frame_g, x, y, xwm.theme.frameW, h, bg);
-	graph_fill(frame_g, x, y+h-xwm.theme.frameW, w, xwm.theme.frameW, bg);
-	graph_fill(frame_g, x+w-xwm.theme.frameW, y, xwm.theme.frameW, h, bg);
+	graph_fill_rect(frame_g, x, y, w, xwm.theme.frameW, bg);
+	graph_fill_rect(frame_g, x, y, xwm.theme.frameW, h, bg);
+	graph_fill_rect(frame_g, x, y+h-xwm.theme.frameW, w, xwm.theme.frameW, bg);
+	graph_fill_rect(frame_g, x+w-xwm.theme.frameW, y, xwm.theme.frameW, h, bg);
 
-	graph_fill(frame_g, x, y, w, 2, 0xff000000);
-	graph_fill(frame_g, x, y, 2, h, 0xff000000);
-	graph_fill(frame_g, x, y+h-2, w, 2, 0xff000000);
-	graph_fill(frame_g, x+w-2, y, 2, h, 0xff000000);
+	graph_fill_rect(frame_g, x, y, w, 2, 0xff000000);
+	graph_fill_rect(frame_g, x, y, 2, h, 0xff000000);
+	graph_fill_rect(frame_g, x, y+h-2, w, 2, 0xff000000);
+	graph_fill_rect(frame_g, x+w-2, y, 2, h, 0xff000000);
 
 	if(frameTLIcon)
 		graph_blt_alpha(frameTLIcon, 0, 0, frameTLIcon->w, frameTLIcon->h,
@@ -76,8 +76,8 @@ void OpenLookWM::drawFrame(graph_t* desktop_g, graph_t* frame_g, graph_t* ws_g, 
 			frame_g, x+w-frameBRIcon->w, y+h-frameBRIcon->h, frameBRIcon->w, frameBRIcon->h, 0xff);
 	//shadow
 	/*if(top) {
-		graph_fill(graph, x+w+xwm.theme.frameW, y, xwm.theme.frameW, h+xwm.theme.frameW, 0xaa000000);
-		graph_fill(graph, x, y+h+xwm.theme.frameW, w+xwm.theme.frameW*2, xwm.theme.frameW, 0xaa000000);
+		graph_fill_rect(graph, x+w+xwm.theme.frameW, y, xwm.theme.frameW, h+xwm.theme.frameW, 0xaa000000);
+		graph_fill_rect(graph, x, y+h+xwm.theme.frameW, w+xwm.theme.frameW*2, xwm.theme.frameW, 0xaa000000);
 	}
 	*/
 }
@@ -94,7 +94,7 @@ void OpenLookWM::drawTitle(graph_t* desktop_g, graph_t* g, xinfo_t* info, grect_
 	
 	int pw = (r->w-sz.w)/2;
 	int ph = (r->h-sz.h)/2;
-	graph_fill(g, r->x, r->y, r->w, r->h, bg);
+	graph_fill_rect(g, r->x, r->y, r->w, r->h, bg);
 	graph_draw_text_font(g, r->x+pw, r->y+ph, info->title, font, xwm.theme.fontSize, fg);//title
 
 	//graph_line(g, r->x, r->y+r->h-3, r->x+r->w, r->y+r->h-3, dark);

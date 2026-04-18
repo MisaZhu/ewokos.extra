@@ -82,13 +82,13 @@ protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         // 绘制阴影边框（3D效果）
         int shadowOffset = 4;
-        graph_fill(g, r.x + shadowOffset, r.y + shadowOffset, r.w, r.h, COLOR_SHADOW);
+        graph_fill_rect(g, r.x + shadowOffset, r.y + shadowOffset, r.w, r.h, COLOR_SHADOW);
         
         // 绘制主背景
-        graph_fill(g, r.x, r.y, r.w, r.h, 0xFFFFFFFF);
+        graph_fill_rect(g, r.x, r.y, r.w, r.h, 0xFFFFFFFF);
         
         // 绘制外边框
-        graph_box(g, r.x, r.y, r.w, r.h, COLOR_BORDER);
+        graph_rect(g, r.x, r.y, r.w, r.h, COLOR_BORDER);
         
         // 计算布局
         int padding = 13;
@@ -104,7 +104,7 @@ protected:
         int contentY = r.y + padding;
         
         // 绘制红色顶部标题栏
-        graph_fill(g, contentX, contentY, contentW, headerHeight, COLOR_HEADER_RED);
+        graph_fill_rect(g, contentX, contentY, contentW, headerHeight, COLOR_HEADER_RED);
         
         // 绘制左右切换按钮区域
         int buttonWidth = 40;
@@ -145,7 +145,7 @@ protected:
         
         // 绘制星期行背景
         int weekdayY = contentY + headerHeight;
-        graph_fill(g, contentX, weekdayY, contentW, weekdayHeight, COLOR_WEEKDAY_BG);
+        graph_fill_rect(g, contentX, weekdayY, contentW, weekdayHeight, COLOR_WEEKDAY_BG);
         
         // 绘制星期文字
         for (int i = 0; i < 7; i++) {
@@ -174,7 +174,7 @@ protected:
                 int cellY = calendarStartY + row * cellHeight;
 
                 // 绘制格子边框
-                graph_box(g, cellX, cellY, cellWidth, cellHeight, COLOR_BORDER);
+                graph_rect(g, cellX, cellY, cellWidth, cellHeight, COLOR_BORDER);
 
                 // 计算日期
                 int dayNum = 0;
@@ -200,9 +200,9 @@ protected:
 
                 // 绘制背景
                 if (isToday) {
-                    graph_fill(g, cellX + 1, cellY + 1, cellWidth - 2, cellHeight - 2, COLOR_TODAY_BG);
+                    graph_fill_rect(g, cellX + 1, cellY + 1, cellWidth - 2, cellHeight - 2, COLOR_TODAY_BG);
                 } else {
-                    graph_fill(g, cellX + 1, cellY + 1, cellWidth - 2, cellHeight - 2, COLOR_CELL_BG);
+                    graph_fill_rect(g, cellX + 1, cellY + 1, cellWidth - 2, cellHeight - 2, COLOR_CELL_BG);
                 }
 
                 // 绘制日期数字
