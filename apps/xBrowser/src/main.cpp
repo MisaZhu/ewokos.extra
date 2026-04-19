@@ -26,14 +26,15 @@ int main(int argc, char* argv[])
     WidgetWebview* webview = new WidgetWebview();
     root->add(webview);
 
+    webview->loadCSS(X::getResFullName("html/default.css"));
     if(argc > 1) {
         editline->disable();
         editline->setContent(argv[1]);
-        webview->loadCSS(X::getResFullName("css/default.css"));
         webview->loadHtml(argv[1]);
     }
     else {
         editline->enable();
+        webview->loadHtml(X::getResFullName("html/default.html"));
     }
 
     win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
