@@ -5,6 +5,8 @@
 #include <Widget/RootWidget.h>
 #include <Widget/WidgetX.h>
 #include <Widget/EditLine.h>
+#include <Widget/Scroller.h>
+#include <Widget/Container.h>
 
 #include "WidgetWebview/WidgetWebview.h"
 
@@ -23,8 +25,19 @@ int main(int argc, char* argv[])
     editline->fix(0, 24);
     root->focus(editline);
 
+    // Create a horizontal container for webview and vertical scroller
+    Container* c = new Container();
+    c->setType(Container::HORIZONTAL);
+    root->add(c);
+
     WidgetWebview* webview = new WidgetWebview();
-    root->add(webview);
+    c->add(webview);
+
+    // Add vertical scroller
+    Scroller* sr = new Scroller();
+    sr->fix(8, 0);
+    webview->setScrollerV(sr);
+    c->add(sr);
 
     win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
 
