@@ -34,11 +34,13 @@ int main(int argc, char* argv[])
     }
     else {
         editline->enable();
-        webview->loadHtml("res://html/default.html");
+        //webview->loadHtml("res://html/default.html");
+        webview->loadHtml("https://raw.githubusercontent.com/MisaZhu/ewokos.extra/refs/heads/main/apps/xBrowser/res/html/default.html");
     }
 
     win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
     widgetXRun(&x, &win);
+
 
     return 0;
 }

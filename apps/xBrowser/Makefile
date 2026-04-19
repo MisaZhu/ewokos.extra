@@ -28,7 +28,7 @@ $(BROWSER): $(BROWSER_OBJS) \
 		$(BUILD_DIR)/lib/libcxx.a
 	mkdir -p $(BROWSER_DIR)
 	$(LD) -Ttext=100 $(BROWSER_OBJS) -o $(BROWSER) $(LDFLAGS) \
-		$(EWOK_LIB_X) -llitehtml \
+		$(EWOK_LIB_X) -llitehtml -ltinyhttpsc \
 		$(EWOK_LIB_GRAPH) \
 		$(EWOK_LIBC) -lcxx
 	cp -r res $(BROWSER_DIR)
