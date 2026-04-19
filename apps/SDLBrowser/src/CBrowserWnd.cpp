@@ -81,7 +81,7 @@ SDL_Renderer* CBrowserWnd::getRenderer()
 
 
 // Helper function to read file contents
-static std::string readFileContents(const char* filename) {
+static std::string readLocalFileContents(const char* filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         return "";
@@ -109,14 +109,14 @@ void CBrowserWnd::handleWindowResize(int newWidth, int newHeight)
 bool CBrowserWnd::runEventLoop()
 {
     {
-        std::string strContents = readFileContents("/data/html/master.css");
+        std::string strContents = readLocalFileContents("/data/html/master.css");
         if (!strContents.empty()) {
             m_browser_context.load_master_stylesheet(strContents.c_str());
         }
     }
 
     {
-        std::string strContents = readFileContents("/data/html/test.html");
+        std::string strContents = readLocalFileContents("/data/html/test.html");
         if (!strContents.empty()) {
             m_doc = litehtml::document::createFromString(strContents.c_str(), m_container.get(), &m_browser_context);
             if (m_doc) {
