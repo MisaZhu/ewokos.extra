@@ -26,6 +26,8 @@ int main(int argc, char* argv[])
     WidgetWebview* webview = new WidgetWebview();
     root->add(webview);
 
+    win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
+
     webview->loadCSS("res://html/default.css");
     if(argc > 1) {
         editline->disable();
@@ -37,9 +39,6 @@ int main(int argc, char* argv[])
         webview->loadHtml("res://html/default.html");
     }
 
-    win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
     widgetXRun(&x, &win);
-
-
     return 0;
 }
