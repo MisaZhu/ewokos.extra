@@ -21,7 +21,13 @@ static void onInputFunc(Widget* wd, uint32_t key, void* arg) {
         return;
     if(key != KEY_ENTER)
         return;
-    webview->loadHtml(editline->getContent().c_str());
+    std::string full_url = editline->getContent();
+    if(full_url.find("://") == std::string::npos) {
+        full_url = "https://" + editline->getContent();
+        editline->setContent(full_url);
+    }
+
+    webview->loadHtml(full_url);
 }
 
 int main(int argc, char* argv[])
