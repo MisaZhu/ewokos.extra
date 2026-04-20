@@ -7,10 +7,22 @@
 #include <Widget/EditLine.h>
 #include <Widget/Scroller.h>
 #include <Widget/Container.h>
+#include <ewoksys/keydef.h>
+
 
 #include "WidgetWebview/WidgetWebview.h"
 
 using namespace Ewok;
+
+static void onInputFunc(Widget* wd, uint32_t key, void* arg) {
+    WidgetWebview* webview = (WidgetWebview*)arg;
+    EditLine* editline = (EditLine*)wd;
+    if(webview == NULL || editline->getContent().empty())
+        return;
+    if(key != KEY_ENTER)
+        return;
+    webview->loadHtml(editline->getContent().c_str());
+}
 
 int main(int argc, char* argv[])
 {
@@ -33,11 +45,15 @@ int main(int argc, char* argv[])
     WidgetWebview* webview = new WidgetWebview();
     c->add(webview);
 
+    editline->setOnInputFunc(onInputFunc, webview);
+
     // Add vertical scroller
     Scroller* sr = new Scroller();
     sr->fix(8, 0);
     webview->setScrollerV(sr);
     c->add(sr);
+
+    editline->setOnInputFunc(onInputFunc, webview);
 
     win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
 
