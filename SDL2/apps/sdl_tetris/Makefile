@@ -20,7 +20,7 @@ TASK_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 all: $(TASK)
 
 $(TASK): $(TASK_OBJS) \
-		$(EWOK_LIBC_A)  \
+		$(BUILD_DIR)/lib/libewoksys.a  \
 		$(BUILD_DIR)/lib/libSDL2.a \
 		$(BUILD_DIR)/lib/libSDL2_image.a \
 		$(BUILD_DIR)/lib/libSDL2_mixer.a \
