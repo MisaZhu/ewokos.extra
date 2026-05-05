@@ -354,13 +354,13 @@ static void on_event(xwin_t* xwin, xevent_t* ev)
         int32_t button = ev->value.mouse.button;
         
         if (button == MOUSE_BUTTON_LEFT) {
-            mouse_buttons[0] = (state == MOUSE_STATE_DOWN);
+            mouse_buttons[0] = (state == MOUSE_STATE_DOWN || state == MOUSE_STATE_DRAG);
         }
         else if (button == MOUSE_BUTTON_RIGHT) {
-            mouse_buttons[1] = (state == MOUSE_STATE_DOWN);
+            mouse_buttons[1] = (state == MOUSE_STATE_DOWN || state == MOUSE_STATE_DRAG);
         }
         else if (button == MOUSE_BUTTON_MID) {
-            mouse_buttons[2] = (state == MOUSE_STATE_DOWN);
+            mouse_buttons[2] = (state == MOUSE_STATE_DOWN || state == MOUSE_STATE_DRAG);
         }
     }
 }
