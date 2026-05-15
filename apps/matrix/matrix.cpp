@@ -66,6 +66,11 @@ GlyphCacheEntry* get_glyph_cache(char c) {
         return entry;
     }
 
+    int glyph = stbtt_FindGlyphIndex(&font, uc);
+    int empty = stbtt_IsGlyphEmpty(&font, glyph);
+    int gx0 = 0, gy0 = 0, gx1 = 0, gy1 = 0;
+    int has_box = stbtt_GetGlyphBox(&font, glyph, &gx0, &gy0, &gx1, &gy1);
+
     int x0, y0, x1, y1;
     stbtt_GetCodepointBitmapBox(&font, uc, font_scale, font_scale, &x0, &y0, &x1, &y1);
 
@@ -83,6 +88,28 @@ GlyphCacheEntry* get_glyph_cache(char c) {
     }
     entry->valid = 1;
     return entry;
+}
+
+static void draw_fallback_block(int x, int y, int cell_w, int cell_h, uint32_t color) {
+    if (!bbufpix || cell_w <= 0 || cell_h <= 0) return;
+
+    int block_w = cell_w * 3 / 5;
+    int block_h = cell_h * 4 / 5;
+    if (block_w < 2) block_w = 2;
+    if (block_h < 2) block_h = 2;
+    if (block_w > cell_w) block_w = cell_w;
+    if (block_h > cell_h) block_h = cell_h;
+
+    int start_x = x + (cell_w - block_w) / 2;
+    int start_y = y + (cell_h - block_h) / 2;
+
+    for (int py = start_y; py < start_y + block_h; ++py) {
+        if (py < 0 || py >= height) continue;
+        for (int px = start_x; px < start_x + block_w; ++px) {
+            if (px < 0 || px >= width) continue;
+            bbufpix[(long)py * width + px] = color;
+        }
+    }
 }
 
 #define DIGIT_HEIGHT 14
@@ -273,21 +300,27 @@ void render_digit_with_chars(int digit, int x, int y, int char_scale, uint32_t c
             if (pattern[row * DIGIT_WIDTH + col] == '#') {
                 int screen_x = x + col * char_scale;
                 int screen_y = y + row * char_scale;
+                if (!is_font_loaded) {
+                    draw_fallback_block(screen_x, screen_y, char_scale, char_scale, color);
+                    continue;
+                }
                 char c = get_random_matrix_char();
                 GlyphCacheEntry* glyph = get_glyph_cache(c);
-                if (glyph->w > 0 && glyph->h > 0) {
-                    int baseline_y = screen_y + (int)(font_ascent * font_scale) + glyph->y0;
-                    for (int gy = 0; gy < glyph->h; gy++) {
-                        int py = baseline_y + gy;
-                        if (py < 0 || py >= height) continue;
-                        for (int gx = 0; gx < glyph->w; gx++) {
-                            int px = screen_x + gx;
-                            if (px < 0 || px >= width) continue;
-                            unsigned char alpha = glyph->bitmap[gy * glyph->w + gx];
-                            if (alpha > 0) {
-                                long idx = ((long)py * width) + px;
-                                bbufpix[idx] = color;
-                            }
+                if (glyph->w <= 0 || glyph->h <= 0) {
+                    draw_fallback_block(screen_x, screen_y, char_scale, char_scale, color);
+                    continue;
+                }
+                int baseline_y = screen_y + (int)(font_ascent * font_scale) + glyph->y0;
+                for (int gy = 0; gy < glyph->h; gy++) {
+                    int py = baseline_y + gy;
+                    if (py < 0 || py >= height) continue;
+                    for (int gx = 0; gx < glyph->w; gx++) {
+                        int px = screen_x + glyph->x0 + gx;
+                        if (px < 0 || px >= width) continue;
+                        unsigned char alpha = glyph->bitmap[gy * glyph->w + gx];
+                        if (alpha > 0) {
+                            long idx = ((long)py * width) + px;
+                            bbufpix[idx] = color;
                         }
                     }
                 }
@@ -302,21 +335,27 @@ void render_colon_with_chars(int x, int y, int char_scale, uint32_t color) {
             if (COLON_PATTERN[row * DIGIT_WIDTH + col] == '#') {
                 int screen_x = x + col * char_scale;
                 int screen_y = y + row * char_scale;
+                if (!is_font_loaded) {
+                    draw_fallback_block(screen_x, screen_y, char_scale, char_scale, color);
+                    continue;
+                }
                 char c = get_random_matrix_char();
                 GlyphCacheEntry* glyph = get_glyph_cache(c);
-                if (glyph->w > 0 && glyph->h > 0) {
-                    int baseline_y = screen_y + (int)(font_ascent * font_scale) + glyph->y0;
-                    for (int gy = 0; gy < glyph->h; gy++) {
-                        int py = baseline_y + gy;
-                        if (py < 0 || py >= height) continue;
-                        for (int gx = 0; gx < glyph->w; gx++) {
-                            int px = screen_x + gx;
-                            if (px < 0 || px >= width) continue;
-                            unsigned char alpha = glyph->bitmap[gy * glyph->w + gx];
-                            if (alpha > 0) {
-                                long idx = ((long)py * width) + px;
-                                bbufpix[idx] = color;
-                            }
+                if (glyph->w <= 0 || glyph->h <= 0) {
+                    draw_fallback_block(screen_x, screen_y, char_scale, char_scale, color);
+                    continue;
+                }
+                int baseline_y = screen_y + (int)(font_ascent * font_scale) + glyph->y0;
+                for (int gy = 0; gy < glyph->h; gy++) {
+                    int py = baseline_y + gy;
+                    if (py < 0 || py >= height) continue;
+                    for (int gx = 0; gx < glyph->w; gx++) {
+                        int px = screen_x + glyph->x0 + gx;
+                        if (px < 0 || px >= width) continue;
+                        unsigned char alpha = glyph->bitmap[gy * glyph->w + gx];
+                        if (alpha > 0) {
+                            long idx = ((long)py * width) + px;
+                            bbufpix[idx] = color;
                         }
                     }
                 }
@@ -426,26 +465,29 @@ void setup_context() {
         exit(0);
     }
 
-    width = WIDTH;
-    height = HEIGHT;
-
     window = SDL_CreateWindow("Matrix Rain", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN);
     if (!window) exit(0);
+
+    SDL_GetWindowSize(window, &width, &height);
+    if (width <= 0 || height <= 0) {
+        width = WIDTH;
+        height = HEIGHT;
+    }
 
     ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     if (!ren) exit(0);
 
-    tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+    tex = SDL_CreateTexture(ren, PIX_FORMAT, SDL_TEXTUREACCESS_STREAMING, width, height);
     if (!tex) exit(0);
 
     pgl_set_max_vertices(PGL_SMALL_MAX_VERTICES);
-    if (!init_glContext(&the_Context, &bbufpix, WIDTH, HEIGHT)) {
+    if (!init_glContext(&the_Context, &bbufpix, width, height)) {
         puts("Failed to initialize glContext");
         exit(0);
     }
 
-    buf_width = WIDTH;
-    buf_height = HEIGHT;
+    buf_width = width;
+    buf_height = height;
 }
 
 void cleanup() {
@@ -459,8 +501,8 @@ void cleanup() {
 
 int handle_events();
 
-int load_font() {
-    FILE* f = fopen(FONT_PATH, "rb");
+static int load_font_from_path(const char* path) {
+    FILE* f = fopen(path, "rb");
     if (!f) return 0;
 
     fseek(f, 0, SEEK_END);
@@ -478,10 +520,24 @@ int load_font() {
         return 0;
     }
 
-    fread(font_buffer, 1, fsize, f);
+    size_t total_read = 0;
+    while (total_read < (size_t)fsize) {
+        size_t nread = fread(font_buffer + total_read, 1, (size_t)fsize - total_read, f);
+        if (nread == 0) {
+            break;
+        }
+        total_read += nread;
+    }
     fclose(f);
 
-    if (!stbtt_InitFont(&font, font_buffer, 0)) {
+    if (total_read != (size_t)fsize) {
+        free(font_buffer);
+        font_buffer = NULL;
+        return 0;
+    }
+
+    int font_offset = stbtt_GetFontOffsetForIndex(font_buffer, 0);
+    if (font_offset < 0 || !stbtt_InitFont(&font, font_buffer, font_offset)) {
         free(font_buffer);
         font_buffer = NULL;
         return 0;
@@ -489,8 +545,30 @@ int load_font() {
 
     stbtt_GetFontVMetrics(&font, &font_ascent, &font_descent, &font_linegap);
     font_scale = stbtt_ScaleForPixelHeight(&font, FONT_SIZE);
+    if (font_ascent <= font_descent || font_scale <= 0.0f || font_scale > 1000.0f) {
+        free(font_buffer);
+        font_buffer = NULL;
+        return 0;
+    }
     is_font_loaded = 1;
     return 1;
+}
+
+int load_font() {
+    static const char* font_paths[] = {
+        FONT_PATH,
+        "/usr/system/fonts/system.ttf",
+        "/usr/system/fonts/DejaVuSansMono.ttf",
+        "/usr/system/fonts/UbuntuMono-Regular.ttf",
+    };
+
+    for (size_t i = 0; i < sizeof(font_paths) / sizeof(font_paths[0]); ++i) {
+        if (load_font_from_path(font_paths[i])) {
+            return 1;
+        }
+    }
+    klog("matrix: failed to load any font, rendering will stay blank\n");
+    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -557,11 +635,6 @@ int main(int argc, char** argv) {
 
                     char c = col.chars[j];
 
-                    GlyphCacheEntry* glyph = get_glyph_cache(c);
-                    if (glyph->w <= 0 || glyph->h <= 0) continue;
-
-                    int baseline_y = char_y + (int)(font_ascent * font_scale) + glyph->y0;
-
                     float brightness = 1.0f - (float)j / col.length;
                     uint32_t color;
                     if (j == 0) {
@@ -572,12 +645,20 @@ int main(int argc, char** argv) {
                         color = 0xFF000000 | ((uint32_t)r_val << 16) | ((uint32_t)g_val << 8);
                     }
 
+                    GlyphCacheEntry* glyph = get_glyph_cache(c);
+                    if (glyph->w <= 0 || glyph->h <= 0) {
+                        draw_fallback_block(col_x, char_y, FONT_SIZE, FONT_SIZE, color);
+                        continue;
+                    }
+
+                    int baseline_y = char_y + (int)(font_ascent * font_scale) + glyph->y0;
+
                     for (int row = 0; row < glyph->h; row++) {
                         int py = baseline_y + row;
                         if (py < 0 || py >= height) continue;
 
                         for (int col_idx = 0; col_idx < glyph->w; col_idx++) {
-                            int px = col_x + col_idx;
+                            int px = col_x + glyph->x0 + col_idx;
                             if (px < 0 || px >= width) continue;
 
                             unsigned char alpha = glyph->bitmap[row * glyph->w + col_idx];
