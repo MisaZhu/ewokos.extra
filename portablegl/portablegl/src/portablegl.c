@@ -5717,8 +5717,14 @@ static void draw_triangle_final(glVertex* v0, glVertex* v1, glVertex* v2, unsign
 {
 	int front_facing;
 	// Use batch vertex transformation to reduce function call overhead and improve cache locality
+#if PGL_NEON_ENABLED
 	pgl_neon_transform_3vertices(&v0->screen_space, &v1->screen_space, &v2->screen_space,
 	                              c->vp_mat, v0->clip_space, v1->clip_space, v2->clip_space);
+#else
+	v0->screen_space = mult_m4_v4(c->vp_mat, v0->clip_space);
+	v1->screen_space = mult_m4_v4(c->vp_mat, v1->clip_space);
+	v2->screen_space = mult_m4_v4(c->vp_mat, v2->clip_space);
+#endif
 
 	front_facing = is_front_facing(v0, v1, v2);
 	if (c->cull_face) {
