@@ -558,6 +558,15 @@ SDL_GetCPUFeatures(void)
         if (CPU_haveAVX()) {
             SDL_CPUFeatures |= CPU_HAS_AVX;
         }
+#if defined(SDL_VIDEO_DRIVER_EWOKOS) && defined(__x86_64__)
+        /*
+         * EwokOS/x86_64 currently lacks full user-space SIMD context handling.
+         * Advertising SSE/AVX makes SDL select vectorized fill/blit paths that
+         * can trap with #GP after scheduling or on secondary cores.
+         */
+        SDL_CPUFeatures &= ~(CPU_HAS_SSE | CPU_HAS_SSE2 | CPU_HAS_SSE3 |
+                             CPU_HAS_SSE41 | CPU_HAS_SSE42 | CPU_HAS_AVX);
+#endif
     }
     return SDL_CPUFeatures;
 }
