@@ -198,7 +198,8 @@ SW_WindowEvent(SDL_Renderer * renderer, const SDL_WindowEvent *event)
 {
     SW_RenderData *data = (SW_RenderData *) renderer->driverdata;
 
-    if (event->event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+    if (event->event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+        event->event == SDL_WINDOWEVENT_RESIZED) {
         data->surface = NULL;
         data->window = NULL;
     }
@@ -242,9 +243,15 @@ SW_CreateTexture(SDL_Renderer * renderer, SDL_Texture * texture)
     SDL_SetSurfaceAlphaMod(texture->driverdata, texture->a);
     SDL_SetSurfaceBlendMode(texture->driverdata, texture->blendMode);
 
+    /* On EwokOS/x86 the software RLE texture path has been observed to fault
+       inside SDL_RLEAlphaBlit() when rendering text-generated surfaces.
+       Keep static textures in plain surface form so RenderCopy stays on the
+       stable non-RLE blit path. */
+#ifndef __EWOKOS__
     if (texture->access == SDL_TEXTUREACCESS_STATIC) {
         SDL_SetSurfaceRLE(texture->driverdata, 1);
     }
+#endif
 
     if (!texture->driverdata) {
         return -1;
