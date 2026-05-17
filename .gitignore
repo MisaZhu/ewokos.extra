@@ -9,3 +9,5 @@
 build
 .xmake
 *.a
+*.log
+*.d
