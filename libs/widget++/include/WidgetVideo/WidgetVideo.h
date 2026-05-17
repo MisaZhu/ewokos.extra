@@ -24,6 +24,8 @@ class WidgetVideo : public Widget {
 	bool stopRequested;
 	bool threadRunning;
 	bool eof;
+	bool seekPending;
+	uint32_t seekTargetMs;
 	uint32_t currentMs;
 	uint32_t totalMs;
 
@@ -53,6 +55,8 @@ public:
 	bool isEOF();
 	uint32_t getCurrentMs();
 	uint32_t getTotalMs();
+	void seekToMs(uint32_t ms);
+	void seekToProgress(float progress);
 
 	gsize_t getMinSize(void);
 
@@ -60,6 +64,7 @@ public:
 	bool isPausedState(void);
 	bool isMutedState(void);
 	bool isLoopState(void);
+	bool hasPendingSeek(void);
 	void setPlaybackState(bool playing, bool paused, bool eof);
 
 private:
@@ -69,6 +74,7 @@ private:
 	void stopDecodeThread();
 	void updateStatus(const string& text);
 	string resolveSourceFile(void);
+	bool takeSeekRequest(uint32_t* targetMs);
 };
 
 }

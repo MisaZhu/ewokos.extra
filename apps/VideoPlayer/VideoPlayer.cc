@@ -16,8 +16,13 @@ using namespace Ewok;
 
 class ProgressBar : public Widget {
 public:
+	typedef void (*SeekCallback)(void* userData, float progress);
+
 	ProgressBar() {
 		progress = 0.0f;
+		seekCb = NULL;
+		seekUserData = NULL;
+		dragging = false;
 	}
 
 	void setProgress(float p) {
@@ -29,8 +34,20 @@ public:
 		update();
 	}
 
+	void setSeekCallback(SeekCallback cb, void* ud) {
+		seekCb = cb;
+		seekUserData = ud;
+	}
+
+	bool isDragging(void) const {
+		return dragging;
+	}
+
 protected:
 	float progress;
+	SeekCallback seekCb;
+	void* seekUserData;
+	bool dragging;
 
 	void onRepaint(graph_t* g, XTheme* theme, const grect_t& rect) {
 		int fillWidth;
@@ -46,6 +63,53 @@ protected:
 		graph_line(g, rect.x + rect.w - 1, rect.y, rect.x + rect.w - 1, rect.y + rect.h - 1, 0xFF555566);
 		graph_line(g, rect.x + rect.w - 1, rect.y + rect.h - 1, rect.x, rect.y + rect.h - 1, 0xFF555566);
 		graph_line(g, rect.x, rect.y + rect.h - 1, rect.x, rect.y, 0xFF555566);
+	}
+
+	bool onMouse(xevent_t* ev) {
+		grect_t r = area;
+		int mx;
+
+		if(ev->type != XEVT_MOUSE)
+			return false;
+
+		gpos_t pos = getInsidePos(ev->value.mouse.x, ev->value.mouse.y);
+
+		mx = pos.x;
+		if(mx < 0 || mx >= r.w)
+			return false;
+
+		if(ev->state == MOUSE_STATE_DOWN) {
+			dragging = true;
+			updateProgressFromMouse(mx, r);
+			return true;
+		}
+		else if(ev->state == MOUSE_STATE_DRAG) {
+			if(dragging) {
+				updateProgressFromMouse(mx, r);
+				return true;
+			}
+		}
+		else if(ev->state == MOUSE_STATE_UP) {
+			if(dragging) {
+				dragging = false;
+				updateProgressFromMouse(mx, r);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void updateProgressFromMouse(int mx, const grect_t& r) {
+		float newProgress = (float)(mx - r.x) / (float)r.w;
+
+		if(newProgress < 0.0f)
+			newProgress = 0.0f;
+		if(newProgress > 1.0f)
+			newProgress = 1.0f;
+		progress = newProgress;
+		update();
+		if(seekCb != NULL)
+			seekCb(seekUserData, progress);
 	}
 };
 
@@ -94,6 +158,13 @@ public:
 
 	void setProgressBar(ProgressBar* bar) {
 		progressBar = bar;
+	}
+
+	void seekToProgress(float progress) {
+		if(video == NULL)
+			return;
+		video->seekToProgress(progress);
+		updateUi();
 	}
 
 	void setMuteBtn(LabelButton* btn) {
@@ -170,9 +241,9 @@ public:
 		tot = video->getTotalMs();
 
 		if(progressBar != NULL) {
-			if(tot > 0)
+			if(!progressBar->isDragging() && tot > 0)
 				progressBar->setProgress((float)cur / (float)tot);
-			else
+			else if(!progressBar->isDragging())
 				progressBar->setProgress(0.0f);
 		}
 
@@ -225,6 +296,10 @@ static void onLoopClick(Widget* wd, xevent_t* evt, void* arg) {
 	((VideoPlayerWin*)arg)->toggleLoop();
 }
 
+static void onSeekProgress(void* userData, float progress) {
+	((VideoPlayerWin*)userData)->seekToProgress(progress);
+}
+
 int main(int argc, char** argv) {
 	X x;
 	VideoPlayerWin win;
@@ -245,7 +320,8 @@ int main(int argc, char** argv) {
 	win.setVideo(video);
 
 	ProgressBar* progressBar = new ProgressBar();
-	progressBar->fix(0, 8);
+	progressBar->fix(0, 16);
+	progressBar->setSeekCallback(onSeekProgress, &win);
 	root->add(progressBar);
 	win.setProgressBar(progressBar);
 

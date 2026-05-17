@@ -602,6 +602,25 @@ static uint32_t video_clock_now_ms(widget_video_clock_t* clock) {
 	return (uint32_t)cur;
 }
 
+static int widget_video_seek(AVFormatContext* fmt_ctx, int video_stream_idx,
+		AVStream* video_stream, uint32_t target_ms) {
+	AVRational ms_base;
+	int64_t ts;
+	int err;
+
+	ms_base.num = 1;
+	ms_base.den = 1000;
+	if(video_stream != NULL) {
+		ts = av_rescale_q((int64_t)target_ms, ms_base, video_stream->time_base);
+		err = av_seek_frame(fmt_ctx, video_stream_idx, ts, AVSEEK_FLAG_BACKWARD);
+		if(err >= 0)
+			return 0;
+	}
+
+	ts = (int64_t)target_ms * 1000LL;
+	return av_seek_frame(fmt_ctx, -1, ts, AVSEEK_FLAG_BACKWARD);
+}
+
 static int widget_video_get_present_lead_ms(WidgetVideo* video) {
 	int lead = VIDEO_PRESENT_LEAD_MIN_MS;
 	int loop_ms = VIDEO_PRESENT_LEAD_MIN_MS;
@@ -709,7 +728,7 @@ static void wait_if_paused(WidgetVideo* video, widget_video_clock_t* clock) {
 		return;
 
 	begin = now_ms();
-	while(video->isPausedState() && !video->isStopRequested())
+	while(video->isPausedState() && !video->isStopRequested() && !video->hasPendingSeek())
 		proc_usleep(10000);
 	delta = now_ms() - begin;
 	if(clock->started)
@@ -789,6 +808,8 @@ WidgetVideo::WidgetVideo(const string& file) {
 	frameGraph = NULL;
 	sourceFile = file;
 	statusText = "Idle";
+	seekPending = false;
+	seekTargetMs = 0;
 	currentMs = 0;
 	totalMs = 0;
 
@@ -929,6 +950,14 @@ bool WidgetVideo::isLoopState(void) {
 	return ret;
 }
 
+bool WidgetVideo::hasPendingSeek(void) {
+	bool ret;
+	pthread_mutex_lock(&stateMutex);
+	ret = seekPending;
+	pthread_mutex_unlock(&stateMutex);
+	return ret;
+}
+
 bool WidgetVideo::isPlaying() {
 	bool ret;
 	pthread_mutex_lock(&stateMutex);
@@ -967,6 +996,45 @@ uint32_t WidgetVideo::getTotalMs() {
 	ret = totalMs;
 	pthread_mutex_unlock(&stateMutex);
 	return ret;
+}
+
+void WidgetVideo::seekToMs(uint32_t ms) {
+	pthread_mutex_lock(&stateMutex);
+	if(totalMs > 0 && ms > totalMs)
+		ms = totalMs;
+	seekPending = true;
+	seekTargetMs = ms;
+	currentMs = ms;
+	eof = false;
+	pthread_mutex_unlock(&stateMutex);
+	update();
+}
+
+void WidgetVideo::seekToProgress(float progress) {
+	uint32_t total = getTotalMs();
+	if(progress < 0.0f)
+		progress = 0.0f;
+	if(progress > 1.0f)
+		progress = 1.0f;
+	if(total == 0)
+		return;
+	seekToMs((uint32_t)((float)total * progress));
+}
+
+bool WidgetVideo::takeSeekRequest(uint32_t* target_ms) {
+	bool pending = false;
+
+	pthread_mutex_lock(&stateMutex);
+	if(seekPending) {
+		*target_ms = seekTargetMs;
+		seekPending = false;
+		eof = false;
+		currentMs = seekTargetMs;
+		statusText = "";
+		pending = true;
+	}
+	pthread_mutex_unlock(&stateMutex);
+	return pending;
 }
 
 bool WidgetVideo::isReady() {
@@ -1079,6 +1147,9 @@ void* WidgetVideo::decodeThreadEntry(void* p) {
 void WidgetVideo::decodeLoop() {
 	string file;
 	bool keep_looping = false;
+	bool restart_for_seek = false;
+	bool apply_seek = false;
+	uint32_t pending_seek_ms = 0;
 
 	av_log_set_level(AV_LOG_ERROR);
 	file = resolveSourceFile();
@@ -1106,6 +1177,8 @@ void WidgetVideo::decodeLoop() {
 		int delay_ms;
 		int err = 0;
 
+		restart_for_seek = false;
+
 		memset(&audio, 0, sizeof(audio));
 		memset(&video_clock, 0, sizeof(video_clock));
 
@@ -1132,9 +1205,17 @@ void WidgetVideo::decodeLoop() {
 		if(audio_stream_idx >= 0)
 			audio_stream = fmt_ctx->streams[audio_stream_idx];
 
+		if(apply_seek) {
+			err = widget_video_seek(fmt_ctx, video_stream_idx, video_stream, pending_seek_ms);
+			if(err < 0) {
+				updateStatus("Seek failed: " + ffmpeg_error_string(err));
+				goto play_once_done;
+			}
+		}
+
 		pthread_mutex_lock(&stateMutex);
 		totalMs = stream_duration_ms(fmt_ctx, video_stream, audio_stream);
-		currentMs = 0;
+		currentMs = apply_seek ? pending_seek_ms : 0;
 		pthread_mutex_unlock(&stateMutex);
 
 		err = open_decoder(fmt_ctx, video_stream_idx, &video_codec_ctx);
@@ -1170,6 +1251,12 @@ void WidgetVideo::decodeLoop() {
 		updateStatus("");
 
 		while(!isStopRequested()) {
+			if(takeSeekRequest(&pending_seek_ms)) {
+				restart_for_seek = true;
+				apply_seek = true;
+				break;
+			}
+
 			err = av_read_frame(fmt_ctx, packet);
 			if(err < 0)
 				break;
@@ -1311,11 +1398,15 @@ play_once_done:
 		avcodec_free_context(&video_codec_ctx);
 		avformat_close_input(&fmt_ctx);
 
-		keep_looping = (!isStopRequested() && isLoopState() && isEOF());
+		keep_looping = (!isStopRequested() && restart_for_seek);
+		if(!keep_looping)
+			keep_looping = (!isStopRequested() && isLoopState() && isEOF());
 		if(keep_looping) {
 			setPlaybackState(true, false, false);
-			updateStatus("Loading...");
+			updateStatus(restart_for_seek ? "" : "Loading...");
 		}
+		else
+			apply_seek = false;
 	} while(keep_looping);
 
 out:
