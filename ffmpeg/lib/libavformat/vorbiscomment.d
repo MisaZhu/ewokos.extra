@@ -1,0 +1,23 @@
+libavformat/vorbiscomment.o: libavformat/vorbiscomment.c \
+ ../../../system/build/virt/include/string.h \
+ ../../../system/build/virt/include/math.h libavformat/avio.h \
+ ../../../system/build/virt/include/stdio.h libavutil/attributes.h \
+ libavutil/dict.h libavutil/log.h libavutil/attributes.h \
+ libavutil/version.h libavutil/macros.h libavutil/avconfig.h \
+ libavformat/version_major.h libavformat/avformat.h \
+ libavcodec/codec_par.h libavutil/avutil.h libavutil/common.h \
+ ../../../system/build/virt/include/errno.h \
+ ../../../system/build/virt/include/sys/errno.h \
+ ../../../system/build/virt/include/inttypes.h \
+ ../../../system/build/virt/include/math.h \
+ ../../../system/build/virt/include/stdlib.h \
+ ../../../system/build/virt/include/string.h libavutil/error.h config.h \
+ libavutil/intmath.h libavutil/mem.h libavutil/internal.h \
+ ../../../system/build/virt/include/assert.h libavutil/pixfmt.h \
+ libavutil/libm.h libavutil/intfloat.h libavutil/mathematics.h \
+ libavutil/rational.h libavutil/log.h libavutil/channel_layout.h \
+ libavutil/rational.h libavutil/pixfmt.h libavcodec/codec_id.h \
+ libavutil/samplefmt.h libavcodec/version_major.h libavcodec/defs.h \
+ libavcodec/packet.h libavutil/buffer.h libavutil/version.h \
+ libavcodec/version_major.h libavcodec/defs.h libavcodec/packet.h \
+ libavformat/metadata.h libavformat/vorbiscomment.h

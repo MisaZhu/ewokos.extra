@@ -1,0 +1,14 @@
+prefix=../../../system/build/virt
+exec_prefix=${prefix}
+libdir=../../../system/build/virt/lib
+includedir=../../../system/build/virt/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 58.29.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil -lm
+Libs.private: 
+Cflags: -I${includedir}
