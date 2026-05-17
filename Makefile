@@ -1,10 +1,10 @@
 
 all: 
 	mkdir -p build
-	cd libs; make
 	cd SDL2; make
 	cd ffmpeg; make
 	cd portablegl; make
+	cd libs; make
 	cd apps; make
 	cd x; make
 	cd bin; make

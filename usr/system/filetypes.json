@@ -19,5 +19,5 @@
     {"ext":".wav", "open_with": "/apps/SndPlayer/SndPlayer", "icon": "icons/wav.png" },
     {"ext":".ogg", "open_with": "/apps/SndPlayer/SndPlayer", "icon": "icons/ogg.png" },
     {"ext":".html", "open_with": "/apps/xBrowser/xBrowser", "icon": "icons/html.png" },
-    {"ext":".mp4", "open_with": "/bin/x/mp4player", "icon": "icons/video.png" }
+    {"ext":".mp4", "open_with": "/apps/VideoPlayer/VideoPlayer", "icon": "icons/video.png" }
 ]

@@ -262,7 +262,7 @@ protected:
         return false;
     }
 
-    void onTimer(uint32_t timerFPS, uint32_t timerStep) {
+    void onTimer(uint32_t timerFPS, uint32_t timerSteps) {
         // 如果当前年份是1970，每隔200毫秒重新获取当前日期
         if (currentYear == 1970) {
             time_t now = time(NULL);
