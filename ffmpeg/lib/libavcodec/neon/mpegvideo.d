@@ -1,19 +1,19 @@
 libavcodec/neon/mpegvideo.o: libavcodec/neon/mpegvideo.c \
- ../../../system/build/virt/include/string.h \
- ../../../system/build/virt/include/math.h config.h \
+ ../../../system/build/raspix/include/string.h \
+ ../../../system/build/raspix/include/math.h config.h \
  libavutil/attributes.h libavutil/cpu.h libavutil/aarch64/cpu.h \
  libavutil/cpu_internal.h libavutil/cpu.h libavcodec/mpegvideo.h \
  libavcodec/avcodec.h libavutil/samplefmt.h libavutil/avutil.h \
- libavutil/common.h ../../../system/build/virt/include/errno.h \
- ../../../system/build/virt/include/sys/errno.h \
- ../../../system/build/virt/include/inttypes.h \
- ../../../system/build/virt/include/math.h \
- ../../../system/build/virt/include/stdio.h \
- ../../../system/build/virt/include/stdlib.h \
- ../../../system/build/virt/include/string.h libavutil/attributes.h \
+ libavutil/common.h ../../../system/build/raspix/include/errno.h \
+ ../../../system/build/raspix/include/sys/errno.h \
+ ../../../system/build/raspix/include/inttypes.h \
+ ../../../system/build/raspix/include/math.h \
+ ../../../system/build/raspix/include/stdio.h \
+ ../../../system/build/raspix/include/stdlib.h \
+ ../../../system/build/raspix/include/string.h libavutil/attributes.h \
  libavutil/error.h libavutil/macros.h libavutil/avconfig.h \
  libavutil/intmath.h libavutil/mem.h libavutil/internal.h \
- ../../../system/build/virt/include/assert.h libavutil/pixfmt.h \
+ ../../../system/build/raspix/include/assert.h libavutil/pixfmt.h \
  libavutil/version.h libavutil/libm.h libavutil/intfloat.h \
  libavutil/mathematics.h libavutil/rational.h libavutil/log.h \
  libavutil/buffer.h libavutil/channel_layout.h libavutil/dict.h \
