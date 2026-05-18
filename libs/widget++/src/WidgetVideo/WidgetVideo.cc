@@ -394,6 +394,7 @@ static void* audio_output_thread_entry(void* p) {
 			if(pcm_write(audio->pcm, tmp, chunk) != 0) {
 				pthread_mutex_lock(&audio->queue_mutex);
 				audio->queue_stop = true;
+				audio->queue_size = 0;
 				pthread_mutex_unlock(&audio->queue_mutex);
 				break;
 			}
@@ -489,6 +490,12 @@ static void cleanup_audio_playback(widget_video_audio_t* audio) {
 	av_free(audio->convert_buf);
 	av_channel_layout_uninit(&audio->out_layout);
 	memset(audio, 0, sizeof(*audio));
+}
+
+static void disable_audio_playback(widget_video_audio_t* audio, AVCodecContext** codec_ctx) {
+	cleanup_audio_playback(audio);
+	if(codec_ctx != NULL)
+		avcodec_free_context(codec_ctx);
 }
 
 static int queue_audio_frame(widget_video_audio_t* audio, AVFrame* frame) {
@@ -1171,6 +1178,7 @@ void WidgetVideo::decodeLoop() {
 		AVStream* audio_stream = NULL;
 		widget_video_audio_t audio;
 		widget_video_clock_t video_clock;
+		string audio_status;
 		uint32_t present_serial;
 		int video_stream_idx;
 		int audio_stream_idx;
@@ -1227,14 +1235,15 @@ void WidgetVideo::decodeLoop() {
 		if(audio_stream != NULL && !isMutedState()) {
 			err = open_decoder(fmt_ctx, audio_stream_idx, &audio_codec_ctx);
 			if(err < 0) {
-				updateStatus("Open audio failed: " + ffmpeg_error_string(err));
-				goto play_once_done;
+				audio_status = "Audio disabled: open audio stream failed: " + ffmpeg_error_string(err);
 			}
 
-			err = init_audio_playback(&audio, audio_codec_ctx);
-			if(err < 0) {
-				updateStatus("Init audio failed: " + ffmpeg_error_string(err));
-				goto play_once_done;
+			if(audio_codec_ctx != NULL) {
+				err = init_audio_playback(&audio, audio_codec_ctx);
+				if(err < 0) {
+					audio_status = "Audio disabled: open sound device failed: " + ffmpeg_error_string(err);
+					disable_audio_playback(&audio, &audio_codec_ctx);
+				}
 			}
 		}
 
@@ -1249,6 +1258,8 @@ void WidgetVideo::decodeLoop() {
 
 		delay_ms = frame_delay_ms(video_stream);
 		updateStatus("");
+		if(!audio_status.empty())
+			updateStatus(audio_status);
 
 		while(!isStopRequested()) {
 			if(takeSeekRequest(&pending_seek_ms)) {
@@ -1370,8 +1381,10 @@ void WidgetVideo::decodeLoop() {
 					if(!isMutedState()) {
 						err = queue_audio_frame(&audio, audio_frame);
 						if(err < 0) {
-							updateStatus("Write audio failed");
-							goto play_once_done;
+							updateStatus("Audio disabled: write sound device failed");
+							disable_audio_playback(&audio, &audio_codec_ctx);
+							av_frame_unref(audio_frame);
+							break;
 						}
 					}
 					av_frame_unref(audio_frame);
