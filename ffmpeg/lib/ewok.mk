@@ -5,6 +5,15 @@ include $(FFMPEG_ROOT_DIR)/make.inc
 SYS_BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 PREFIX = $(SYS_BUILD_DIR)
 FFMPEG_MAKE = $(MAKE) -f Makefile
+CROSS_PREFIX = $(patsubst %gcc,%,$(CC))
+FFMPEG_ARCH = $(ARCH)
+FFMPEG_EXTRA_CFLAGS =
+
+ifeq ($(ARCH),arm)
+ifeq ($(ARCH_VER),v7)
+FFMPEG_EXTRA_CFLAGS += -march=armv7-a
+endif
+endif
 
 CONFIGURE_FLAGS = \
 	--prefix=$(PREFIX) \
@@ -12,14 +21,14 @@ CONFIGURE_FLAGS = \
 	--incdir=$(PREFIX)/include \
 	--pkgconfigdir=$(PREFIX)/lib/pkgconfig \
 	--enable-cross-compile \
-	--arch=aarch64 \
+	--arch=$(FFMPEG_ARCH) \
 	--target-os=linux \
-	--cross-prefix=aarch64-none-elf- \
+	--cross-prefix=$(CROSS_PREFIX) \
 	--cc=$(CC) \
 	--cxx=$(CXX) \
 	--ar=$(AR) \
-	--ranlib=aarch64-none-elf-ranlib \
-	--nm=aarch64-none-elf-nm \
+	--ranlib=$(CROSS_PREFIX)ranlib \
+	--nm=$(CROSS_PREFIX)nm \
 	--disable-programs \
 	--disable-doc \
 	--disable-debug \
@@ -55,7 +64,7 @@ CONFIGURE_FLAGS = \
 	--enable-parser=aac,aac_latm,flac,h264,hevc,mpegaudio,mpeg4video,opus,vorbis \
 	--enable-decoder=aac,flac,h264,hevc,mjpeg,mp3,mpeg2video,mpeg4,opus,pcm_f32le,pcm_s16be,pcm_s16le,pcm_u8,vorbis \
 	--enable-bsf=aac_adtstoasc \
-	--extra-cflags="$(CFLAGS) -I$(SYS_BUILD_DIR)/include -include $(SYS_BUILD_DIR)/include/string.h -include $(SYS_BUILD_DIR)/include/math.h" \
+	--extra-cflags="$(CFLAGS) $(FFMPEG_EXTRA_CFLAGS) -I$(SYS_BUILD_DIR)/include -include $(SYS_BUILD_DIR)/include/string.h -include $(SYS_BUILD_DIR)/include/math.h" \
 	--extra-ldflags="-nostartfiles -nostdlib -L$(SYS_BUILD_DIR)/lib -Wl,-Ttext=100" \
 	--extra-libs="-Wl,--start-group -lewoksys -lc -lgloss -lgcc -Wl,--end-group -lm -lopenlibm"
 

@@ -863,7 +863,7 @@ static int64_t read_string_to_bprint(AVIOContext *s, AVBPrint *bp,
                    c == '\0');
             if (!end)
                 tmp[len++] = c;
-        } while (!end && len < sizeof(tmp) &&
+        } while (!end && len < (int)sizeof(tmp) &&
                  ((max_len < 0) || (read + len < max_len)));
         av_bprint_append_data(bp, tmp, len);
         read += len;
@@ -1422,12 +1422,15 @@ static int dyn_buf_write(void *opaque, const uint8_t *buf, int buf_size)
     unsigned new_size;
 
     /* reallocate buffer if needed */
-    new_size = (unsigned)d->pos + buf_size;
-    if (new_size < d->pos || new_size > INT_MAX)
+    if (d->pos < 0 || buf_size < 0)
+        return AVERROR(EINVAL);
+    new_size = (unsigned)d->pos + (unsigned)buf_size;
+    if (new_size > INT_MAX)
         return AVERROR(ERANGE);
-    if (new_size > d->allocated_size) {
-        unsigned new_allocated_size = d->allocated_size ? d->allocated_size
-                                                        : new_size;
+    if (d->allocated_size < 0 || new_size > (unsigned)d->allocated_size) {
+        unsigned new_allocated_size = d->allocated_size > 0
+                                        ? (unsigned)d->allocated_size
+                                        : new_size;
         int err;
         while (new_size > new_allocated_size)
             new_allocated_size += new_allocated_size / 2 + 1;
