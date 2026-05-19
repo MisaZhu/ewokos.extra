@@ -42,6 +42,8 @@ static const int VIDEO_PRESENT_LEAD_MIN_MS = 4;
 static const int VIDEO_PRESENT_LEAD_MAX_MS = 40;
 static const size_t AUDIO_QUEUE_CAPACITY = 256 * 1024;
 static const size_t AUDIO_QUEUE_CHUNK = 8192;
+static const int AUDIO_WAIT_SLEEP_MS = 1;
+static const int AUDIO_QUEUE_WAIT_US = 1000;
 
 typedef struct {
 	WidgetVideo* owner;
@@ -170,24 +172,28 @@ static int pcm_buf_avail(widget_video_pcm_t* pcm) {
 }
 
 static int pcm_wait_avail(widget_video_pcm_t* pcm, int* avail, int timeout_ms) {
-	const int sleep_ms = 5;
 	const int period_bytes = pcm->config.period_size * pcm->frame_size;
-	const int max_try_count = timeout_ms / sleep_ms;
+	int min_avail = period_bytes / 4;
+	const int max_try_count = timeout_ms / AUDIO_WAIT_SLEEP_MS;
 	int try_count = 0;
 	int ret = 0;
+
+	if(min_avail < pcm->frame_size)
+		min_avail = pcm->frame_size;
 
 	*avail = 0;
 	for(;;) {
 		ret = pcm_buf_avail(pcm);
 		if(ret < 0)
 			return ret;
-		if(ret >= period_bytes) {
+		if(ret >= min_avail) {
 			*avail = ret;
 			return ret;
 		}
 		if(try_count++ >= max_try_count)
 			return ret;
-		proc_usleep(sleep_ms * 1000);
+		//proc_usleep(AUDIO_WAIT_SLEEP_MS * 1000);
+		proc_yield();
 	}
 }
 
@@ -355,7 +361,8 @@ static int audio_queue_write(widget_video_audio_t* audio, const uint8_t* data, s
 		if(stop)
 			return -1;
 		if(chunk == 0) {
-			proc_usleep(2000);
+			//proc_usleep(AUDIO_QUEUE_WAIT_US);
+			proc_yield();
 			continue;
 		}
 		offset += chunk;
@@ -403,7 +410,8 @@ static void* audio_output_thread_entry(void* p) {
 
 		if(stop)
 			break;
-		proc_usleep(2000);
+		//proc_usleep(AUDIO_QUEUE_WAIT_US);
+		proc_yield();
 	}
 
 	pthread_mutex_lock(&audio->queue_mutex);
