@@ -45,3 +45,5 @@ ffmpeg/lib/libswresample/libswresample.version
 ffmpeg/lib/libswscale/libswscale.pc
 ffmpeg/lib/libswscale/libswscale.version
 ffmpeg/lib/libavcodec/neon/mpegvideo.d
+ffmpeg/lib/doc/config.texi
+ffmpeg/lib/libavcodec/neon/mpegvideo.d
