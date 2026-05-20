@@ -7,6 +7,7 @@
 namespace Ewok {
 
 class WidgetVideo : public Widget {
+public:
 	string sourceFile;
 	string statusText;
 
@@ -67,7 +68,7 @@ public:
 	bool hasPendingSeek(void);
 	void setPlaybackState(bool playing, bool paused, bool eof);
 
-private:
+public:
 	static void* decodeThreadEntry(void* p);
 
 	void decodeLoop();

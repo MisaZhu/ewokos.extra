@@ -364,7 +364,7 @@ int main(int argc, char** argv) {
 	 * Widget repaint is timer-driven; use a higher timer so video present
 	 * granularity is closer to mp4player's direct render loop.
 	 */
-	win.setTimer(120);
+	win.setTimer(60);
 
 	if(argc >= 2)
 		win.loadVideo(argv[1]);

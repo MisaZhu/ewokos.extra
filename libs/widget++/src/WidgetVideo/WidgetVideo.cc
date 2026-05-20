@@ -4,6 +4,7 @@
 #include <x++/XTheme.h>
 
 #include <ewoksys/devcmd.h>
+#include <ewoksys/kernel_tic.h>
 #include <ewoksys/keydef.h>
 #include <ewoksys/proc.h>
 #include <ewoksys/proto.h>
@@ -26,7 +27,6 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <unistd.h>
 
 namespace Ewok {
@@ -110,10 +110,193 @@ typedef struct {
 	int64_t start_pts_ms;
 } widget_video_clock_t;
 
+typedef struct {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	AVPacket** packets;
+	int capacity;
+	int read_pos;
+	int write_pos;
+	int count;
+	bool eof;
+	bool abort;
+} widget_video_packet_queue_t;
+
+typedef struct {
+	WidgetVideo* owner;
+	widget_video_packet_queue_t video_queue;
+	widget_video_packet_queue_t audio_queue;
+	pthread_mutex_t state_mutex;
+	bool state_mutex_ready;
+	bool abort_requested;
+} widget_video_pipeline_t;
+
+typedef struct {
+	widget_video_pipeline_t* pipeline;
+	AVCodecContext* codec_ctx;
+	AVStream* stream;
+	widget_video_audio_t* audio;
+	widget_video_clock_t clock;
+	int delay_ms;
+	pthread_t thread;
+	bool thread_running;
+	int err;
+} widget_video_video_worker_t;
+
+typedef struct {
+	widget_video_pipeline_t* pipeline;
+	AVCodecContext* codec_ctx;
+	widget_video_audio_t* audio;
+	pthread_t thread;
+	bool thread_running;
+	int err;
+} widget_video_audio_worker_t;
+
 static int64_t now_ms(void) {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return ((int64_t)tv.tv_sec * 1000LL) + ((int64_t)tv.tv_usec / 1000LL);
+	uint64_t usec = 0;
+	kernel_tic(NULL, &usec);
+	return (int64_t)(usec / 1000ULL);
+}
+
+static int packet_queue_init(widget_video_packet_queue_t* queue, int capacity) {
+	memset(queue, 0, sizeof(*queue));
+	queue->packets = (AVPacket**)calloc((size_t)capacity, sizeof(AVPacket*));
+	if(queue->packets == NULL)
+		return AVERROR(ENOMEM);
+	queue->capacity = capacity;
+	pthread_mutex_init(&queue->mutex, NULL);
+	pthread_cond_init(&queue->cond, NULL);
+	return 0;
+}
+
+static void packet_queue_abort(widget_video_packet_queue_t* queue) {
+	pthread_mutex_lock(&queue->mutex);
+	queue->abort = true;
+	pthread_cond_broadcast(&queue->cond);
+	pthread_mutex_unlock(&queue->mutex);
+}
+
+static void packet_queue_set_eof(widget_video_packet_queue_t* queue) {
+	pthread_mutex_lock(&queue->mutex);
+	queue->eof = true;
+	pthread_cond_broadcast(&queue->cond);
+	pthread_mutex_unlock(&queue->mutex);
+}
+
+static void packet_queue_destroy(widget_video_packet_queue_t* queue) {
+	int i;
+
+	packet_queue_abort(queue);
+	pthread_mutex_lock(&queue->mutex);
+	for(i = 0; i < queue->count; ++i) {
+		int idx = (queue->read_pos + i) % queue->capacity;
+		av_packet_free(&queue->packets[idx]);
+	}
+	free(queue->packets);
+	queue->packets = NULL;
+	queue->count = 0;
+	pthread_mutex_unlock(&queue->mutex);
+	pthread_cond_destroy(&queue->cond);
+	pthread_mutex_destroy(&queue->mutex);
+}
+
+static int packet_queue_push_clone(widget_video_packet_queue_t* queue, const AVPacket* packet) {
+	AVPacket* clone = av_packet_clone(packet);
+	if(clone == NULL)
+		return AVERROR(ENOMEM);
+
+	pthread_mutex_lock(&queue->mutex);
+	while(!queue->abort && queue->count >= queue->capacity)
+		pthread_cond_wait(&queue->cond, &queue->mutex);
+	if(queue->abort) {
+		pthread_mutex_unlock(&queue->mutex);
+		av_packet_free(&clone);
+		return AVERROR_EXIT;
+	}
+	queue->packets[queue->write_pos] = clone;
+	queue->write_pos = (queue->write_pos + 1) % queue->capacity;
+	queue->count++;
+	pthread_cond_broadcast(&queue->cond);
+	pthread_mutex_unlock(&queue->mutex);
+	return 0;
+}
+
+static int packet_queue_pop(widget_video_packet_queue_t* queue, AVPacket** packet) {
+	*packet = NULL;
+
+	pthread_mutex_lock(&queue->mutex);
+	while(!queue->abort && queue->count == 0 && !queue->eof)
+		pthread_cond_wait(&queue->cond, &queue->mutex);
+	if(queue->abort) {
+		pthread_mutex_unlock(&queue->mutex);
+		return AVERROR_EXIT;
+	}
+	if(queue->count == 0) {
+		pthread_mutex_unlock(&queue->mutex);
+		return AVERROR_EOF;
+	}
+
+	*packet = queue->packets[queue->read_pos];
+	queue->packets[queue->read_pos] = NULL;
+	queue->read_pos = (queue->read_pos + 1) % queue->capacity;
+	queue->count--;
+	pthread_cond_broadcast(&queue->cond);
+	pthread_mutex_unlock(&queue->mutex);
+	return 0;
+}
+
+static int pipeline_init(widget_video_pipeline_t* pipeline, WidgetVideo* owner) {
+	int err;
+
+	memset(pipeline, 0, sizeof(*pipeline));
+	pipeline->owner = owner;
+	pthread_mutex_init(&pipeline->state_mutex, NULL);
+	pipeline->state_mutex_ready = true;
+
+	err = packet_queue_init(&pipeline->video_queue, 64);
+	if(err < 0)
+		return err;
+	err = packet_queue_init(&pipeline->audio_queue, 128);
+	if(err < 0) {
+		packet_queue_destroy(&pipeline->video_queue);
+		return err;
+	}
+	return 0;
+}
+
+static void pipeline_abort(widget_video_pipeline_t* pipeline) {
+	if(pipeline == NULL)
+		return;
+	if(pipeline->state_mutex_ready) {
+		pthread_mutex_lock(&pipeline->state_mutex);
+		pipeline->abort_requested = true;
+		pthread_mutex_unlock(&pipeline->state_mutex);
+	}
+	packet_queue_abort(&pipeline->video_queue);
+	packet_queue_abort(&pipeline->audio_queue);
+}
+
+static bool pipeline_is_aborted(widget_video_pipeline_t* pipeline) {
+	bool aborted = false;
+
+	if(pipeline == NULL || !pipeline->state_mutex_ready)
+		return false;
+	pthread_mutex_lock(&pipeline->state_mutex);
+	aborted = pipeline->abort_requested;
+	pthread_mutex_unlock(&pipeline->state_mutex);
+	return aborted;
+}
+
+static void pipeline_destroy(widget_video_pipeline_t* pipeline) {
+	if(pipeline == NULL)
+		return;
+	if(pipeline->video_queue.packets != NULL)
+		packet_queue_destroy(&pipeline->video_queue);
+	if(pipeline->audio_queue.packets != NULL)
+		packet_queue_destroy(&pipeline->audio_queue);
+	if(pipeline->state_mutex_ready)
+		pthread_mutex_destroy(&pipeline->state_mutex);
+	memset(pipeline, 0, sizeof(*pipeline));
 }
 
 static string ffmpeg_error_string(int err) {
@@ -746,7 +929,7 @@ static void wait_if_paused(WidgetVideo* video, widget_video_clock_t* clock) {
 	while(video->isPausedState() && !video->isStopRequested() && !video->hasPendingSeek())
 		proc_usleep(10000);
 	delta = now_ms() - begin;
-	if(clock->started)
+	if(clock != NULL && clock->started)
 		clock->start_ticks_ms += delta;
 }
 
@@ -815,6 +998,272 @@ static int frame_delay_ms(AVStream* stream) {
 			return (int)delay;
 	}
 	return 40;
+}
+
+static int video_worker_present_frame(widget_video_video_worker_t* worker,
+		struct SwsContext** sws_ctx, AVFrame* video_frame, AVFrame* rgba_frame) {
+	WidgetVideo* video = worker->pipeline->owner;
+	int err;
+	uint32_t present_serial;
+
+	err = ensure_scaler(sws_ctx, video_frame);
+	if(err < 0)
+		return err;
+
+	pthread_mutex_lock(&video->renderMutex);
+	if(video->frameGraph == NULL ||
+			video->frameGraph->w != video_frame->width ||
+			video->frameGraph->h != video_frame->height) {
+		if(video->frameGraph != NULL)
+			graph_free(video->frameGraph);
+		video->frameGraph = graph_new(NULL, video_frame->width, video_frame->height);
+	}
+	if(video->frameGraph == NULL) {
+		pthread_mutex_unlock(&video->renderMutex);
+		return AVERROR(ENOMEM);
+	}
+
+	err = av_image_fill_arrays(rgba_frame->data, rgba_frame->linesize,
+			(uint8_t*)video->frameGraph->buffer, AV_PIX_FMT_BGRA,
+			video->frameGraph->w, video->frameGraph->h, 1);
+	if(err >= 0) {
+		rgba_frame->width = video->frameGraph->w;
+		rgba_frame->height = video->frameGraph->h;
+		rgba_frame->format = AV_PIX_FMT_BGRA;
+		sws_scale(*sws_ctx, (const uint8_t* const*)video_frame->data, video_frame->linesize,
+				0, video_frame->height, rgba_frame->data, rgba_frame->linesize);
+	}
+	pthread_mutex_unlock(&video->renderMutex);
+	if(err < 0)
+		return err;
+
+	if(!sync_video_clock(video, &worker->clock, worker->audio,
+				frame_pts_ms(video_frame, worker->stream), worker->delay_ms)) {
+		if(video->isStopRequested())
+			return AVERROR_EXIT;
+		return 0;
+	}
+
+	present_serial = widget_video_queue_present(video);
+	widget_video_wait_present_done(video, present_serial, 100);
+
+	pthread_mutex_lock(&video->stateMutex);
+	{
+		int64_t current_pts_ms = frame_pts_ms(video_frame, worker->stream);
+		if(current_pts_ms < 0)
+			current_pts_ms = video_clock_now_ms(&worker->clock);
+		video->currentMs = (uint32_t)((current_pts_ms < 0) ? 0 : current_pts_ms);
+	}
+	pthread_mutex_unlock(&video->stateMutex);
+	return 0;
+}
+
+static int video_worker_drain_decoder(widget_video_video_worker_t* worker,
+		struct SwsContext** sws_ctx, AVFrame* video_frame, AVFrame* rgba_frame) {
+	WidgetVideo* video = worker->pipeline->owner;
+	int err = avcodec_send_packet(worker->codec_ctx, NULL);
+	if(err < 0 && err != AVERROR_EOF)
+		return err;
+
+	while(!video->isStopRequested()) {
+		err = avcodec_receive_frame(worker->codec_ctx, video_frame);
+		if(err == AVERROR(EAGAIN) || err == AVERROR_EOF)
+			return 0;
+		if(err < 0)
+			return err;
+		err = video_worker_present_frame(worker, sws_ctx, video_frame, rgba_frame);
+		av_frame_unref(video_frame);
+		if(err < 0)
+			return err;
+	}
+	return 0;
+}
+
+static void* video_decode_thread_entry(void* p) {
+	widget_video_video_worker_t* worker = (widget_video_video_worker_t*)p;
+	WidgetVideo* video = worker->pipeline->owner;
+	struct SwsContext* sws_ctx = NULL;
+	AVFrame* video_frame = av_frame_alloc();
+	AVFrame* rgba_frame = av_frame_alloc();
+	AVPacket* packet = NULL;
+
+	memset(&worker->clock, 0, sizeof(worker->clock));
+	if(video_frame == NULL || rgba_frame == NULL) {
+		worker->err = AVERROR(ENOMEM);
+		pipeline_abort(worker->pipeline);
+		goto out;
+	}
+
+	while(!video->isStopRequested() && !pipeline_is_aborted(worker->pipeline)) {
+		int err = packet_queue_pop(&worker->pipeline->video_queue, &packet);
+		if(err == AVERROR_EOF)
+			break;
+		if(err < 0) {
+			worker->err = err;
+			break;
+		}
+
+		wait_if_paused(video, &worker->clock);
+		if(video->isStopRequested()) {
+			av_packet_free(&packet);
+			break;
+		}
+
+		err = avcodec_send_packet(worker->codec_ctx, packet);
+		av_packet_free(&packet);
+		if(err < 0) {
+			worker->err = err;
+			video->updateStatus("Send video failed: " + ffmpeg_error_string(err));
+			pipeline_abort(worker->pipeline);
+			break;
+		}
+
+		while(!video->isStopRequested()) {
+			err = avcodec_receive_frame(worker->codec_ctx, video_frame);
+			if(err == AVERROR(EAGAIN) || err == AVERROR_EOF)
+				break;
+			if(err < 0) {
+				worker->err = err;
+				video->updateStatus("Receive video failed: " + ffmpeg_error_string(err));
+				pipeline_abort(worker->pipeline);
+				goto out;
+			}
+
+			err = video_worker_present_frame(worker, &sws_ctx, video_frame, rgba_frame);
+			av_frame_unref(video_frame);
+			if(err < 0) {
+				if(err != AVERROR_EXIT) {
+					worker->err = err;
+					video->updateStatus("Video present failed: " + ffmpeg_error_string(err));
+					pipeline_abort(worker->pipeline);
+				}
+				goto out;
+			}
+		}
+	}
+
+	if(!video->isStopRequested() && !pipeline_is_aborted(worker->pipeline)) {
+		worker->err = video_worker_drain_decoder(worker, &sws_ctx, video_frame, rgba_frame);
+		if(worker->err < 0 && worker->err != AVERROR_EXIT) {
+			video->updateStatus("Video drain failed: " + ffmpeg_error_string(worker->err));
+			pipeline_abort(worker->pipeline);
+		}
+	}
+
+out:
+	av_packet_free(&packet);
+	av_frame_free(&video_frame);
+	av_frame_free(&rgba_frame);
+	sws_freeContext(sws_ctx);
+	worker->thread_running = false;
+	return NULL;
+}
+
+static int audio_worker_drain_decoder(widget_video_audio_worker_t* worker, AVFrame* audio_frame) {
+	WidgetVideo* video = worker->pipeline->owner;
+	int err = avcodec_send_packet(worker->codec_ctx, NULL);
+	if(err < 0 && err != AVERROR_EOF)
+		return err;
+
+	while(!video->isStopRequested()) {
+		err = avcodec_receive_frame(worker->codec_ctx, audio_frame);
+		if(err == AVERROR(EAGAIN) || err == AVERROR_EOF)
+			return 0;
+		if(err < 0)
+			return err;
+		wait_if_paused(video, NULL);
+		if(video->isStopRequested())
+			return 0;
+		if(!video->isMutedState()) {
+			err = queue_audio_frame(worker->audio, audio_frame);
+			if(err < 0)
+				return err;
+		}
+		av_frame_unref(audio_frame);
+	}
+	return 0;
+}
+
+static void* audio_decode_thread_entry(void* p) {
+	widget_video_audio_worker_t* worker = (widget_video_audio_worker_t*)p;
+	WidgetVideo* video = worker->pipeline->owner;
+	AVFrame* audio_frame = av_frame_alloc();
+	AVPacket* packet = NULL;
+
+	if(audio_frame == NULL) {
+		worker->err = AVERROR(ENOMEM);
+		pipeline_abort(worker->pipeline);
+		goto out;
+	}
+
+	while(!video->isStopRequested() && !pipeline_is_aborted(worker->pipeline)) {
+		int err = packet_queue_pop(&worker->pipeline->audio_queue, &packet);
+		if(err == AVERROR_EOF)
+			break;
+		if(err < 0) {
+			worker->err = err;
+			break;
+		}
+
+		wait_if_paused(video, NULL);
+		if(video->isStopRequested()) {
+			av_packet_free(&packet);
+			break;
+		}
+
+		err = avcodec_send_packet(worker->codec_ctx, packet);
+		av_packet_free(&packet);
+		if(err < 0) {
+			worker->err = err;
+			video->updateStatus("Send audio failed: " + ffmpeg_error_string(err));
+			pipeline_abort(worker->pipeline);
+			break;
+		}
+
+		while(!video->isStopRequested()) {
+			err = avcodec_receive_frame(worker->codec_ctx, audio_frame);
+			if(err == AVERROR(EAGAIN) || err == AVERROR_EOF)
+				break;
+			if(err < 0) {
+				worker->err = err;
+				video->updateStatus("Receive audio failed: " + ffmpeg_error_string(err));
+				pipeline_abort(worker->pipeline);
+				goto out;
+			}
+
+			wait_if_paused(video, NULL);
+			if(video->isStopRequested()) {
+				av_frame_unref(audio_frame);
+				goto out;
+			}
+
+			if(!video->isMutedState()) {
+				err = queue_audio_frame(worker->audio, audio_frame);
+				if(err < 0) {
+					worker->err = err;
+					video->updateStatus("Audio disabled: write sound device failed");
+					pipeline_abort(worker->pipeline);
+					av_frame_unref(audio_frame);
+					goto out;
+				}
+			}
+			av_frame_unref(audio_frame);
+		}
+	}
+
+	if(!video->isStopRequested() && !pipeline_is_aborted(worker->pipeline)) {
+		worker->err = audio_worker_drain_decoder(worker, audio_frame);
+		if(worker->err < 0 && worker->err != AVERROR_EXIT) {
+			video->updateStatus("Audio drain failed: " + ffmpeg_error_string(worker->err));
+			pipeline_abort(worker->pipeline);
+		}
+	}
+
+out:
+	av_packet_free(&packet);
+	av_frame_free(&audio_frame);
+	worker->thread_running = false;
+	return NULL;
 }
 
 }
@@ -1177,17 +1626,14 @@ void WidgetVideo::decodeLoop() {
 		AVFormatContext* fmt_ctx = NULL;
 		AVCodecContext* video_codec_ctx = NULL;
 		AVCodecContext* audio_codec_ctx = NULL;
-		struct SwsContext* sws_ctx = NULL;
-		AVFrame* video_frame = NULL;
-		AVFrame* audio_frame = NULL;
-		AVFrame* rgba_frame = NULL;
 		AVPacket* packet = NULL;
 		AVStream* video_stream = NULL;
 		AVStream* audio_stream = NULL;
 		widget_video_audio_t audio;
-		widget_video_clock_t video_clock;
+		widget_video_pipeline_t pipeline;
+		widget_video_video_worker_t video_worker;
+		widget_video_audio_worker_t audio_worker;
 		string audio_status;
-		uint32_t present_serial;
 		int video_stream_idx;
 		int audio_stream_idx;
 		int delay_ms;
@@ -1196,7 +1642,9 @@ void WidgetVideo::decodeLoop() {
 		restart_for_seek = false;
 
 		memset(&audio, 0, sizeof(audio));
-		memset(&video_clock, 0, sizeof(video_clock));
+		memset(&pipeline, 0, sizeof(pipeline));
+		memset(&video_worker, 0, sizeof(video_worker));
+		memset(&audio_worker, 0, sizeof(audio_worker));
 
 		updateStatus("Loading...");
 		err = avformat_open_input(&fmt_ctx, file.c_str(), NULL, NULL);
@@ -1255,165 +1703,111 @@ void WidgetVideo::decodeLoop() {
 			}
 		}
 
-		video_frame = av_frame_alloc();
-		audio_frame = av_frame_alloc();
-		rgba_frame = av_frame_alloc();
-		packet = av_packet_alloc();
-		if(video_frame == NULL || audio_frame == NULL || rgba_frame == NULL || packet == NULL) {
-			updateStatus("ffmpeg alloc failed");
+		err = pipeline_init(&pipeline, this);
+		if(err < 0) {
+			updateStatus("Pipeline init failed: " + ffmpeg_error_string(err));
 			goto play_once_done;
 		}
 
 		delay_ms = frame_delay_ms(video_stream);
+		video_worker.pipeline = &pipeline;
+		video_worker.codec_ctx = video_codec_ctx;
+		video_worker.stream = video_stream;
+		video_worker.audio = &audio;
+		video_worker.delay_ms = delay_ms;
+		video_worker.thread_running = true;
+		err = pthread_create(&video_worker.thread, NULL, video_decode_thread_entry, &video_worker);
+		if(err != 0) {
+			video_worker.thread_running = false;
+			updateStatus("Create video thread failed");
+			goto play_once_done;
+		}
+
+		if(audio.enabled && audio_codec_ctx != NULL) {
+			audio_worker.pipeline = &pipeline;
+			audio_worker.codec_ctx = audio_codec_ctx;
+			audio_worker.audio = &audio;
+			audio_worker.thread_running = true;
+			err = pthread_create(&audio_worker.thread, NULL, audio_decode_thread_entry, &audio_worker);
+			if(err != 0) {
+				audio_worker.thread_running = false;
+				audio_status = "Audio disabled: create audio thread failed";
+				cleanup_audio_playback(&audio);
+				avcodec_free_context(&audio_codec_ctx);
+			}
+		}
+
+		packet = av_packet_alloc();
+		if(packet == NULL) {
+			updateStatus("ffmpeg alloc failed");
+			pipeline_abort(&pipeline);
+			goto play_once_done;
+		}
+
 		updateStatus("");
 		if(!audio_status.empty())
 			updateStatus(audio_status);
 
-		while(!isStopRequested()) {
+		while(!isStopRequested() && !pipeline_is_aborted(&pipeline)) {
 			if(takeSeekRequest(&pending_seek_ms)) {
 				restart_for_seek = true;
 				apply_seek = true;
+				pipeline_abort(&pipeline);
 				break;
 			}
 
-			err = av_read_frame(fmt_ctx, packet);
-			if(err < 0)
+			wait_if_paused(this, NULL);
+			if(isStopRequested())
 				break;
 
-			wait_if_paused(this, &video_clock);
-			if(isStopRequested()) {
-				av_packet_unref(packet);
+			err = av_read_frame(fmt_ctx, packet);
+			if(err < 0) {
+				packet_queue_set_eof(&pipeline.video_queue);
+				packet_queue_set_eof(&pipeline.audio_queue);
 				break;
 			}
 
 			if(packet->stream_index == video_stream_idx) {
-				err = avcodec_send_packet(video_codec_ctx, packet);
-				av_packet_unref(packet);
-				if(err < 0) {
-					updateStatus("Send video failed: " + ffmpeg_error_string(err));
-					goto play_once_done;
-				}
-
-				while(!isStopRequested()) {
-					err = avcodec_receive_frame(video_codec_ctx, video_frame);
-					if(err == AVERROR(EAGAIN) || err == AVERROR_EOF) {
-						err = 0;
-						break;
-					}
-					if(err < 0) {
-						updateStatus("Receive video failed: " + ffmpeg_error_string(err));
-						goto play_once_done;
-					}
-
-					err = ensure_scaler(&sws_ctx, video_frame);
-					if(err < 0) {
-						updateStatus("Scaler failed: " + ffmpeg_error_string(err));
-						goto play_once_done;
-					}
-
-					pthread_mutex_lock(&renderMutex);
-					if(frameGraph == NULL || frameGraph->w != video_frame->width || frameGraph->h != video_frame->height) {
-						if(frameGraph != NULL)
-							graph_free(frameGraph);
-						frameGraph = graph_new(NULL, video_frame->width, video_frame->height);
-					}
-					if(frameGraph == NULL) {
-						pthread_mutex_unlock(&renderMutex);
-						updateStatus("Frame alloc failed");
-						goto play_once_done;
-					}
-
-					err = av_image_fill_arrays(rgba_frame->data, rgba_frame->linesize,
-							(uint8_t*)frameGraph->buffer, AV_PIX_FMT_BGRA,
-							frameGraph->w, frameGraph->h, 1);
-					if(err >= 0) {
-						rgba_frame->width = frameGraph->w;
-						rgba_frame->height = frameGraph->h;
-						rgba_frame->format = AV_PIX_FMT_BGRA;
-						sws_scale(sws_ctx, (const uint8_t* const*)video_frame->data, video_frame->linesize,
-								0, video_frame->height, rgba_frame->data, rgba_frame->linesize);
-					}
-					pthread_mutex_unlock(&renderMutex);
-
-					if(err < 0) {
-						updateStatus("Fill frame failed: " + ffmpeg_error_string(err));
-						goto play_once_done;
-					}
-
-					if(!sync_video_clock(this, &video_clock, &audio,
-								frame_pts_ms(video_frame, video_stream), delay_ms)) {
-						av_frame_unref(video_frame);
-						if(isStopRequested())
-							goto play_once_done;
-						continue;
-					}
-
-					present_serial = widget_video_queue_present(this);
-					widget_video_wait_present_done(this, present_serial, 100);
-					pthread_mutex_lock(&stateMutex);
-					{
-						int64_t current_pts_ms = frame_pts_ms(video_frame, video_stream);
-						if(current_pts_ms < 0)
-							current_pts_ms = video_clock_now_ms(&video_clock);
-						currentMs = (uint32_t)((current_pts_ms < 0) ? 0 : current_pts_ms);
-					}
-					pthread_mutex_unlock(&stateMutex);
-					av_frame_unref(video_frame);
-				}
-				continue;
+				err = packet_queue_push_clone(&pipeline.video_queue, packet);
 			}
-
-			if(audio.enabled && packet->stream_index == audio_stream_idx) {
-				err = avcodec_send_packet(audio_codec_ctx, packet);
-				av_packet_unref(packet);
-				if(err < 0) {
-					updateStatus("Send audio failed: " + ffmpeg_error_string(err));
-					goto play_once_done;
-				}
-
-				while(!isStopRequested()) {
-					err = avcodec_receive_frame(audio_codec_ctx, audio_frame);
-					if(err == AVERROR(EAGAIN) || err == AVERROR_EOF) {
-						err = 0;
-						break;
-					}
-					if(err < 0) {
-						updateStatus("Receive audio failed: " + ffmpeg_error_string(err));
-						goto play_once_done;
-					}
-
-					wait_if_paused(this, &video_clock);
-					if(isStopRequested())
-						goto play_once_done;
-
-					if(!isMutedState()) {
-						err = queue_audio_frame(&audio, audio_frame);
-						if(err < 0) {
-							updateStatus("Audio disabled: write sound device failed");
-							disable_audio_playback(&audio, &audio_codec_ctx);
-							av_frame_unref(audio_frame);
-							break;
-						}
-					}
-					av_frame_unref(audio_frame);
-				}
-				continue;
+			else if(audio_worker.thread_running && packet->stream_index == audio_stream_idx) {
+				err = packet_queue_push_clone(&pipeline.audio_queue, packet);
 			}
 
 			av_packet_unref(packet);
+			if(err < 0) {
+				if(err != AVERROR_EXIT)
+					updateStatus("Queue packet failed: " + ffmpeg_error_string(err));
+				pipeline_abort(&pipeline);
+				break;
+			}
 		}
 
-		if(!isStopRequested()) {
+		av_packet_free(&packet);
+		packet = NULL;
+
+		if(video_worker.thread_running) {
+			pthread_join(video_worker.thread, NULL);
+			video_worker.thread_running = false;
+		}
+		if(audio_worker.thread_running) {
+			pthread_join(audio_worker.thread, NULL);
+			audio_worker.thread_running = false;
+		}
+
+		if(!isStopRequested() && !restart_for_seek && !pipeline_is_aborted(&pipeline)) {
 			updateStatus("Done");
 			setPlaybackState(false, false, true);
 		}
 
 play_once_done:
 		av_packet_free(&packet);
-		av_frame_free(&video_frame);
-		av_frame_free(&audio_frame);
-		av_frame_free(&rgba_frame);
-		sws_freeContext(sws_ctx);
+		pipeline_abort(&pipeline);
+		if(video_worker.thread_running)
+			pthread_join(video_worker.thread, NULL);
+		if(audio_worker.thread_running)
+			pthread_join(audio_worker.thread, NULL);
+		pipeline_destroy(&pipeline);
 		cleanup_audio_playback(&audio);
 		avcodec_free_context(&audio_codec_ctx);
 		avcodec_free_context(&video_codec_ctx);
