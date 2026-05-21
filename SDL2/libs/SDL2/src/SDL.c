@@ -56,6 +56,16 @@ static SDL_bool SDL_MainIsReady = SDL_TRUE;
 static SDL_bool SDL_bInMainQuit = SDL_FALSE;
 static Uint8 SDL_SubsystemRefCount[ 32 ];
 
+#ifdef __EWOKOS__
+static SDL_bool SDL_bAutoQuitRegistered = SDL_FALSE;
+
+static void
+SDL_AutoQuit(void)
+{
+    SDL_Quit();
+}
+#endif
+
 /* Private helper to increment a subsystem's ref counter. */
 static void
 SDL_PrivateSubsystemRefCountIncr(Uint32 subsystem)
@@ -114,6 +124,14 @@ SDL_InitSubSystem(Uint32 flags)
 
     /* Clear the error message */
     SDL_ClearError();
+
+#ifdef __EWOKOS__
+    if (!SDL_bAutoQuitRegistered) {
+        if (atexit(SDL_AutoQuit) == 0) {
+            SDL_bAutoQuitRegistered = SDL_TRUE;
+        }
+    }
+#endif
 
 #if SDL_VIDEO_DRIVER_WINDOWS
 	if ((flags & (SDL_INIT_HAPTIC|SDL_INIT_JOYSTICK))) {

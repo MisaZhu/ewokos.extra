@@ -24,6 +24,9 @@
 
 #ifdef HAVE_SIGNAL_H
 #include <signal.h>
+#ifdef __EWOKOS__
+#include <stdlib.h>
+#endif
 #endif
 
 #include "SDL_events.h"
@@ -34,11 +37,16 @@
 static void
 SDL_HandleSIG(int sig)
 {
+#ifdef __EWOKOS__
+    signal(sig, SIG_DFL);
+    exit(0);
+#else
     /* Reset the signal handler */
     signal(sig, SDL_HandleSIG);
 
     /* Signal a quit interrupt */
     SDL_SendQuit();
+#endif
 }
 #endif /* HAVE_SIGNAL_H */
 

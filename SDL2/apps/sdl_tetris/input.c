@@ -28,6 +28,10 @@ int listen_for_input(int game_over) {
     if (event.type == SDL_QUIT) {
       return QUIT;
     }
+    if (event.type == SDL_WINDOWEVENT &&
+        event.window.event == SDL_WINDOWEVENT_CLOSE) {
+      return QUIT;
+    }
     if (event.type == SDL_KEYDOWN) {
       return handle_key_down(event.key.keysym.sym);
     }
