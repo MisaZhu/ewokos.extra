@@ -699,6 +699,9 @@ int handle_events() {
             return 1;
 
         case SDL_WINDOWEVENT:
+            if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
+                return 1;
+            }
             if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
                 width = event.window.data1;
                 height = event.window.data2;

@@ -42,10 +42,15 @@
 #include "x/x.h"
 #include "x/xcntl.h"
 #include <ewoksys/vdevice.h>
+#include <ewoksys/vfs.h>
 #include <ewoksys/proto.h>
 #include <pthread.h>
 
 static x_t _x_;
+static xwin_t *_main_xwin;
+static pthread_t _x_thread_id;
+static int _x_thread_started;
+static volatile int _video_closing;
 
 #ifdef HAVE_USPI
 #include "uspi.h"
@@ -63,11 +68,15 @@ static int EWOKOS_VideoInit(_THIS);
 static int EWOKOS_SetDisplayMode(_THIS, SDL_VideoDisplay * display, SDL_DisplayMode * mode);
 static void EWOKOS_VideoQuit(_THIS);
 static int EWOKOS_GetDisplayBounds (_THIS, SDL_VideoDisplay * display, SDL_Rect * rect);
+static void EWOKOS_DestroyWindow(_THIS, SDL_Window * window);
 
 static int phys_width;
 static int phys_height;
 
 static bool on_close(xwin_t* xwin) {
+    if (_video_closing) {
+        return true;
+    }
     if(xwin == NULL || xwin->xinfo == NULL)
         return false;
     SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
@@ -79,6 +88,9 @@ static bool on_close(xwin_t* xwin) {
 }
 
 static void on_resize(xwin_t* xwin) {
+    if (_video_closing) {
+        return;
+    }
     if(xwin == NULL || xwin->xinfo == NULL)
         return;
     SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
@@ -108,6 +120,9 @@ static int sdl_key(int v) {
 static void on_event(xwin_t* xw, xevent_t* ev) {
 	if(xw == NULL)
 		return;
+    if (_video_closing || ev == NULL || xw->xinfo == NULL) {
+        return;
+    }
 
     SDL_Event sdlEvent;
     SDL_zero(sdlEvent);
@@ -121,12 +136,16 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
         SDL_PushEvent(&sdlEvent);
     }
     else if(ev->type == XEVT_MOUSE) {
+        SDL_Window *window = SDL_GetWindowFromID(xw->xinfo->win);
+        if (window == NULL) {
+            return;
+        }
         int mousex =  ev->value.mouse.x - xw->xinfo->wsr.x;
         int mousey =  ev->value.mouse.y - xw->xinfo->wsr.y;
         
         if(ev->state == MOUSE_STATE_MOVE || ev->state == MOUSE_STATE_DRAG) {
             sdlEvent.type = SDL_MOUSEMOTION;
-            sdlEvent.motion.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
+            sdlEvent.motion.windowID = SDL_GetWindowID(window);
             sdlEvent.motion.x = mousex;
             sdlEvent.motion.y = mousey;
             sdlEvent.motion.xrel = ev->value.mouse.rx;
@@ -136,7 +155,7 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
         }
         else if(ev->state == MOUSE_STATE_DOWN) {
             sdlEvent.type = SDL_MOUSEBUTTONDOWN;
-            sdlEvent.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
+            sdlEvent.button.windowID = SDL_GetWindowID(window);
             sdlEvent.button.x = mousex;
             sdlEvent.button.y = mousey;
             sdlEvent.motion.xrel = ev->value.mouse.rx;
@@ -147,7 +166,7 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
         }
         else if(ev->state == MOUSE_STATE_UP) {
             sdlEvent.type = SDL_MOUSEBUTTONUP;
-            sdlEvent.button.windowID = SDL_GetWindowID(SDL_GetWindowFromID(xw->xinfo->win));
+            sdlEvent.button.windowID = SDL_GetWindowID(window);
             sdlEvent.button.x = mousex;
             sdlEvent.button.y = mousey;
             sdlEvent.motion.xrel = ev->value.mouse.rx;
@@ -157,6 +176,40 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
             SDL_PushEvent(&sdlEvent);
         }
     }
+}
+
+static void EWOKOS_StopVideoThread(void)
+{
+    if (!_x_thread_started) {
+        return;
+    }
+
+    x_terminate(&_x_);
+    vfs_wakeup(_x_.dev_fsinfo.node, VFS_EVT_RD);
+    pthread_join(_x_thread_id, NULL);
+    _x_thread_started = 0;
+}
+
+static void EWOKOS_CloseMainWindow(void)
+{
+    if (_main_xwin == NULL) {
+        return;
+    }
+
+    _main_xwin->on_event = NULL;
+    _main_xwin->on_resize = NULL;
+    _main_xwin->on_close = NULL;
+    xwin_close(_main_xwin);
+}
+
+static void EWOKOS_DestroyClosedWindow(void)
+{
+    if (_main_xwin == NULL) {
+        return;
+    }
+
+    xwin_destroy(_main_xwin);
+    _main_xwin = NULL;
 }
 
 static int
@@ -185,6 +238,7 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     xwin->on_event = on_event;
     xwin->on_close = on_close;
     xwin->on_resize = on_resize;
+    _main_xwin = xwin;
     window->driverdata = xwin;
     if(xwin->xinfo != NULL)
         window->id = xwin->xinfo->win;
@@ -218,6 +272,7 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     /* One window, it always has focus */
     SDL_SetMouseFocus(window);
     SDL_SetKeyboardFocus(window);
+    return 0;
 }
 
 /* driver bootstrap functions */
@@ -323,6 +378,7 @@ EWOKOS_CreateDevice(int devindex)
     device->SetDisplayMode = EWOKOS_SetDisplayMode;
     device->PumpEvents = EWOKOS_PumpEvents;
     device->CreateWindow = EWOKOS_CreateWindow;
+    device->DestroyWindow = EWOKOS_DestroyWindow;
     device->CreateWindowFramebuffer = EWOKOS_CreateWindowFramebuffer;
     device->UpdateWindowFramebuffer = EWOKOS_UpdateWindowFramebuffer;
     device->DestroyWindowFramebuffer = EWOKOS_DestroyWindowFramebuffer;
@@ -382,6 +438,9 @@ EWOKOS_VideoInit(_THIS)
     phys_width = scr.size.w;
     phys_height = scr.size.h;
 
+    _main_xwin = NULL;
+    _x_thread_started = 0;
+    _video_closing = 0;
     x_init(&_x_, NULL);    
     _this->driverdata = &_x_;
 
@@ -397,8 +456,10 @@ EWOKOS_VideoInit(_THIS)
 
     SDL_AddDisplayMode(&_this->displays[0], &mode);
 
-    pthread_t tid;
-    pthread_create(&tid, NULL, x_thread, _this);
+    if (pthread_create(&_x_thread_id, NULL, x_thread, _this) != 0) {
+        return SDL_SetError("Unable to start EwokOS video thread");
+    }
+    _x_thread_started = 1;
 
     return 0;
 }
@@ -414,6 +475,22 @@ EWOKOS_SetDisplayMode(_THIS, SDL_VideoDisplay * display, SDL_DisplayMode * mode)
 void
 EWOKOS_VideoQuit(_THIS)
 {
+    (void)_this;
+    _video_closing = 1;
+    EWOKOS_CloseMainWindow();
+    EWOKOS_StopVideoThread();
+    EWOKOS_DestroyClosedWindow();
+}
+
+static void
+EWOKOS_DestroyWindow(_THIS, SDL_Window * window)
+{
+    (void)_this;
+    (void)window;
+    _video_closing = 1;
+    EWOKOS_CloseMainWindow();
+    EWOKOS_StopVideoThread();
+    EWOKOS_DestroyClosedWindow();
 }
 
 static int
