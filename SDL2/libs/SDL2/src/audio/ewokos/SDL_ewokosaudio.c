@@ -180,7 +180,7 @@ static int pcm_try_write(struct pcm *pcm, const void* data, unsigned int count)
     }
 }
 
-static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms)
+static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms, const volatile int *enabled)
 {
     enum { SLEEP_TIME_MS = 5 };
     *avail = 0;
@@ -190,6 +190,10 @@ static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms)
     int try_count = 0;
 
     for(;;) {
+        if (enabled != NULL && *enabled == 0) {
+            return -1;
+        }
+
         ret = pcm_buf_avail(pcm);
         if (ret < 0) {
             break;
@@ -210,7 +214,7 @@ static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms)
     return ret;
 }
 
-static int pcm_write(struct pcm *pcm, const void* data, unsigned int count) {
+static int pcm_write(struct pcm *pcm, const void* data, unsigned int count, const volatile int *enabled) {
     int period_bytes = 0;
     int avail = 0;
     int bytes = (int)count;
@@ -222,7 +226,11 @@ static int pcm_write(struct pcm *pcm, const void* data, unsigned int count) {
     period_bytes = pcm->config.period_size * pcm->framesize;
     copy_bytes = bytes < period_bytes ? bytes : period_bytes;
     while (bytes > 0) {
-        ret = wait_avail(pcm, &avail, 2000);
+        if (enabled != NULL && *enabled == 0) {
+            break;
+        }
+
+        ret = wait_avail(pcm, &avail, 2000, enabled);
         if (ret == -EPIPE) {
             copy_bytes = (bytes < period_bytes ? bytes : period_bytes);
             pcm->prepared = 0;
@@ -305,7 +313,7 @@ static int pcm_close(struct pcm *pcm)
 struct audio_thread_data {
     SDL_AudioDevice *device;
     struct pcm *pcm;
-    int enabled;
+    volatile int enabled;
 };
 
 static struct audio_thread_data audio_thread_data;
@@ -347,7 +355,7 @@ static void *audio_thread(void *arg)
         fill(udata, buffer, buffer_size);
 
         /* Write to PCM device */
-        if (pcm_write(pcm, buffer, buffer_size) != 0) {
+        if (pcm_write(pcm, buffer, buffer_size, &data->enabled) != 0) {
             /* Error writing */
         }
     }
