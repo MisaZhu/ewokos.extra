@@ -91,6 +91,43 @@ static bool next_utf8_codepoint(const char*& p, uint32_t& codepoint)
     return true;
 }
 
+static std::string trim_request_url(const std::string& url)
+{
+    size_t begin = 0;
+    size_t end = url.size();
+
+    while(begin < end) {
+        char ch = url[begin];
+        if(ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+            ++begin;
+            continue;
+        }
+        break;
+    }
+
+    while(end > begin) {
+        char ch = url[end - 1];
+        if(ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+            --end;
+            continue;
+        }
+        break;
+    }
+
+    if(end > begin + 1) {
+        char first = url[begin];
+        char last = url[end - 1];
+        if((first == '"' && last == '"') ||
+           (first == '\'' && last == '\'') ||
+           (first == '`' && last == '`')) {
+            ++begin;
+            --end;
+        }
+    }
+
+    return url.substr(begin, end - begin);
+}
+
 }
 
 static inline int char_width_cache_slot(uint64_t key)
@@ -410,59 +447,104 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
     else if(full_url.starts_with("http://") || full_url.starts_with("https://")) {
         // Use tinyhttpsc to fetch HTTP/HTTPS URL
         uint64_t start_ms = kernel_tic_ms(0);
-        TinyHttpsRequest* request = NewHttpsRequest(full_url.c_str());
+        std::string request_url = trim_request_url(full_url);
+        TinyHttpsRequest* request = NewHttpsRequest(request_url.c_str());
         if(request == NULL) {
+            klog("[xBrowser] loadURL http: create request failed url=%s\n", request_url.c_str());
             return NULL;
         }
-        
+
         // Set timeout and max redirections
         HttpsRequestSetTimeout(request, 10000); // 10 seconds
         HttpsRequestSetMaxRedirections(request, 5);
-        
+        HttpsRequestAddHeader(request, "User-Agent", "ewokos-xbrowser/1");
+
         // Execute request
         TinyHttpsResponse* response = HttpsRequestFetch(request);
-        HttpsRequestFree(request);
-        
+
         if(response == NULL) {
+            klog("[xBrowser] loadURL http: null response url=%s cost=%u ms\n",
+                request_url.c_str(), (uint32_t)(kernel_tic_ms(0) - start_ms));
+            HttpsRequestFree(request);
             return NULL;
         }
-        
-        // Check for errors
-        if(HttpsResponseError(response)) {
-            HttpsResponseFree(response);
-            return NULL;
-        }
-        
-        // Check status code
+
         int status_code = HttpsResponseGetStatusCode(response);
-        if(status_code != 200) {
+        int error_code = HttpsResponseGetErrorCode(response);
+        int header_body_size = HttpsResponseGetBodySize(response);
+        const char* error_msg = HttpsResponseGetErrorMsg(response);
+        const char* content_type = HttpsResponseGetHeaderValueByKey(response, "content-type");
+        const char* location = HttpsResponseGetHeaderValueByKey(response, "location");
+        bool has_error = HttpsResponseError(response);
+
+        if(has_error) {
+            klog("[xBrowser] loadURL http error: url=%s status=%d err=%d body=%d type=%s location=%s msg=%s cost=%u ms\n",
+                request_url.c_str(),
+                status_code,
+                error_code,
+                header_body_size,
+                content_type ? content_type : "-",
+                location ? location : "-",
+                error_msg ? error_msg : "-",
+                (uint32_t)(kernel_tic_ms(0) - start_ms));
             HttpsResponseFree(response);
+            HttpsRequestFree(request);
             return NULL;
         }
-        
+
+        if(status_code != 200) {
+            klog("[xBrowser] loadURL http status: url=%s status=%d err=%d body=%d type=%s location=%s cost=%u ms\n",
+                request_url.c_str(),
+                status_code,
+                error_code,
+                header_body_size,
+                content_type ? content_type : "-",
+                location ? location : "-",
+                (uint32_t)(kernel_tic_ms(0) - start_ms));
+            HttpsResponseFree(response);
+            HttpsRequestFree(request);
+            return NULL;
+        }
+
         // Read response body first (this will populate the body size)
         int body_size = 0;
         const char* body = HttpsResponseReadBody(response, &body_size);
         if(body == NULL || body_size <= 0) {
+            klog("[xBrowser] loadURL http empty body: url=%s status=%d err=%d hdr_body=%d body=%d type=%s cost=%u ms\n",
+                request_url.c_str(),
+                status_code,
+                error_code,
+                header_body_size,
+                body_size,
+                content_type ? content_type : "-",
+                (uint32_t)(kernel_tic_ms(0) - start_ms));
             HttpsResponseFree(response);
+            HttpsRequestFree(request);
             return NULL;
         }
-        
+
         // Allocate memory and copy data
         ret = (uint8_t*)malloc(body_size+1);
         if(ret == NULL) {
+            klog("[xBrowser] loadURL http: alloc failed url=%s body=%d\n", request_url.c_str(), body_size);
             HttpsResponseFree(response);
+            HttpsRequestFree(request);
             return NULL;
         }
-        
+
         memcpy(ret, body, body_size);
         HttpsResponseFree(response);
+        HttpsRequestFree(request);
         ret[body_size] = 0;
 
         if(sz != NULL)
             *sz = body_size;
-        klog("[xBrowser] loadURL http: url=%s size=%d cost=%u ms\n",
-            full_url.c_str(), body_size, (uint32_t)(kernel_tic_ms(0) - start_ms));
+        klog("[xBrowser] loadURL http: url=%s status=%d size=%d type=%s cost=%u ms\n",
+            request_url.c_str(),
+            status_code,
+            body_size,
+            content_type ? content_type : "-",
+            (uint32_t)(kernel_tic_ms(0) - start_ms));
         return ret;
     }
     klog("[xBrowser] loadURL failed: %s\n", full_url.c_str());
