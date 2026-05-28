@@ -1080,7 +1080,10 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 			uint64_t text_start = kernel_tic_ms(0);
 			std::string str;
 			std::string spaces;
-			std::string str_in = node->v.text.text;
+			const char* str_in = node->v.text.text ? node->v.text.text : "";
+			size_t str_in_len = strlen(str_in);
+			str.reserve(str_in_len);
+			spaces.reserve(str_in_len);
 			unsigned char c;
 			auto flush_text = [&]()
 			{
@@ -1106,7 +1109,7 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 					spaces.clear();
 				}
 			};
-			for (size_t i = 0; i < str_in.length(); i++)
+			for (size_t i = 0; i < str_in_len; i++)
 			{
 				c = (unsigned char) str_in[i];
 				if (c == ' ' || c == '\t' || c == '\r' || c == '\f')
@@ -1128,8 +1131,8 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 					flush_spaces();
 					// For UTF-8 CJK characters, we need to capture 3 bytes
 					str += c;
-					if (i + 1 < str_in.length()) str += str_in[++i];
-					if (i + 1 < str_in.length()) str += str_in[++i];
+					if (i + 1 < str_in_len) str += str_in[++i];
+					if (i + 1 < str_in_len) str += str_in[++i];
 					element::ptr text = litehtml_alloc<el_text>("el_text", str.c_str(), this);
 					if(text)
 					{
@@ -1171,7 +1174,9 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 	case GUMBO_NODE_WHITESPACE:
 		{
 			std::string spaces;
-			std::string str_in = node->v.text.text;
+			const char* str_in = node->v.text.text ? node->v.text.text : "";
+			size_t str_in_len = strlen(str_in);
+			spaces.reserve(str_in_len);
 			auto flush_spaces = [&]()
 			{
 				if(!spaces.empty())
@@ -1184,7 +1189,7 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 					spaces.clear();
 				}
 			};
-			for(size_t i = 0; i < str_in.length(); i++)
+			for(size_t i = 0; i < str_in_len; i++)
 			{
 				unsigned char c = (unsigned char)str_in[i];
 				if(c == '\n')

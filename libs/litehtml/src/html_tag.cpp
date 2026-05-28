@@ -410,18 +410,38 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 			return false;
 		}
 
+		const tchar_t* own_id = nullptr;
+		bool own_id_loaded = false;
+
 		for(const auto& attr_sel : right.m_attrs)
 		{
+			const bool is_class_attr = (attr_sel.attribute == _t("class"));
+			const bool is_id_attr = (attr_sel.attribute == _t("id"));
 			switch(attr_sel.condition)
 			{
 			case select_exists:
-				if(!get_attr(attr_sel.attribute.c_str()))
+				if(is_class_attr)
 				{
-					return false;
+					if(m_class_values.empty())
+					{
+						return false;
+					}
+				}
+				else if(is_id_attr)
+				{
+					if(!own_id_loaded)
+					{
+						own_id = get_attr(_t("id"));
+						own_id_loaded = true;
+					}
+					if(!own_id)
+					{
+						return false;
+					}
 				}
 				break;
 			case select_equal:
-				if(attr_sel.attribute == _t("class"))
+				if(is_class_attr)
 				{
 					bool found = true;
 					for(const auto& cls : attr_sel.class_val)
@@ -446,43 +466,62 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 						return false;
 					}
 				}
-				else
+				else if(is_id_attr)
 				{
-					const tchar_t* attr_value = get_attr(attr_sel.attribute.c_str());
-					if(!attr_value || t_strcasecmp(attr_sel.val.c_str(), attr_value))
+					if(!own_id_loaded)
+					{
+						own_id = get_attr(_t("id"));
+						own_id_loaded = true;
+					}
+					if(!own_id || t_strcasecmp(attr_sel.val.c_str(), own_id))
 					{
 						return false;
 					}
 				}
 				break;
 			case select_contain_str:
+				if(is_id_attr)
 				{
-					const tchar_t* attr_value = get_attr(attr_sel.attribute.c_str());
-					if(!attr_value || !t_strstr(attr_value, attr_sel.val.c_str()))
+					if(!own_id_loaded)
+					{
+						own_id = get_attr(_t("id"));
+						own_id_loaded = true;
+					}
+					if(!own_id || !t_strstr(own_id, attr_sel.val.c_str()))
 					{
 						return false;
 					}
 				}
 				break;
 			case select_start_str:
+				if(is_id_attr)
 				{
-					const tchar_t* attr_value = get_attr(attr_sel.attribute.c_str());
-					if(!attr_value || t_strncmp(attr_value, attr_sel.val.c_str(), attr_sel.val.length()))
+					if(!own_id_loaded)
+					{
+						own_id = get_attr(_t("id"));
+						own_id_loaded = true;
+					}
+					if(!own_id || t_strncmp(own_id, attr_sel.val.c_str(), attr_sel.val.length()))
 					{
 						return false;
 					}
 				}
 				break;
 			case select_end_str:
+				if(is_id_attr)
 				{
-					const tchar_t* attr_value = get_attr(attr_sel.attribute.c_str());
-					if(!attr_value)
+					if(!own_id_loaded)
+					{
+						own_id = get_attr(_t("id"));
+						own_id_loaded = true;
+					}
+					if(!own_id)
 					{
 						return false;
 					}
-					size_t attr_len = t_strlen(attr_value);
+					size_t attr_len = t_strlen(own_id);
 					size_t val_len = attr_sel.val.length();
-					if(attr_len < val_len || t_strcasecmp(attr_value + attr_len - val_len, attr_sel.val.c_str()))
+					if(attr_len < val_len || t_strcasecmp(own_id + attr_len - val_len, attr_sel.val.c_str()))
 					{
 						return false;
 					}
@@ -500,6 +539,10 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 
 	for(const auto& sel : stylesheet.selectors())
 	{
+		if(!sel->is_media_valid())
+		{
+			continue;
+		}
 		if(!right_selector_maybe_matches(sel))
 		{
 			continue;
@@ -519,7 +562,6 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 				return *us;
 			};
 
-			if(sel->is_media_valid())
 			{
 				if(apply & select_match_pseudo_class)
 				{
