@@ -549,6 +549,19 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 		}
 		int apply = select(*sel, false);
 
+		if(apply == select_no_match)
+		{
+			continue;
+		}
+		if(apply & select_match_pseudo_class)
+		{
+			apply = select(*sel, true);
+			if(apply == select_no_match)
+			{
+				continue;
+			}
+		}
+
 		if(apply != select_no_match)
 		{
 			used_selector* us = nullptr;
@@ -563,34 +576,7 @@ void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 			};
 
 			{
-				if(apply & select_match_pseudo_class)
-				{
-					if(select(*sel, true))
-					{
-						if(apply & select_match_with_after)
-						{
-							ensure_used_style();
-							element::ptr el = get_element_after();
-							if(el)
-							{
-								el->add_style(*sel->m_style);
-							}
-						} else if(apply & select_match_with_before)
-						{
-							ensure_used_style();
-							element::ptr el = get_element_before();
-							if(el)
-							{
-								el->add_style(*sel->m_style);
-							}
-						}
-						else
-						{
-							ensure_used_style().m_used = true;
-							add_style(*sel->m_style);
-						}
-					}
-				} else if(apply & select_match_with_after)
+				if(apply & select_match_with_after)
 				{
 					ensure_used_style();
 					element::ptr el = get_element_after();
