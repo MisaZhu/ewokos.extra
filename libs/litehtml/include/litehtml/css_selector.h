@@ -251,8 +251,7 @@ namespace litehtml
 	class used_selector
 	{
 	public:
-		typedef std::unique_ptr<used_selector>	ptr;
-		typedef std::vector<used_selector::ptr>	vector;
+		typedef std::vector<used_selector>	vector;
 
 		css_selector::ptr	m_selector;
 		bool				m_used;

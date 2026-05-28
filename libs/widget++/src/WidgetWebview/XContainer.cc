@@ -4,18 +4,99 @@
 #include "WidgetWebview/WidgetWebview.h"
 #include "el_input.h"
 
-#include <iostream>
 #include <graph/graph_ex.h>
 #include <graph/graph_image.h>
 #include <ewoksys/basic_math.h>
+#include <ewoksys/kernel_tic.h>
 #include <ewoksys/klog.h>
 #include <x++/X.h>
 #include <tinyhttpsc/tinyhttpsc.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cstdint>
 
 using namespace litehtml;
 using namespace Ewok;
+
+namespace {
+
+static uint64_t make_char_width_key(const FontInfo* fontInfo, uint32_t codepoint)
+{
+    uintptr_t font_ptr = reinterpret_cast<uintptr_t>(fontInfo->font);
+    uint64_t font_hash = ((uint64_t)(font_ptr >> 4)) & 0xFFFFFFULL;
+    return (((uint64_t)(fontInfo->size & 0xFFFF)) << 48) |
+           (((uint64_t)(codepoint & 0xFFFFFF)) << 24) |
+           font_hash;
+}
+
+static bool next_utf8_codepoint(const char*& p, uint32_t& codepoint)
+{
+    unsigned char c0 = (unsigned char)*p;
+    if(c0 == 0) {
+        return false;
+    }
+
+    if(c0 < 0x80) {
+        codepoint = c0;
+        ++p;
+        return true;
+    }
+
+    if((c0 & 0xE0) == 0xC0) {
+        unsigned char c1 = (unsigned char)p[1];
+        if((c1 & 0xC0) != 0x80) {
+            codepoint = c0;
+            ++p;
+            return true;
+        }
+        codepoint = ((uint32_t)(c0 & 0x1F) << 6) | (uint32_t)(c1 & 0x3F);
+        p += 2;
+        return true;
+    }
+
+    if((c0 & 0xF0) == 0xE0) {
+        unsigned char c1 = (unsigned char)p[1];
+        unsigned char c2 = (unsigned char)p[2];
+        if((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80) {
+            codepoint = c0;
+            ++p;
+            return true;
+        }
+        codepoint = ((uint32_t)(c0 & 0x0F) << 12) |
+                    ((uint32_t)(c1 & 0x3F) << 6) |
+                    (uint32_t)(c2 & 0x3F);
+        p += 3;
+        return true;
+    }
+
+    if((c0 & 0xF8) == 0xF0) {
+        unsigned char c1 = (unsigned char)p[1];
+        unsigned char c2 = (unsigned char)p[2];
+        unsigned char c3 = (unsigned char)p[3];
+        if((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80 || (c3 & 0xC0) != 0x80) {
+            codepoint = c0;
+            ++p;
+            return true;
+        }
+        codepoint = ((uint32_t)(c0 & 0x07) << 18) |
+                    ((uint32_t)(c1 & 0x3F) << 12) |
+                    ((uint32_t)(c2 & 0x3F) << 6) |
+                    (uint32_t)(c3 & 0x3F);
+        p += 4;
+        return true;
+    }
+
+    codepoint = c0;
+    ++p;
+    return true;
+}
+
+}
+
+static inline int char_width_cache_slot(uint64_t key)
+{
+    return (int)(key & 2047ULL);
+}
 
 XContainer::XContainer(litehtml::context* html_context, WidgetWebview* webview)
 {
@@ -23,6 +104,19 @@ XContainer::XContainer(litehtml::context* html_context, WidgetWebview* webview)
     m_webview = webview;
     m_client_width = 640;
     m_client_height = 480;
+    m_text_width_calls = 0;
+    m_text_width_ms = 0;
+    m_draw_text_calls = 0;
+    m_draw_text_ms = 0;
+    m_text_width_hits = 0;
+    m_text_width_misses = 0;
+    m_char_width_hits = 0;
+    m_char_width_misses = 0;
+    m_create_font_calls = 0;
+    m_create_font_ms = 0;
+    m_defer_image_load = false;
+    memset(m_char_width_keys, 0, sizeof(m_char_width_keys));
+    memset(m_char_width_vals, 0, sizeof(m_char_width_vals));
 }
 
 XContainer::~XContainer(void)
@@ -49,6 +143,7 @@ uint32_t XContainer::web_color_to_graph(const litehtml::web_color& c)
 
 litehtml::uint_ptr XContainer::create_font(const litehtml::tchar_t* faceName, int size, int weight, litehtml::font_style italic, unsigned int decoration, litehtml::font_metrics* fm)
 {
+    uint64_t start_ms = kernel_tic_ms(0);
     std::string fontName = "system-cn";
     std::string key = "system-cn";
 
@@ -76,6 +171,8 @@ litehtml::uint_ptr XContainer::create_font(const litehtml::tchar_t* faceName, in
     }
 
     if(fontInfo.font == NULL) {
+        m_create_font_calls++;
+        m_create_font_ms += (uint32_t)(kernel_tic_ms(0) - start_ms);
         return 0;
     }
 
@@ -95,6 +192,8 @@ litehtml::uint_ptr XContainer::create_font(const litehtml::tchar_t* faceName, in
         }
     }
 
+    m_create_font_calls++;
+    m_create_font_ms += (uint32_t)(kernel_tic_ms(0) - start_ms);
     return (uint_ptr)&m_fonts[key];
 }
 
@@ -111,8 +210,44 @@ int XContainer::text_width(const litehtml::tchar_t* text, litehtml::uint_ptr hFo
         return 0;
     }
 
-    uint32_t w, h;
-    font_text_size(text, fontInfo->font, fontInfo->size, &w, &h);
+    if(!text[0]) {
+        return 0;
+    }
+
+    m_text_width_calls++;
+    uint64_t start_ms = kernel_tic_ms(0);
+    const char* p = text;
+    uint32_t w = 0;
+    bool cache_hit_only = true;
+    while(*p) {
+        uint32_t codepoint = 0;
+        if(!next_utf8_codepoint(p, codepoint)) {
+            break;
+        }
+
+        uint64_t char_key = make_char_width_key(fontInfo, codepoint);
+        int slot = char_width_cache_slot(char_key);
+        if(m_char_width_keys[slot] == char_key) {
+            m_char_width_hits++;
+            w += (uint32_t)m_char_width_vals[slot];
+            continue;
+        }
+
+        cache_hit_only = false;
+        m_char_width_misses++;
+        uint32_t cw = 0;
+        font_char_size(codepoint, fontInfo->font, fontInfo->size, &cw, NULL);
+        m_char_width_keys[slot] = char_key;
+        m_char_width_vals[slot] = (int)cw;
+        w += cw;
+    }
+
+    m_text_width_ms += (uint32_t)(kernel_tic_ms(0) - start_ms);
+    if(cache_hit_only) {
+        m_text_width_hits++;
+    } else {
+        m_text_width_misses++;
+    }
     return w;
 }
 
@@ -135,7 +270,42 @@ void XContainer::draw_text(litehtml::uint_ptr hdc, const litehtml::tchar_t* text
         graph_color = 0xFF000000 | (graph_color & 0xFFFFFF);
     }
 
+    uint64_t start_ms = kernel_tic_ms(0);
     graph_draw_text_font(g, pos.x, pos.y, text, fontInfo->font, fontInfo->size, graph_color);
+    m_draw_text_calls++;
+    m_draw_text_ms += (uint32_t)(kernel_tic_ms(0) - start_ms);
+}
+
+void XContainer::resetPerfStats()
+{
+    m_text_width_calls = 0;
+    m_text_width_ms = 0;
+    m_draw_text_calls = 0;
+    m_draw_text_ms = 0;
+    m_text_width_hits = 0;
+    m_text_width_misses = 0;
+    m_char_width_hits = 0;
+    m_char_width_misses = 0;
+    m_create_font_calls = 0;
+    m_create_font_ms = 0;
+}
+
+void XContainer::getPerfStats(uint32_t& textWidthCalls, uint32_t& textWidthMs,
+                              uint32_t& drawTextCalls, uint32_t& drawTextMs,
+                              uint32_t& textWidthHits, uint32_t& textWidthMisses,
+                              uint32_t& charWidthHits, uint32_t& charWidthMisses,
+                              uint32_t& createFontCalls, uint32_t& createFontMs) const
+{
+    textWidthCalls = m_text_width_calls;
+    textWidthMs = m_text_width_ms;
+    drawTextCalls = m_draw_text_calls;
+    drawTextMs = m_draw_text_ms;
+    textWidthHits = m_text_width_hits;
+    textWidthMisses = m_text_width_misses;
+    charWidthHits = m_char_width_hits;
+    charWidthMisses = m_char_width_misses;
+    createFontCalls = m_create_font_calls;
+    createFontMs = m_create_font_ms;
 }
 
 int XContainer::pt_to_px(int pt)
@@ -182,7 +352,7 @@ void XContainer::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::list_m
 }
 
 const std::string XContainer::getFullURL(const std::string& src, const std::string& baseurl) {
-    std::string path;
+    std::string path = src;
     if(src.starts_with("file://") || 
             src.starts_with("http://") ||
             src.starts_with("https://")) {
@@ -205,12 +375,17 @@ const std::string XContainer::getFullURL(const std::string& src, const std::stri
     }
 
     if (!baseurl.empty()) {
-        if(baseurl[baseurl.length() - 1] != '/')
-            path = baseurl + "/" + path;
-        else
-            path = baseurl + path;
+        size_t slash = baseurl.find_last_of('/');
+        std::string base_dir = slash == std::string::npos ? baseurl : baseurl.substr(0, slash + 1);
+        if(!base_dir.empty())
+            path = base_dir + path;
     }
     return path;
+}
+
+std::string XContainer::normalizeURL(const std::string& url, const std::string& baseurl)
+{
+    return getFullURL(url, baseurl);
 }
 
 uint8_t* XContainer::loadURL(const std::string& url, int* sz)
@@ -220,15 +395,21 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
         *sz = 0;
 
     std::string full_url = getFullURL(url, "");
+    klog("[xBrowser] loadURL: %s -> %s\n", url.c_str(), full_url.c_str());
     if(full_url.starts_with("file://")) {
         std::string path = full_url.substr(6);
         if(!path.empty()) { //local file
+            uint64_t start_ms = kernel_tic_ms(0);
             ret = vfs_readfile(path.c_str(), sz);
+            uint32_t cost_ms = (uint32_t)(kernel_tic_ms(0) - start_ms);
+            klog("[xBrowser] loadURL file: path=%s ok=%d size=%d cost=%u ms\n",
+                path.c_str(), ret != NULL ? 1 : 0, sz != NULL ? *sz : 0, cost_ms);
             return ret;
         }
     }
     else if(full_url.starts_with("http://") || full_url.starts_with("https://")) {
         // Use tinyhttpsc to fetch HTTP/HTTPS URL
+        uint64_t start_ms = kernel_tic_ms(0);
         TinyHttpsRequest* request = NewHttpsRequest(full_url.c_str());
         if(request == NULL) {
             return NULL;
@@ -280,14 +461,18 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
 
         if(sz != NULL)
             *sz = body_size;
+        klog("[xBrowser] loadURL http: url=%s size=%d cost=%u ms\n",
+            full_url.c_str(), body_size, (uint32_t)(kernel_tic_ms(0) - start_ms));
         return ret;
     }
+    klog("[xBrowser] loadURL failed: %s\n", full_url.c_str());
     return NULL;
 }
 
 
 void XContainer::load_image(const litehtml::tchar_t* src, const litehtml::tchar_t* baseurl, bool redraw_on_ready)
 {
+    (void)redraw_on_ready;
     if (src == NULL || src[0] == 0)
         return;
 
@@ -303,7 +488,38 @@ void XContainer::load_image(const litehtml::tchar_t* src, const litehtml::tchar_
         return;
     }
 
-    m_webview->addTask( { full_url,  HttpTask::TASK_IMAGE } );
+    if(m_defer_image_load) {
+        for(const auto& pending_url : m_pending_image_urls) {
+            if(pending_url == full_url) {
+                return;
+            }
+        }
+        m_pending_image_urls.push_back(full_url);
+        return;
+    }
+
+    m_webview->addTask( { full_url,  HttpTask::TASK_IMAGE, false } );
+}
+
+void XContainer::setDeferImageLoad(bool defer)
+{
+    m_defer_image_load = defer;
+    klog("[xBrowser] image defer: %d pending=%d\n", defer ? 1 : 0, (int)m_pending_image_urls.size());
+}
+
+void XContainer::flushPendingImages()
+{
+    if(m_pending_image_urls.empty()) {
+        klog("[xBrowser] flush pending images: 0\n");
+        return;
+    }
+
+    std::vector<std::string> pending_urls = m_pending_image_urls;
+    m_pending_image_urls.clear();
+    klog("[xBrowser] flush pending images: %d\n", (int)pending_urls.size());
+    for(const auto& url : pending_urls) {
+        m_webview->addTask({ url, HttpTask::TASK_IMAGE, false });
+    }
 }
 
 bool XContainer::loadImageData(const std::string& url, uint8_t* data, int sz)
@@ -372,14 +588,20 @@ void XContainer::draw_background(litehtml::uint_ptr hdc, const litehtml::backgro
     }
 
     uint32_t color = web_color_to_graph(bg.color);
-    if ((color >> 24) == 0) {
-        color = 0xFF000000 | (color & 0xFFFFFF);
-    }
+    uint8_t alpha = color >> 24;
 
-    if(!do_image)
+    if(!do_image) {
+        if(alpha == 0)
+            return;
         graph_fill_rect(g, bg.clip_box.x, bg.clip_box.y, bg.clip_box.width, bg.clip_box.height, color);
-    else
-        graph_rect(g, bg.clip_box.x, bg.clip_box.y, bg.clip_box.width, bg.clip_box.height, color);
+    } else {
+        // Keep image boxes visible before the real bitmap arrives so HTML can
+        // render immediately and swap the image in on a later repaint.
+        uint32_t fill = alpha != 0 ? color : 0xFFE8E8E8;
+        uint32_t stroke = alpha != 0 ? color : 0xFFB0B0B0;
+        graph_fill_rect(g, bg.clip_box.x, bg.clip_box.y, bg.clip_box.width, bg.clip_box.height, fill);
+        graph_rect(g, bg.clip_box.x, bg.clip_box.y, bg.clip_box.width, bg.clip_box.height, stroke);
+    }
 }
 
 void XContainer::draw_borders(litehtml::uint_ptr hdc, const litehtml::borders& borders, const litehtml::position& draw_pos, bool root)
@@ -455,7 +677,7 @@ void XContainer::import_css(litehtml::tstring& text, const litehtml::tstring& ur
     std::string full_url = getFullURL(css_path, base_url);
     if(full_url.empty())
         return;
-    m_webview->addTask( { full_url,  HttpTask::TASK_CSS } );
+    m_webview->loadCSS(full_url);
 }
 
 void XContainer::set_caption(const litehtml::tchar_t* caption)

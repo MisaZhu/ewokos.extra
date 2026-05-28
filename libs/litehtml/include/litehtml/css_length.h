@@ -25,6 +25,7 @@ namespace litehtml
 		float		val() const;
 		css_units	units() const;
 		int			calc_percent(int width) const;
+		void		fromString(const tchar_t* str, const tchar_t* predefs = _t(""), int defValue = 0);
 		void		fromString(const tstring& str, const tstring& predefs = _t(""), int defValue = 0);
 	};
 

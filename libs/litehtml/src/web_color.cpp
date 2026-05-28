@@ -1,6 +1,24 @@
 #include "html.h"
 #include "web_color.h"
 #include <string.h>
+#include <stdint.h>
+#include <ewoksys/kernel_tic.h>
+
+namespace litehtml {
+void profile_color_parse(uint64_t start_ms);
+}
+
+namespace {
+
+static int hex_digit_value(litehtml::tchar_t ch)
+{
+	if(ch >= '0' && ch <= '9') return ch - '0';
+	if(ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+	if(ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+	return -1;
+}
+
+}
 
 litehtml::def_color litehtml::g_def_colors[] = 
 {
@@ -156,38 +174,49 @@ litehtml::def_color litehtml::g_def_colors[] =
 
 litehtml::web_color litehtml::web_color::from_string(const tchar_t* str, litehtml::document_container* callback)
 {
+	uint64_t start_ms = kernel_tic_ms(0);
 	if(!str || !str[0])
 	{
+		litehtml::profile_color_parse(start_ms);
 		return web_color(0, 0, 0);
 	}
 	if(str[0] == _t('#'))
 	{
-		tstring red		= _t("");
-		tstring green		= _t("");
-		tstring blue		= _t("");
-		if(t_strlen(str + 1) == 3)
-		{
-			red		+= str[1];
-			red		+= str[1];
-			green	+= str[2];
-			green	+= str[2];
-			blue	+= str[3];
-			blue	+= str[3];
-		} else if(t_strlen(str + 1) == 6)
-		{
-			red		+= str[1];
-			red		+= str[2];
-			green	+= str[3];
-			green	+= str[4];
-			blue	+= str[5];
-			blue	+= str[6];
-		}
-		tchar_t* sss = 0;
 		web_color clr;
-		clr.red		= (byte) t_strtol(red.c_str(),	&sss, 16);
-		clr.green	= (byte) t_strtol(green.c_str(),	&sss, 16);
-		clr.blue	= (byte) t_strtol(blue.c_str(),	&sss, 16);
-		return clr;
+		size_t hex_len = t_strlen(str + 1);
+		if(hex_len == 3)
+		{
+			int r = hex_digit_value(str[1]);
+			int g = hex_digit_value(str[2]);
+			int b = hex_digit_value(str[3]);
+			if(r >= 0 && g >= 0 && b >= 0)
+			{
+				clr.red = (byte)((r << 4) | r);
+				clr.green = (byte)((g << 4) | g);
+				clr.blue = (byte)((b << 4) | b);
+				litehtml::profile_color_parse(start_ms);
+				return clr;
+			}
+		}
+		else if(hex_len == 6)
+		{
+			int r1 = hex_digit_value(str[1]);
+			int r2 = hex_digit_value(str[2]);
+			int g1 = hex_digit_value(str[3]);
+			int g2 = hex_digit_value(str[4]);
+			int b1 = hex_digit_value(str[5]);
+			int b2 = hex_digit_value(str[6]);
+			if(r1 >= 0 && r2 >= 0 && g1 >= 0 && g2 >= 0 && b1 >= 0 && b2 >= 0)
+			{
+				clr.red = (byte)((r1 << 4) | r2);
+				clr.green = (byte)((g1 << 4) | g2);
+				clr.blue = (byte)((b1 << 4) | b2);
+				litehtml::profile_color_parse(start_ms);
+				return clr;
+			}
+		}
+		litehtml::profile_color_parse(start_ms);
+		return web_color(0, 0, 0);
 	} else if(!t_strncmp(str, _t("rgb"), 3))
 	{
 		tstring s = str;
@@ -213,15 +242,19 @@ litehtml::web_color litehtml::web_color::from_string(const tchar_t* str, litehtm
 		if(tokens.size() >= 3)	clr.blue	= (byte) t_atoi(tokens[2].c_str());
 		if(tokens.size() >= 4)	clr.alpha	= (byte) (t_strtod(tokens[3].c_str(), 0) * 255.0);
 
+		litehtml::profile_color_parse(start_ms);
 		return clr;
 	} else
 	{
 		tstring rgb = resolve_name(str, callback);
 		if(!rgb.empty())
 		{
-			return from_string(rgb.c_str(), callback);
+			litehtml::web_color clr = from_string(rgb.c_str(), callback);
+			litehtml::profile_color_parse(start_ms);
+			return clr;
 		}
 	}
+	litehtml::profile_color_parse(start_ms);
 	return web_color(0, 0, 0);
 }
 

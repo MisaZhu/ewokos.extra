@@ -83,6 +83,14 @@ namespace litehtml
 		{
 			m_properties.clear();
 		}
+		bool empty() const
+		{
+			return m_properties.empty();
+		}
+		const props_map& properties() const
+		{
+			return m_properties;
+		}
 
 	private:
 		void parse_property(const tstring& txt, const tchar_t* baseurl);

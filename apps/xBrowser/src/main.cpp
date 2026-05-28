@@ -28,40 +28,87 @@ public:
 
 class BrowserWidget: public WidgetWebview {
 public:
-    BrowserWidget() : WidgetWebview() { statusBar = nullptr; }
-    ~BrowserWidget() {}
+    BrowserWidget() : WidgetWebview() {
+        statusBar = nullptr;
+        m_statusDirty = false;
+        m_initialLoadStarted = false;
+        pthread_mutex_init(&m_statusMutex, NULL);
+    }
+
+    ~BrowserWidget() {
+        pthread_mutex_destroy(&m_statusMutex);
+    }
 
     void setStatusBar(StatusBar* statusBar) {
         this->statusBar = statusBar;
     }
+
+    void setInitialUrl(const std::string& url) {
+        m_initialUrl = url;
+    }
 protected:
     StatusBar* statusBar;
+    std::string m_pendingStatus;
+    std::string m_initialUrl;
+    pthread_mutex_t m_statusMutex;
+    bool m_statusDirty;
+    bool m_initialLoadStarted;
+
+    void queueStatus(const std::string& msg) {
+        pthread_mutex_lock(&m_statusMutex);
+        m_pendingStatus = msg;
+        m_statusDirty = true;
+        pthread_mutex_unlock(&m_statusMutex);
+    }
 
     void onTaskStart(const HttpTask& task) override {
-        if(statusBar == nullptr)
-            return;
-        std::string msg = "loading " + task.url;
-        statusBar->setLabel(msg);
+        queueStatus("loading " + task.url);
     }
     void onTaskEnd(const HttpTask& task) override {
-        if(statusBar == nullptr)
-            return;
-        std::string msg = task.url;
-        msg += " loaded";
-        statusBar->setLabel(msg);
+        queueStatus(task.url + " loaded");
     }
     void onTaskFailed(const HttpTask& task) override {
-        if(statusBar == nullptr)
-            return;
-        std::string msg = task.url;
-        msg += " failed";
-        statusBar->setLabel(msg);
+        queueStatus(task.url + " failed");
     }
 
     void onTasksEnd() override {
+        queueStatus("");
+    }
+
+    void onBuildStatus(const std::string& status, int progress) override {
+        if(status.empty()) {
+            queueStatus("");
+            return;
+        }
+        queueStatus(status + " (" + std::to_string(progress) + "%)");
+    }
+
+    void onTimer(uint32_t timerFPS, uint32_t timerSteps) override {
+        WidgetWebview::onTimer(timerFPS, timerSteps);
+        (void)timerFPS;
+        (void)timerSteps;
+
+        if(!m_initialLoadStarted && !m_initialUrl.empty()) {
+            m_initialLoadStarted = true;
+            loadHtml(m_initialUrl);
+        }
+
         if(statusBar == nullptr)
             return;
-        statusBar->setLabel("");
+
+        std::string msg;
+        bool dirty = false;
+        pthread_mutex_lock(&m_statusMutex);
+        if(m_statusDirty) {
+            msg = m_pendingStatus;
+            m_statusDirty = false;
+            dirty = true;
+        }
+        pthread_mutex_unlock(&m_statusMutex);
+
+        if(dirty) {
+            statusBar->setLabel(msg);
+        }
     }
 };
 
@@ -115,18 +162,20 @@ int main(int argc, char* argv[])
     win.open(&x, -1, -1, -1, 0, 0, "HTML Browser", XWIN_STYLE_NORMAL);
 
     webview->setDefaultCSS("res://html/default.css");
+    std::string initialUrl;
     if(argc > 1) {
         editline->disable();
         editline->setContent(argv[1]);
-        webview->loadHtml(argv[1]);
+        initialUrl = argv[1];
     }
     else {
         editline->enable();
-        webview->loadHtml("res://html/default.html");
+        initialUrl = "res://html/default.html";
     }
 
     StatusBar* statusBar = new StatusBar("");
     webview->setStatusBar(statusBar);
+    webview->setInitialUrl(initialUrl);
     statusBar->fix(0, 24);
     root->add(statusBar);
 

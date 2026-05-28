@@ -5,6 +5,7 @@
 #include <litehtml.h>
 #include <graph/graph.h>
 #include <font/font.h>
+#include <cstdint>
 #include <unordered_map>
 
 class el_input;
@@ -62,12 +63,23 @@ public:
     void                               import_css(litehtml::tstring& text, const litehtml::tstring& url, litehtml::tstring& baseurl);
     void                               set_caption(const litehtml::tchar_t* caption);
     void                               set_base_url(const litehtml::tchar_t* base_url);
+    void                               setDeferImageLoad(bool defer);
+    void                               flushPendingImages();
 
     void                               setGraph(graph_t* g) { m_g = g; }
+    void                               resetPerfStats();
+    void                               getPerfStats(uint32_t& textWidthCalls, uint32_t& textWidthMs,
+                                                    uint32_t& drawTextCalls, uint32_t& drawTextMs,
+                                                    uint32_t& textWidthHits, uint32_t& textWidthMisses,
+                                                    uint32_t& charWidthHits, uint32_t& charWidthMisses,
+                                                    uint32_t& createFontCalls, uint32_t& createFontMs) const;
     static uint8_t*                    loadURL(const std::string& url, int* sz);
+    static std::string                 normalizeURL(const std::string& url, const std::string& baseurl);
     bool                               loadImageData(const std::string& url, uint8_t* data, int sz);
 
 private:
+    enum { CHAR_WIDTH_CACHE_SIZE = 2048 };
+
     graph_t* m_g;
     Ewok::WidgetWebview* m_webview;
     std::unordered_map<std::string, FontInfo> m_fonts;
@@ -75,6 +87,20 @@ private:
     int m_client_width;
     int m_client_height;
     std::string m_base_url;
+    uint32_t m_text_width_calls;
+    uint32_t m_text_width_ms;
+    uint32_t m_draw_text_calls;
+    uint32_t m_draw_text_ms;
+    uint32_t m_text_width_hits;
+    uint32_t m_text_width_misses;
+    uint32_t m_char_width_hits;
+    uint32_t m_char_width_misses;
+    uint32_t m_create_font_calls;
+    uint32_t m_create_font_ms;
+    bool m_defer_image_load;
+    uint64_t m_char_width_keys[CHAR_WIDTH_CACHE_SIZE];
+    int m_char_width_vals[CHAR_WIDTH_CACHE_SIZE];
+    std::vector<std::string> m_pending_image_urls;
 
     std::vector<el_input*> m_vecInput;
 

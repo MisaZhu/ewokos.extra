@@ -147,6 +147,8 @@ protected:
 		virtual bool				set_class(const tchar_t* pclass, bool add);
 		virtual bool				is_replaced() const;
 		virtual int					line_height() const;
+		virtual text_align			get_text_align() const;
+		virtual text_transform		get_text_transform() const;
 		virtual white_space			get_white_space() const;
 		virtual style_display		get_display() const;
 		virtual visibility			get_visibility() const;
@@ -155,6 +157,7 @@ protected:
 		virtual void				parse_styles(bool is_reparse = false);
 		virtual void				draw(uint_ptr hdc, int x, int y, const position* clip);
 		virtual void				draw_background( uint_ptr hdc, int x, int y, const position* clip );
+		virtual const tchar_t*		get_style_property_own(const tchar_t* name) const;
 		virtual const tchar_t*		get_style_property(const tchar_t* name, bool inherited, const tchar_t* def = 0);
 		virtual uint_ptr			get_font(font_metrics* fm = 0);
 		virtual int					get_font_size() const;

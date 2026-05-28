@@ -394,8 +394,11 @@ bool litehtml::element::set_class( const tchar_t* pclass, bool add )				LITEHTML
 litehtml::element_position litehtml::element::get_element_position(css_offsets* offsets) const			LITEHTML_RETURN_FUNC(element_position_static)
 bool litehtml::element::is_replaced() const											LITEHTML_RETURN_FUNC(false)
 int litehtml::element::line_height() const											LITEHTML_RETURN_FUNC(0)
+litehtml::text_align litehtml::element::get_text_align() const						LITEHTML_RETURN_FUNC(text_align_left)
+litehtml::text_transform litehtml::element::get_text_transform() const				LITEHTML_RETURN_FUNC(text_transform_none)
 void litehtml::element::draw( uint_ptr hdc, int x, int y, const position* clip )	LITEHTML_EMPTY_FUNC
 void litehtml::element::draw_background( uint_ptr hdc, int x, int y, const position* clip )	LITEHTML_EMPTY_FUNC
+const litehtml::tchar_t* litehtml::element::get_style_property_own( const tchar_t* name ) const	LITEHTML_RETURN_FUNC(0)
 const litehtml::tchar_t* litehtml::element::get_style_property( const tchar_t* name, bool inherited, const tchar_t* def /*= 0*/ )	LITEHTML_RETURN_FUNC(0)
 litehtml::uint_ptr litehtml::element::get_font( font_metrics* fm /*= 0*/ )			LITEHTML_RETURN_FUNC(0)
 int litehtml::element::get_font_size()	const										LITEHTML_RETURN_FUNC(0)

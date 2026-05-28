@@ -12,8 +12,8 @@ namespace litehtml
 	public:
 		css()
 		{
-
 		}
+		
 		
 		~css()
 		{

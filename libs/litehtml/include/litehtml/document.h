@@ -68,6 +68,14 @@ namespace litehtml
 		media_features						m_media;
 		tstring                             m_lang;
 		tstring                             m_culture;
+		bool								m_last_font_valid;
+		tstring								m_last_font_name;
+		tstring								m_last_font_weight;
+		tstring								m_last_font_style;
+		tstring								m_last_font_decoration;
+		int									m_last_font_size;
+		uint_ptr							m_last_font;
+		font_metrics						m_last_font_metrics;
 	public:
 		document(litehtml::document_container* objContainer, litehtml::context* ctx);
 		virtual ~document();
@@ -96,6 +104,7 @@ namespace litehtml
 		bool                            match_lang(const tstring & lang);
 		void							add_tabular(const element::ptr& el);
 		void							update_master_styles();
+		bool							is_fast_mode() const { return m_context && m_context->is_fast_mode(); }
 
 		static litehtml::document::ptr createFromString(const tchar_t* str, litehtml::document_container* objPainter, litehtml::context* ctx, litehtml::css* user_styles = 0);
 		static litehtml::document::ptr createFromUTF8(const char* str, litehtml::document_container* objPainter, litehtml::context* ctx, litehtml::css* user_styles = 0);

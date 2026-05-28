@@ -1,5 +1,138 @@
 #include "html.h"
 #include "document.h"
+#include <stdint.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <ewoksys/kernel_tic.h>
+#include <ewoksys/klog.h>
+
+namespace litehtml {
+void reset_parse_style_profile();
+void dump_parse_style_profile();
+void reset_dom_internal_profile();
+void dump_dom_internal_profile();
+void profile_apply_stylesheet(uint32_t selector_count, uint64_t start_ms);
+void profile_select(uint64_t start_ms);
+void profile_select_element(uint64_t start_ms);
+void profile_get_style_property(bool cache_hit, uint32_t parent_steps, uint64_t start_ms);
+void profile_init_font(bool inherit_fast, uint64_t start_ms);
+void profile_text_parse(uint32_t transform_ms, uint32_t measure_ms, uint64_t start_ms);
+void profile_get_font(bool cache_hit, uint64_t start_ms);
+void profile_cvt_units(uint64_t start_ms);
+void profile_color_parse(uint64_t start_ms);
+}
+
+namespace {
+
+static inline bool font_metrics_ptr_writable_doc(litehtml::font_metrics* fm)
+{
+	if(!fm)
+	{
+		return false;
+	}
+	uintptr_t addr = (uintptr_t)fm;
+	return addr >= 0x180000;
+}
+
+struct create_node_profile_t
+{
+	uint32_t calls;
+	uint32_t element_nodes;
+	uint32_t text_nodes;
+	uint32_t attrs_ms;
+	uint32_t create_element_ms;
+	uint32_t children_ms;
+	uint32_t text_split_ms;
+};
+
+static create_node_profile_t g_create_node_profile = {};
+static const bool g_create_node_profile_supported = true;
+
+struct dom_internal_profile_t
+{
+	uint32_t apply_stylesheet_calls;
+	uint32_t apply_stylesheet_selectors;
+	uint32_t apply_stylesheet_ms;
+	uint32_t select_calls;
+	uint32_t select_ms;
+	uint32_t select_element_calls;
+	uint32_t select_element_ms;
+	uint32_t get_style_calls;
+	uint32_t get_style_cache_hits;
+	uint32_t get_style_parent_steps;
+	uint32_t get_style_ms;
+	uint32_t init_font_calls;
+	uint32_t init_font_inherit_hits;
+	uint32_t init_font_ms;
+	uint32_t text_parse_calls;
+	uint32_t text_transform_ms;
+	uint32_t text_measure_ms;
+	uint32_t text_parse_ms;
+	uint32_t get_font_calls;
+	uint32_t get_font_cache_hits;
+	uint32_t get_font_cache_misses;
+	uint32_t get_font_ms;
+	uint32_t cvt_units_calls;
+	uint32_t cvt_units_ms;
+	uint32_t color_parse_calls;
+	uint32_t color_parse_ms;
+};
+
+static dom_internal_profile_t g_dom_internal_profile = {};
+
+static inline void add_dom_internal_time(uint32_t& slot, uint64_t start_ms)
+{
+	slot += (uint32_t)(kernel_tic_ms(0) - start_ms);
+}
+
+template<typename T, typename... Args>
+static T* litehtml_alloc(const char* label, Args... args)
+{
+	void* mem = malloc(sizeof(T));
+	if(!mem)
+	{
+		klog("[xBrowser] litehtml oom: %s size=%u\n", label, (unsigned)sizeof(T));
+		return nullptr;
+	}
+	return new (mem) T(args...);
+}
+
+static inline void reset_create_node_profile()
+{
+	if(!g_create_node_profile_supported)
+	{
+		return;
+	}
+	memset(&g_create_node_profile, 0, sizeof(g_create_node_profile));
+}
+
+static inline void add_create_node_time(uint32_t& slot, uint64_t start_ms)
+{
+	if(!g_create_node_profile_supported)
+	{
+		return;
+	}
+	slot += (uint32_t)(kernel_tic_ms(0) - start_ms);
+}
+
+static inline void dump_create_node_profile()
+{
+	if(!g_create_node_profile_supported)
+	{
+		return;
+	}
+	klog("[xBrowser] create node detail: calls=%u elements=%u text=%u attrs=%u ms create=%u ms children=%u ms text_split=%u ms\n",
+		g_create_node_profile.calls,
+		g_create_node_profile.element_nodes,
+		g_create_node_profile.text_nodes,
+		g_create_node_profile.attrs_ms,
+		g_create_node_profile.create_element_ms,
+		g_create_node_profile.children_ms,
+		g_create_node_profile.text_split_ms);
+}
+
+}
 #include "stylesheet.h"
 #include "html_tag.h"
 #include "el_text.h"
@@ -21,6 +154,8 @@
 #include "el_div.h"
 #include "el_font.h"
 #include "el_tr.h"
+#include <ewoksys/kernel_tic.h>
+#include <ewoksys/klog.h>
 #include <math.h>
 #include <stdio.h>
 #include <algorithm>
@@ -35,6 +170,122 @@ litehtml::document::document(litehtml::document_container* objContainer, litehtm
 	m_over_element = nullptr;
 	m_size.width = 0;
 	m_size.height = 0;
+	m_def_color = web_color(0, 0, 0);
+	m_last_font_valid = false;
+	m_last_font_size = 0;
+	m_last_font = 0;
+}
+
+void litehtml::reset_dom_internal_profile()
+{
+	memset(&g_dom_internal_profile, 0, sizeof(g_dom_internal_profile));
+}
+
+void litehtml::dump_dom_internal_profile()
+{
+	klog("[xBrowser] dom internal: apply_stylesheet=%u/%u sel=%u/%u ms select_el=%u/%u ms get_style=%u(hit=%u steps=%u)/%u ms init_font=%u(inherit=%u)/%u ms text_parse=%u(transform=%u measure=%u)/%u ms get_font=%u(hit=%u miss=%u)/%u ms cvt_units=%u/%u ms color=%u/%u ms\n",
+		g_dom_internal_profile.apply_stylesheet_calls,
+		g_dom_internal_profile.apply_stylesheet_ms,
+		g_dom_internal_profile.apply_stylesheet_selectors,
+		g_dom_internal_profile.select_calls,
+		g_dom_internal_profile.select_element_calls,
+		g_dom_internal_profile.select_element_ms,
+		g_dom_internal_profile.get_style_calls,
+		g_dom_internal_profile.get_style_cache_hits,
+		g_dom_internal_profile.get_style_parent_steps,
+		g_dom_internal_profile.get_style_ms,
+		g_dom_internal_profile.init_font_calls,
+		g_dom_internal_profile.init_font_inherit_hits,
+		g_dom_internal_profile.init_font_ms,
+		g_dom_internal_profile.text_parse_calls,
+		g_dom_internal_profile.text_transform_ms,
+		g_dom_internal_profile.text_measure_ms,
+		g_dom_internal_profile.text_parse_ms,
+		g_dom_internal_profile.get_font_calls,
+		g_dom_internal_profile.get_font_cache_hits,
+		g_dom_internal_profile.get_font_cache_misses,
+		g_dom_internal_profile.get_font_ms,
+		g_dom_internal_profile.cvt_units_calls,
+		g_dom_internal_profile.cvt_units_ms,
+		g_dom_internal_profile.color_parse_calls,
+		g_dom_internal_profile.color_parse_ms);
+	klog("[xBrowser] dom internal 2: select=%u/%u ms\n",
+		g_dom_internal_profile.select_calls,
+		g_dom_internal_profile.select_ms);
+}
+
+void litehtml::profile_apply_stylesheet(uint32_t selector_count, uint64_t start_ms)
+{
+	g_dom_internal_profile.apply_stylesheet_calls++;
+	g_dom_internal_profile.apply_stylesheet_selectors += selector_count;
+	add_dom_internal_time(g_dom_internal_profile.apply_stylesheet_ms, start_ms);
+}
+
+void litehtml::profile_select(uint64_t start_ms)
+{
+	g_dom_internal_profile.select_calls++;
+	add_dom_internal_time(g_dom_internal_profile.select_ms, start_ms);
+}
+
+void litehtml::profile_select_element(uint64_t start_ms)
+{
+	g_dom_internal_profile.select_element_calls++;
+	add_dom_internal_time(g_dom_internal_profile.select_element_ms, start_ms);
+}
+
+void litehtml::profile_get_style_property(bool cache_hit, uint32_t parent_steps, uint64_t start_ms)
+{
+	g_dom_internal_profile.get_style_calls++;
+	if(cache_hit)
+	{
+		g_dom_internal_profile.get_style_cache_hits++;
+	}
+	g_dom_internal_profile.get_style_parent_steps += parent_steps;
+	add_dom_internal_time(g_dom_internal_profile.get_style_ms, start_ms);
+}
+
+void litehtml::profile_init_font(bool inherit_fast, uint64_t start_ms)
+{
+	g_dom_internal_profile.init_font_calls++;
+	if(inherit_fast)
+	{
+		g_dom_internal_profile.init_font_inherit_hits++;
+	}
+	add_dom_internal_time(g_dom_internal_profile.init_font_ms, start_ms);
+}
+
+void litehtml::profile_text_parse(uint32_t transform_ms, uint32_t measure_ms, uint64_t start_ms)
+{
+	g_dom_internal_profile.text_parse_calls++;
+	g_dom_internal_profile.text_transform_ms += transform_ms;
+	g_dom_internal_profile.text_measure_ms += measure_ms;
+	add_dom_internal_time(g_dom_internal_profile.text_parse_ms, start_ms);
+}
+
+void litehtml::profile_get_font(bool cache_hit, uint64_t start_ms)
+{
+	g_dom_internal_profile.get_font_calls++;
+	if(cache_hit)
+	{
+		g_dom_internal_profile.get_font_cache_hits++;
+	}
+	else
+	{
+		g_dom_internal_profile.get_font_cache_misses++;
+	}
+	add_dom_internal_time(g_dom_internal_profile.get_font_ms, start_ms);
+}
+
+void litehtml::profile_cvt_units(uint64_t start_ms)
+{
+	g_dom_internal_profile.cvt_units_calls++;
+	add_dom_internal_time(g_dom_internal_profile.cvt_units_ms, start_ms);
+}
+
+void litehtml::profile_color_parse(uint64_t start_ms)
+{
+	g_dom_internal_profile.color_parse_calls++;
+	add_dom_internal_time(g_dom_internal_profile.color_parse_ms, start_ms);
 }
 
 litehtml::document::~document()
@@ -62,15 +313,28 @@ litehtml::document::ptr litehtml::document::createFromString( const tchar_t* str
 
 litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, litehtml::document_container* objPainter, litehtml::context* ctx, litehtml::css* user_styles)
 {
+	uint64_t total_start = kernel_tic_ms(0);
+	reset_dom_internal_profile();
 	// parse document into GumboOutput
+	uint64_t gumbo_start = kernel_tic_ms(0);
 	GumboOutput* output = gumbo_parse((const char*) str);
+	uint32_t gumbo_ms = (uint32_t)(kernel_tic_ms(0) - gumbo_start);
 
 	// Create litehtml::document
-	litehtml::document::ptr doc = new litehtml::document(objPainter, ctx);
+	litehtml::document::ptr doc = litehtml_alloc<litehtml::document>("document", objPainter, ctx);
+	if(!doc)
+	{
+		gumbo_destroy_output(&kGumboDefaultOptions, output);
+		return nullptr;
+	}
 
 	// Create litehtml::elements.
 	elements_vector root_elements;
+	uint64_t create_node_start = kernel_tic_ms(0);
+	reset_create_node_profile();
 	doc->create_node(output->root, root_elements);
+	uint32_t create_node_ms = (uint32_t)(kernel_tic_ms(0) - create_node_start);
+	dump_create_node_profile();
 	if (!root_elements.empty())
 	{
 		doc->m_root = root_elements.back();
@@ -94,13 +358,18 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 		doc->container()->get_media_features(doc->m_media);
 
 		// apply master CSS
+		uint64_t master_css_start = kernel_tic_ms(0);
 		doc->m_root->apply_stylesheet(ctx->master_css());
+		uint32_t master_css_ms = (uint32_t)(kernel_tic_ms(0) - master_css_start);
 
 		// parse elements attributes
+		uint64_t attrs_start = kernel_tic_ms(0);
 		doc->m_root->parse_attributes();
+		uint32_t attrs_ms = (uint32_t)(kernel_tic_ms(0) - attrs_start);
 
 		// parse style sheets linked in document
 		media_query_list::ptr media;
+		uint64_t inline_css_start = kernel_tic_ms(0);
 		for (css_text::vector::iterator css = doc->m_css.begin(); css != doc->m_css.end(); css++)
 		{
 			if (!css->media.empty())
@@ -115,32 +384,53 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 		}
 		// Sort css selectors using CSS rules.
 		doc->m_styles.sort_selectors();
+		uint32_t inline_css_ms = (uint32_t)(kernel_tic_ms(0) - inline_css_start);
 
 		// get current media features
+		uint64_t media_start = kernel_tic_ms(0);
 		if (!doc->m_media_lists.empty())
 		{
 			doc->update_media_lists(doc->m_media);
 		}
+		uint32_t media_ms = (uint32_t)(kernel_tic_ms(0) - media_start);
 
 		// Apply parsed styles.
+		uint64_t doc_css_start = kernel_tic_ms(0);
 		doc->m_root->apply_stylesheet(doc->m_styles);
+		uint32_t doc_css_ms = (uint32_t)(kernel_tic_ms(0) - doc_css_start);
 
 		// Apply user styles if any
+		uint64_t user_css_start = kernel_tic_ms(0);
 		if (user_styles)
 		{
 			doc->m_root->apply_stylesheet(*user_styles);
 		}
+		uint32_t user_css_ms = (uint32_t)(kernel_tic_ms(0) - user_css_start);
 
 		// Parse applied styles in the elements
+		uint64_t parse_styles_start = kernel_tic_ms(0);
+		reset_parse_style_profile();
 		doc->m_root->parse_styles();
+		dump_parse_style_profile();
+		dump_dom_internal_profile();
+		uint32_t parse_styles_ms = (uint32_t)(kernel_tic_ms(0) - parse_styles_start);
 
 		// Now the m_tabular_elements is filled with tabular elements.
 		// We have to check the tabular elements for missing table elements
 		// and create the anonymous boxes in visual table layout
+		uint64_t fix_tables_start = kernel_tic_ms(0);
 		doc->fix_tables_layout();
+		uint32_t fix_tables_ms = (uint32_t)(kernel_tic_ms(0) - fix_tables_start);
 
 		// Fanaly initialize elements
+		uint64_t init_start = kernel_tic_ms(0);
 		doc->m_root->init();
+		uint32_t init_ms = (uint32_t)(kernel_tic_ms(0) - init_start);
+
+		klog("[xBrowser] create dom detail: gumbo=%u node=%u master_css=%u attrs=%u inline_css=%u media=%u doc_css=%u user_css=%u parse_styles=%u fix_tables=%u init=%u total=%u ms\n",
+			gumbo_ms, create_node_ms, master_css_ms, attrs_ms, inline_css_ms, media_ms,
+			doc_css_ms, user_css_ms, parse_styles_ms, fix_tables_ms, init_ms,
+			(uint32_t)(kernel_tic_ms(0) - total_start));
 	}
 
 	return doc;
@@ -229,7 +519,7 @@ litehtml::uint_ptr litehtml::document::add_font( const tchar_t* name, int size, 
 		fi.font = m_container->create_font(name, size, fw, fs, decor, &fi.metrics);
 		m_fonts[key] = fi;
 		ret = fi.font;
-		if(fm)
+		if(font_metrics_ptr_writable_doc(fm))
 		{
 			*fm = fi.metrics;
 		}
@@ -239,6 +529,7 @@ litehtml::uint_ptr litehtml::document::add_font( const tchar_t* name, int size, 
 
 litehtml::uint_ptr litehtml::document::get_font( const tchar_t* name, int size, const tchar_t* weight, const tchar_t* style, const tchar_t* decoration, font_metrics* fm )
 {
+	uint64_t start_ms = kernel_tic_ms(0);
 	if( !name || (name && !t_strcasecmp(name, _t("inherit"))) )
 	{
 		name = m_container->get_default_font_name();
@@ -247,6 +538,21 @@ litehtml::uint_ptr litehtml::document::get_font( const tchar_t* name, int size, 
 	if(!size)
 	{
 		size = container()->get_default_font_size();
+	}
+
+	if(m_last_font_valid &&
+		m_last_font_size == size &&
+		m_last_font_name == name &&
+		m_last_font_weight == weight &&
+		m_last_font_style == style &&
+		m_last_font_decoration == decoration)
+	{
+		if(fm)
+		{
+			*fm = m_last_font_metrics;
+		}
+		profile_get_font(true, start_ms);
+		return m_last_font;
 	}
 
 	tchar_t strSize[20];
@@ -270,9 +576,35 @@ litehtml::uint_ptr litehtml::document::get_font( const tchar_t* name, int size, 
 		{
 			*fm = el->second.metrics;
 		}
+		m_last_font_valid = true;
+		m_last_font_name = name;
+		m_last_font_weight = weight;
+		m_last_font_style = style;
+		m_last_font_decoration = decoration;
+		m_last_font_size = size;
+		m_last_font = el->second.font;
+		m_last_font_metrics = el->second.metrics;
+		profile_get_font(true, start_ms);
 		return el->second.font;
 	}
-	return add_font(name, size, weight, style, decoration, fm);
+	uint_ptr font = add_font(name, size, weight, style, decoration, fm);
+	if(font)
+	{
+		fonts_map::iterator cached = m_fonts.find(key);
+		if(cached != m_fonts.end())
+		{
+			m_last_font_valid = true;
+			m_last_font_name = name;
+			m_last_font_weight = weight;
+			m_last_font_style = style;
+			m_last_font_decoration = decoration;
+			m_last_font_size = size;
+			m_last_font = cached->second.font;
+			m_last_font_metrics = cached->second.metrics;
+		}
+	}
+	profile_get_font(false, start_ms);
+	return font;
 }
 
 int litehtml::document::render( int max_width, render_type rt )
@@ -311,6 +643,7 @@ void litehtml::document::draw( uint_ptr hdc, int x, int y, const position* clip 
 
 int litehtml::document::cvt_units( const tchar_t* str, int fontSize, bool* is_percent/*= 0*/ ) const
 {
+	uint64_t start_ms = kernel_tic_ms(0);
 	if(!str)	return 0;
 	
 	css_length val;
@@ -319,13 +652,17 @@ int litehtml::document::cvt_units( const tchar_t* str, int fontSize, bool* is_pe
 	{
 		*is_percent = true;
 	}
-	return cvt_units(val, fontSize);
+	int ret = cvt_units(val, fontSize);
+	profile_cvt_units(start_ms);
+	return ret;
 }
 
 int litehtml::document::cvt_units( css_length& val, int fontSize, int size ) const
 {
+	uint64_t start_ms = kernel_tic_ms(0);
 	if(val.is_predefined())
 	{
+		profile_cvt_units(start_ms);
 		return 0;
 	}
 	int ret = 0;
@@ -370,6 +707,7 @@ int litehtml::document::cvt_units( css_length& val, int fontSize, int size ) con
 		ret = (int) val.val();
 		break;
 	}
+	profile_cvt_units(start_ms);
 	return ret;
 }
 
@@ -519,7 +857,7 @@ bool litehtml::document::on_lbutton_up( int x, int y, int client_x, int client_y
 
 litehtml::element::ptr litehtml::document::create_element(const tchar_t* tag_name, const string_map& attributes)
 {
-	element::ptr newTag;
+	element::ptr newTag = nullptr;
 	if(m_container)
 	{
 		newTag = m_container->create_element(tag_name, attributes, this);
@@ -528,52 +866,52 @@ litehtml::element::ptr litehtml::document::create_element(const tchar_t* tag_nam
 	{
 		if(!t_strcmp(tag_name, _t("br")))
 		{
-			newTag = new litehtml::el_break(this);
+			newTag = litehtml_alloc<litehtml::el_break>("el_break", this);
 		} else if(!t_strcmp(tag_name, _t("p")))
 		{
-			newTag = new litehtml::el_para(this);
+			newTag = litehtml_alloc<litehtml::el_para>("el_para", this);
 		} else if(!t_strcmp(tag_name, _t("img")))
 		{
-			newTag = new litehtml::el_image(this);
+			newTag = litehtml_alloc<litehtml::el_image>("el_image", this);
 		} else if(!t_strcmp(tag_name, _t("table")))
 		{
-			newTag = new litehtml::el_table(this);
+			newTag = litehtml_alloc<litehtml::el_table>("el_table", this);
 		} else if(!t_strcmp(tag_name, _t("td")) || !t_strcmp(tag_name, _t("th")))
 		{
-			newTag = new litehtml::el_td(this);
+			newTag = litehtml_alloc<litehtml::el_td>("el_td", this);
 		} else if(!t_strcmp(tag_name, _t("link")))
 		{
-			newTag = new litehtml::el_link(this);
+			newTag = litehtml_alloc<litehtml::el_link>("el_link", this);
 		} else if(!t_strcmp(tag_name, _t("title")))
 		{
-			newTag = new litehtml::el_title(this);
+			newTag = litehtml_alloc<litehtml::el_title>("el_title", this);
 		} else if(!t_strcmp(tag_name, _t("a")))
 		{
-			newTag = new litehtml::el_anchor(this);
+			newTag = litehtml_alloc<litehtml::el_anchor>("el_anchor", this);
 		} else if(!t_strcmp(tag_name, _t("tr")))
 		{
-			newTag = new litehtml::el_tr(this);
+			newTag = litehtml_alloc<litehtml::el_tr>("el_tr", this);
 		} else if(!t_strcmp(tag_name, _t("style")))
 		{
-			newTag = new litehtml::el_style(this);
+			newTag = litehtml_alloc<litehtml::el_style>("el_style", this);
 		} else if(!t_strcmp(tag_name, _t("base")))
 		{
-			newTag = new litehtml::el_base(this);
+			newTag = litehtml_alloc<litehtml::el_base>("el_base", this);
 		} else if(!t_strcmp(tag_name, _t("body")))
 		{
-			newTag = new litehtml::el_body(this);
+			newTag = litehtml_alloc<litehtml::el_body>("el_body", this);
 		} else if(!t_strcmp(tag_name, _t("div")))
 		{
-			newTag = new litehtml::el_div(this);
+			newTag = litehtml_alloc<litehtml::el_div>("el_div", this);
 		} else if(!t_strcmp(tag_name, _t("script")))
 		{
-			newTag = new litehtml::el_script(this);
+			newTag = litehtml_alloc<litehtml::el_script>("el_script", this);
 		} else if(!t_strcmp(tag_name, _t("font")))
 		{
-			newTag = new litehtml::el_font(this);
+			newTag = litehtml_alloc<litehtml::el_font>("el_font", this);
 		} else
 		{
-			newTag = new litehtml::html_tag(this);
+			newTag = litehtml_alloc<litehtml::html_tag>("html_tag", this);
 		}
 	}
 	if(newTag)
@@ -651,7 +989,22 @@ void litehtml::document::update_master_styles()
 {
 	if(m_root && m_context)
 	{
+		uint64_t update_start = kernel_tic_ms(0);
+		m_root->refresh_styles();
+		uint32_t refresh_ms = (uint32_t)(kernel_tic_ms(0) - update_start);
+
+		uint64_t apply_start = kernel_tic_ms(0);
+		m_root->apply_stylesheet(m_context->master_css());
+		uint32_t apply_ms = (uint32_t)(kernel_tic_ms(0) - apply_start);
+
+		uint64_t parse_start = kernel_tic_ms(0);
+		reset_parse_style_profile();
 		m_root->parse_styles();
+		dump_parse_style_profile();
+		uint32_t parse_ms = (uint32_t)(kernel_tic_ms(0) - parse_start);
+
+		klog("[xBrowser] update master styles: refresh=%u ms apply=%u ms parse=%u ms total=%u ms\n",
+			refresh_ms, apply_ms, parse_ms, (uint32_t)(kernel_tic_ms(0) - update_start));
 	}
 }
 
@@ -668,21 +1021,26 @@ void litehtml::document::add_media_list( media_query_list::ptr list )
 
 void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 {
+	g_create_node_profile.calls++;
 	switch (node->type)
 	{
 	case GUMBO_NODE_ELEMENT:
 		{
+			g_create_node_profile.element_nodes++;
 			string_map attrs;
 			GumboAttribute* attr;
+			uint64_t attrs_start = kernel_tic_ms(0);
 			for (unsigned int i = 0; i < node->v.element.attributes.length; i++)
 			{
 				attr = (GumboAttribute*)node->v.element.attributes.data[i];
 				attrs[tstring(litehtml_from_utf8(attr->name))] = litehtml_from_utf8(attr->value);
 			}
+			add_create_node_time(g_create_node_profile.attrs_ms, attrs_start);
 
 
-			element::ptr ret;
+			element::ptr ret = nullptr;
 			const char* tag = gumbo_normalized_tagname(node->v.element.tag);
+			uint64_t create_start = kernel_tic_ms(0);
 			if (tag[0])
 			{
 				ret = create_element(litehtml_from_utf8(tag), attrs);
@@ -697,90 +1055,150 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 					ret = create_element(litehtml_from_utf8(strA.c_str()), attrs);
 				}
 			}
+			add_create_node_time(g_create_node_profile.create_element_ms, create_start);
 			if (ret)
 			{
 				elements_vector child;
+				uint64_t children_start = kernel_tic_ms(0);
 				for (unsigned int i = 0; i < node->v.element.children.length; i++)
 				{
 					child.clear();
 					create_node(static_cast<GumboNode*> (node->v.element.children.data[i]), child);
-					std::for_each(child.begin(), child.end(), 
-						[&ret](element::ptr& el)
-						{
-							ret->appendChild(el);
-						}
-					);
+					for(auto& el : child)
+					{
+						ret->appendChild(el);
+					}
 				}
+				add_create_node_time(g_create_node_profile.children_ms, children_start);
 				elements.push_back(ret);
 			}
 		}
 		break;
 	case GUMBO_NODE_TEXT:
 		{
+			g_create_node_profile.text_nodes++;
+			uint64_t text_start = kernel_tic_ms(0);
 			std::string str;
+			std::string spaces;
 			std::string str_in = node->v.text.text;
 			unsigned char c;
+			auto flush_text = [&]()
+			{
+				if (!str.empty())
+				{
+					element::ptr text = litehtml_alloc<el_text>("el_text", str.c_str(), this);
+					if(text)
+					{
+						elements.push_back(text);
+					}
+					str.clear();
+				}
+			};
+			auto flush_spaces = [&]()
+			{
+				if (!spaces.empty())
+				{
+					element::ptr space = litehtml_alloc<el_space>("el_space", spaces.c_str(), this);
+					if(space)
+					{
+						elements.push_back(space);
+					}
+					spaces.clear();
+				}
+			};
 			for (size_t i = 0; i < str_in.length(); i++)
 			{
 				c = (unsigned char) str_in[i];
-				if (c <= ' ' && (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'))
+				if (c == ' ' || c == '\t' || c == '\r' || c == '\f')
 				{
-					if (!str.empty())
-					{
-						elements.push_back(new el_text(str.c_str(), this));
-						str.clear();
-					}
-					str += c;
-					elements.push_back(new el_space(str.c_str(), this));
-					str.clear();
+					flush_text();
+					spaces += c;
+				}
+				else if (c == '\n')
+				{
+					flush_text();
+					flush_spaces();
+					spaces += c;
+					flush_spaces();
 				}
 				// CJK character range - simplified for UTF-8
 				else if (c >= 0xE4 && c <= 0xE9)
 				{
-					if (!str.empty())
-					{
-						elements.push_back(new el_text(str.c_str(), this));
-						str.clear();
-					}
+					flush_text();
+					flush_spaces();
 					// For UTF-8 CJK characters, we need to capture 3 bytes
 					str += c;
 					if (i + 1 < str_in.length()) str += str_in[++i];
 					if (i + 1 < str_in.length()) str += str_in[++i];
-					elements.push_back(new el_text(str.c_str(), this));
+					element::ptr text = litehtml_alloc<el_text>("el_text", str.c_str(), this);
+					if(text)
+					{
+						elements.push_back(text);
+					}
 					str.clear();
 				}
 				else
 				{
+					flush_spaces();
 					str += c;
 				}
 			}
-			if (!str.empty())
-			{
-				elements.push_back(new el_text(str.c_str(), this));
-			}
+			flush_text();
+			flush_spaces();
+			add_create_node_time(g_create_node_profile.text_split_ms, text_start);
 		}
 		break;
 	case GUMBO_NODE_CDATA:
 		{
-			element::ptr ret = new el_cdata(this);
-			ret->set_data(litehtml_from_utf8(node->v.text.text));
-			elements.push_back(ret);
+			element::ptr ret = litehtml_alloc<el_cdata>("el_cdata", this);
+			if(ret)
+			{
+				ret->set_data(litehtml_from_utf8(node->v.text.text));
+				elements.push_back(ret);
+			}
 		}
 		break;
 	case GUMBO_NODE_COMMENT:
 		{
-			element::ptr ret = new el_comment(this);
-			ret->set_data(litehtml_from_utf8(node->v.text.text));
-			elements.push_back(ret);
+			element::ptr ret = litehtml_alloc<el_comment>("el_comment", this);
+			if(ret)
+			{
+				ret->set_data(litehtml_from_utf8(node->v.text.text));
+				elements.push_back(ret);
+			}
 		}
 		break;
 	case GUMBO_NODE_WHITESPACE:
 		{
-			tstring str = litehtml_from_utf8(node->v.text.text);
-			for (size_t i = 0; i < str.length(); i++)
+			std::string spaces;
+			std::string str_in = node->v.text.text;
+			auto flush_spaces = [&]()
 			{
-				elements.push_back(new el_space(str.substr(i, 1).c_str(), this));
+				if(!spaces.empty())
+				{
+					element::ptr space = litehtml_alloc<el_space>("el_space", spaces.c_str(), this);
+					if(space)
+					{
+						elements.push_back(space);
+					}
+					spaces.clear();
+				}
+			};
+			for(size_t i = 0; i < str_in.length(); i++)
+			{
+				unsigned char c = (unsigned char)str_in[i];
+				if(c == '\n')
+				{
+					flush_spaces();
+					spaces += c;
+					flush_spaces();
+				}
+				else
+				{
+					spaces += c;
+				}
 			}
+			flush_spaces();
 		}
 		break;
 	default:
@@ -840,7 +1258,12 @@ void litehtml::document::fix_table_children(element::ptr& el_ptr, style_display 
 
 	auto flush_elements = [&]()
 	{
-		element::ptr annon_tag = new html_tag(this);
+		element::ptr annon_tag = litehtml_alloc<html_tag>("html_tag(table-child)", this);
+		if(!annon_tag)
+		{
+			tmp.clear();
+			return;
+		}
 		style st;
 		st.add_property(_t("display"), disp_str, 0, false);
 		annon_tag->add_style(st);
@@ -952,7 +1375,11 @@ void litehtml::document::fix_table_parent(element::ptr& el_ptr, style_display di
 			}
 
 			// extract elements with the same display and wrap them with anonymous object
-			element::ptr annon_tag = new html_tag(this);
+			element::ptr annon_tag = litehtml_alloc<html_tag>("html_tag(table-parent)", this);
+			if(!annon_tag)
+			{
+				return;
+			}
 			style st;
 			st.add_property(_t("display"), disp_str, 0, false);
 			annon_tag->add_style(st);

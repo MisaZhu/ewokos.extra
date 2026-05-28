@@ -44,8 +44,10 @@ namespace litehtml
 		tstring					m_tag;
 		litehtml::style			m_style;
 		string_map				m_attrs;
+		mutable string_map		m_style_property_cache;
 		vertical_align			m_vertical_align;
 		text_align				m_text_align;
+		text_transform			m_text_transform;
 		style_display			m_display;
 		list_style_type			m_list_style_type;
 		list_style_position		m_list_style_position;
@@ -93,6 +95,7 @@ namespace litehtml
 		int						m_border_spacing_x;
 		int						m_border_spacing_y;
 		border_collapse			m_border_collapse;
+		void					init_font(const tchar_t* own_font_size, const tchar_t* own_name, const tchar_t* own_weight, const tchar_t* own_style, const tchar_t* own_decoration);
 
 		virtual void			select_all(const css_selector& selector, elements_vector& res);
 
@@ -157,6 +160,8 @@ namespace litehtml
 		virtual bool				set_class(const tchar_t* pclass, bool add) override;
 		virtual bool				is_replaced() const override;
 		virtual int					line_height() const override;
+		virtual text_align			get_text_align() const override;
+		virtual text_transform		get_text_transform() const override;
 		virtual white_space			get_white_space() const override;
 		virtual style_display		get_display() const override;
 		virtual visibility			get_visibility() const override;
@@ -164,6 +169,7 @@ namespace litehtml
 		virtual void				draw(uint_ptr hdc, int x, int y, const position* clip) override;
 		virtual void				draw_background(uint_ptr hdc, int x, int y, const position* clip) override;
 
+		virtual const tchar_t*		get_style_property_own(const tchar_t* name) const override;
 		virtual const tchar_t*		get_style_property(const tchar_t* name, bool inherited, const tchar_t* def = 0) override;
 		virtual uint_ptr			get_font(font_metrics* fm = 0) override;
 		virtual int					get_font_size() const override;
@@ -226,6 +232,7 @@ namespace litehtml
 		int							render_table(int x, int y, int max_width, bool second_pass = false);
 		int							fix_line_width(int max_width, element_float flt);
 		void						parse_background();
+		void						clear_style_property_cache() const;
 		void						init_background_paint( position pos, background_paint &bg_paint, const background* bg );
 		void						draw_list_marker( uint_ptr hdc, const position &pos );
 		void						parse_nth_child_params( tstring param, int &num, int &off );
@@ -243,4 +250,3 @@ namespace litehtml
 		return m_children;
 	}
 }
-

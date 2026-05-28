@@ -1,6 +1,12 @@
 #include "html.h"
 #include "el_text.h"
 #include "document.h"
+#include <stdint.h>
+#include <ewoksys/kernel_tic.h>
+
+namespace litehtml {
+void profile_text_parse(uint32_t transform_ms, uint32_t measure_ms, uint64_t start_ms);
+}
 
 litehtml::el_text::el_text(const tchar_t* text, litehtml::document* doc) : element(doc)
 {
@@ -43,7 +49,18 @@ const litehtml::tchar_t* litehtml::el_text::get_style_property( const tchar_t* n
 
 void litehtml::el_text::parse_styles(bool is_reparse)
 {
-	m_text_transform	= (text_transform)	value_index(get_style_property(_t("text-transform"), true,	_t("none")),	text_transform_strings,	text_transform_none);
+	(void)is_reparse;
+	uint64_t start_ms = kernel_tic_ms(0);
+	uint32_t transform_ms = 0;
+	uint32_t measure_ms = 0;
+	if(m_parent)
+	{
+		m_text_transform = m_parent->get_text_transform();
+	}
+	else
+	{
+		m_text_transform = text_transform_none;
+	}
 	if(m_text_transform != text_transform_none)
 	{
 		m_transformed_text	= m_text;
@@ -51,7 +68,9 @@ void litehtml::el_text::parse_styles(bool is_reparse)
 		document* doc = get_document();
 		if (doc && doc->container())
 		{
+			uint64_t transform_start = kernel_tic_ms(0);
 			doc->container()->transform_text(m_transformed_text, m_text_transform);
+			transform_ms += (uint32_t)(kernel_tic_ms(0) - transform_start);
 		}
 	}
 
@@ -90,13 +109,16 @@ void litehtml::el_text::parse_styles(bool is_reparse)
 		document* doc = get_document();
 		if (doc && doc->container())
 		{
+			uint64_t measure_start = kernel_tic_ms(0);
 			m_size.width	= doc->container()->text_width(m_use_transformed ? m_transformed_text.c_str() : m_text.c_str(), font);
+			measure_ms += (uint32_t)(kernel_tic_ms(0) - measure_start);
 		} else
 		{
 			m_size.width = 0;
 		}
 	}
 	m_draw_spaces = fm.draw_spaces;
+	litehtml::profile_text_parse(transform_ms, measure_ms, start_ms);
 }
 
 int litehtml::el_text::get_base_line()
