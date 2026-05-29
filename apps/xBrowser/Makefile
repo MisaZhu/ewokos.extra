@@ -21,6 +21,7 @@ all: $(BROWSER)
 
 $(BROWSER): $(BROWSER_OBJS) \
 		$(BUILD_DIR)/lib/liblitehtml.a \
+		$(BUILD_DIR)/lib/libtinyhttpsc.a \
 		$(BUILD_DIR)/lib/libsocket.a \
 		$(BUILD_DIR)/lib/libWidgetWebview.a \
 		$(BUILD_DIR)/lib/libwidget++.a \
