@@ -5,7 +5,7 @@
 #include <litehtml.h>
 #include <graph/graph.h>
 #include <font/font.h>
-#include <cstdint>
+#include <stdint.h>
 #include <unordered_map>
 
 class el_input;

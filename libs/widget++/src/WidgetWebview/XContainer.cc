@@ -13,7 +13,7 @@
 #include <tinyhttpsc/tinyhttpsc.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cstdint>
+#include <stdint.h>
 
 using namespace litehtml;
 using namespace Ewok;

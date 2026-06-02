@@ -15,6 +15,10 @@ FFMPEG_EXTRA_CFLAGS += -march=armv7-a
 endif
 endif
 
+ifeq ($(ARCH),x86)
+FFMPEG_EXTRA_CONFIGURE_FLAGS += --disable-x86asm
+endif
+
 CONFIGURE_FLAGS = \
 	--prefix=$(PREFIX) \
 	--libdir=$(PREFIX)/lib \
@@ -66,7 +70,8 @@ CONFIGURE_FLAGS = \
 	--enable-bsf=aac_adtstoasc \
 	--extra-cflags="$(CFLAGS) $(FFMPEG_EXTRA_CFLAGS) -I$(SYS_BUILD_DIR)/include -include $(SYS_BUILD_DIR)/include/string.h -include $(SYS_BUILD_DIR)/include/math.h" \
 	--extra-ldflags="-nostartfiles -nostdlib -L$(SYS_BUILD_DIR)/lib -Wl,-Ttext=100" \
-	--extra-libs="-Wl,--start-group -lewoksys -lc -lgloss -lgcc -Wl,--end-group -lm -lopenlibm"
+	--extra-libs="-Wl,--start-group -lewoksys -lc -lgloss -lgcc -Wl,--end-group -lm -lopenlibm" \
+	$(FFMPEG_EXTRA_CONFIGURE_FLAGS)
 
 TARGET_LIBS = \
 	$(SYS_BUILD_DIR)/lib/libavcodec.a \
@@ -78,6 +83,8 @@ TARGET_LIBS = \
 all: $(TARGET_LIBS)
 
 ffbuild/config.mak: configure
+	@test -f libavfilter/allfilters.c || : > libavfilter/allfilters.c
+	@test -f libavdevice/alldevices.c || : > libavdevice/alldevices.c
 	./configure $(CONFIGURE_FLAGS)
 
 $(TARGET_LIBS): ffbuild/config.mak
