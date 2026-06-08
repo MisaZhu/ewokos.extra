@@ -1,6 +1,5 @@
 
 all: 
-	mkdir -p build
 	cd SDL2; make
 	cd ffmpeg; make
 	cd portablegl; make
