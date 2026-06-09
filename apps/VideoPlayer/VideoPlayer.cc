@@ -162,6 +162,15 @@ public:
 		lastTot = 0;
 	}
 
+	~VideoPlayerWin(void) {
+		stopVideo();
+	}
+
+	bool onClose(void) {
+		stopVideo();
+		return WidgetWin::onClose();
+	}
+
 	void setVideo(WidgetVideo* v) {
 		video = v;
 	}
@@ -422,5 +431,6 @@ int main(int argc, char** argv) {
 	win.updateUi();
 
 	widgetXRun(&x, &win);
+	win.stopVideo();
 	return 0;
 }

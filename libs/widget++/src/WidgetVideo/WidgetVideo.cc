@@ -87,6 +87,7 @@ typedef struct {
 } widget_video_pcm_t;
 
 typedef struct {
+	WidgetVideo* owner;
 	int enabled;
 	widget_video_pcm_t* pcm;
 	struct SwrContext* swr;
@@ -106,6 +107,16 @@ typedef struct {
 	uint8_t* convert_buf;
 	int convert_buf_size;
 } widget_video_audio_t;
+
+static bool audio_should_stop(widget_video_audio_t* audio) {
+	if(audio == NULL)
+		return true;
+	if(audio->queue_stop)
+		return true;
+	if(audio->owner != NULL && audio->owner->isStopRequested())
+		return true;
+	return false;
+}
 
 typedef struct {
 	int started;
@@ -366,7 +377,8 @@ static int pcm_buf_avail(widget_video_pcm_t* pcm) {
 	return ret;
 }
 
-static int pcm_wait_avail(widget_video_pcm_t* pcm, int* avail, int timeout_ms) {
+static int pcm_wait_avail(widget_video_audio_t* audio, int* avail, int timeout_ms) {
+	widget_video_pcm_t* pcm = audio->pcm;
 	const int period_bytes = pcm->config.period_size * pcm->frame_size;
 	int min_avail = period_bytes / 4;
 	const int max_try_count = timeout_ms / AUDIO_WAIT_SLEEP_MS;
@@ -378,6 +390,8 @@ static int pcm_wait_avail(widget_video_pcm_t* pcm, int* avail, int timeout_ms) {
 
 	*avail = 0;
 	for(;;) {
+		if(audio_should_stop(audio))
+			return -1;
 		ret = pcm_buf_avail(pcm);
 		if(ret < 0)
 			return ret;
@@ -391,7 +405,8 @@ static int pcm_wait_avail(widget_video_pcm_t* pcm, int* avail, int timeout_ms) {
 	}
 }
 
-static int pcm_write(widget_video_pcm_t* pcm, const void* data, unsigned int count) {
+static int pcm_write(widget_video_audio_t* audio, const void* data, unsigned int count) {
+	widget_video_pcm_t* pcm = audio->pcm;
 	const char* p = (const char*)data;
 	int period_bytes = pcm->config.period_size * pcm->frame_size;
 	int avail = 0;
@@ -404,7 +419,11 @@ static int pcm_write(widget_video_pcm_t* pcm, const void* data, unsigned int cou
 
 	while(bytes > 0) {
 		int chunk;
-		int ret = pcm_wait_avail(pcm, &avail, 2000);
+		int ret;
+
+		if(audio_should_stop(audio))
+			return -1;
+		ret = pcm_wait_avail(audio, &avail, 2000);
 		if(ret < 0 || avail == 0)
 			break;
 
@@ -552,7 +571,7 @@ static int audio_queue_write(widget_video_audio_t* audio, const uint8_t* data, s
 		}
 		pthread_mutex_unlock(&audio->queue_mutex);
 
-		if(stop)
+		if(stop || (audio->owner != NULL && audio->owner->isStopRequested()))
 			return -1;
 		if(chunk == 0) {
 			proc_usleep(AUDIO_QUEUE_WAIT_US);
@@ -590,7 +609,7 @@ static void* audio_output_thread_entry(void* p) {
 		pthread_mutex_unlock(&audio->queue_mutex);
 
 		if(chunk > 0) {
-			if(pcm_write(audio->pcm, tmp, chunk) != 0) {
+			if(pcm_write(audio, tmp, chunk) != 0) {
 				pthread_mutex_lock(&audio->queue_mutex);
 				audio->queue_stop = true;
 				audio->queue_size = 0;
@@ -618,7 +637,7 @@ static int init_audio_playback(widget_video_audio_t* audio, WidgetVideo* owner, 
 
 	memset(audio, 0, sizeof(*audio));
 	memset(&stereo_layout, 0, sizeof(stereo_layout));
-	(void)owner;
+	audio->owner = owner;
 	av_channel_layout_default(&stereo_layout, 2);
 	audio->out_layout = stereo_layout;
 	audio->out_fmt = AV_SAMPLE_FMT_S16;
@@ -1804,6 +1823,13 @@ void WidgetVideo::decodeLoop() {
 
 		av_packet_free(&packet);
 		packet = NULL;
+
+		/*
+		 * On close/stop, worker threads may still be blocked in packet_queue_pop().
+		 * Abort the pipeline before joining so queue waits are released promptly.
+		 */
+		if(isStopRequested() || restart_for_seek || pipeline_is_aborted(&pipeline))
+			pipeline_abort(&pipeline);
 
 		if(video_worker.thread_running) {
 			pthread_join(video_worker.thread, NULL);
