@@ -40,10 +40,13 @@ static const char* PCM_DEVICES[] = {
 
 static const int VIDEO_PRESENT_LEAD_MIN_MS = 4;
 static const int VIDEO_PRESENT_LEAD_MAX_MS = 40;
+static const int VIDEO_PACKET_HIGH_WATER = 48;
+static const int AUDIO_PACKET_HIGH_WATER = 96;
 static const size_t AUDIO_QUEUE_CAPACITY = 256 * 1024;
 static const size_t AUDIO_QUEUE_CHUNK = 8192;
 static const int AUDIO_WAIT_SLEEP_MS = 1;
 static const int AUDIO_QUEUE_WAIT_US = 1000;
+static const int DEMUX_BACKPRESSURE_US = 5000;
 
 typedef struct {
 	WidgetVideo* owner;
@@ -245,6 +248,15 @@ static int packet_queue_pop(widget_video_packet_queue_t* queue, AVPacket** packe
 	return 0;
 }
 
+static int packet_queue_count(widget_video_packet_queue_t* queue) {
+	int count;
+
+	pthread_mutex_lock(&queue->mutex);
+	count = queue->count;
+	pthread_mutex_unlock(&queue->mutex);
+	return count;
+}
+
 static int pipeline_init(widget_video_pipeline_t* pipeline, WidgetVideo* owner) {
 	int err;
 
@@ -375,8 +387,7 @@ static int pcm_wait_avail(widget_video_pcm_t* pcm, int* avail, int timeout_ms) {
 		}
 		if(try_count++ >= max_try_count)
 			return ret;
-		//proc_usleep(AUDIO_WAIT_SLEEP_MS * 1000);
-		proc_yield();
+		proc_usleep(AUDIO_WAIT_SLEEP_MS * 1000);
 	}
 }
 
@@ -544,8 +555,7 @@ static int audio_queue_write(widget_video_audio_t* audio, const uint8_t* data, s
 		if(stop)
 			return -1;
 		if(chunk == 0) {
-			//proc_usleep(AUDIO_QUEUE_WAIT_US);
-			proc_yield();
+			proc_usleep(AUDIO_QUEUE_WAIT_US);
 			continue;
 		}
 		offset += chunk;
@@ -593,8 +603,7 @@ static void* audio_output_thread_entry(void* p) {
 
 		if(stop)
 			break;
-		//proc_usleep(AUDIO_QUEUE_WAIT_US);
-		proc_yield();
+		proc_usleep(AUDIO_QUEUE_WAIT_US);
 	}
 
 	pthread_mutex_lock(&audio->queue_mutex);
@@ -1749,6 +1758,10 @@ void WidgetVideo::decodeLoop() {
 			updateStatus(audio_status);
 
 		while(!isStopRequested() && !pipeline_is_aborted(&pipeline)) {
+			int video_backlog = packet_queue_count(&pipeline.video_queue);
+			int audio_backlog = audio_worker.thread_running ?
+					packet_queue_count(&pipeline.audio_queue) : 0;
+
 			if(takeSeekRequest(&pending_seek_ms)) {
 				restart_for_seek = true;
 				apply_seek = true;
@@ -1759,6 +1772,13 @@ void WidgetVideo::decodeLoop() {
 			wait_if_paused(this, NULL);
 			if(isStopRequested())
 				break;
+
+			if(video_backlog >= VIDEO_PACKET_HIGH_WATER ||
+					(audio_worker.thread_running &&
+					 audio_backlog >= AUDIO_PACKET_HIGH_WATER)) {
+				proc_usleep(DEMUX_BACKPRESSURE_US);
+				continue;
+			}
 
 			err = av_read_frame(fmt_ctx, packet);
 			if(err < 0) {

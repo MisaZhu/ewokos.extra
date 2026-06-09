@@ -30,6 +30,8 @@ public:
 			p = 0.0f;
 		if(p > 1.0f)
 			p = 1.0f;
+		if(progress == p)
+			return;
 		progress = p;
 		update();
 	}
@@ -41,6 +43,10 @@ public:
 
 	bool isDragging(void) const {
 		return dragging;
+	}
+
+	float getProgress(void) const {
+		return progress;
 	}
 
 protected:
@@ -122,6 +128,12 @@ class VideoPlayerWin : public WidgetWin {
 	LabelButton* muteBtn;
 	LabelButton* loopBtn;
 	string loadedFile;
+	bool uiStateReady;
+	bool lastPlaying;
+	bool lastMuted;
+	bool lastLoop;
+	uint32_t lastCur;
+	uint32_t lastTot;
 
 protected:
 	void onDialoged(XWin* from, int res, void* arg) {
@@ -142,6 +154,12 @@ public:
 		progressBar = NULL;
 		muteBtn = NULL;
 		loopBtn = NULL;
+		uiStateReady = false;
+		lastPlaying = false;
+		lastMuted = false;
+		lastLoop = false;
+		lastCur = 0;
+		lastTot = 0;
 	}
 
 	void setVideo(WidgetVideo* v) {
@@ -220,45 +238,78 @@ public:
 		updateUi();
 	}
 
-	void updateUi(void) {
+	void updateUi(bool force = false) {
 		uint32_t cur;
 		uint32_t tot;
+		bool playingState;
+		bool mutedState;
+		bool loopState;
+		float progress;
+		const char* playLabel;
+		const char* muteLabel;
+		const char* loopLabel;
 		char buf[64];
 
 		if(video == NULL)
 			return;
 
-		if(playBtn != NULL)
-			playBtn->setLabel(video->isPlaying() ? "||" : ">");
-
-		if(muteBtn != NULL)
-			muteBtn->setLabel(video->isMutedState() ? "Muted" : "Sound");
-
-		if(loopBtn != NULL)
-			loopBtn->setLabel(video->isLoopState() ? "Loop*" : "Loop");
-
+		playingState = video->isPlaying();
+		mutedState = video->isMutedState();
+		loopState = video->isLoopState();
 		cur = video->getCurrentMs();
 		tot = video->getTotalMs();
 
-		if(progressBar != NULL) {
-			if(!progressBar->isDragging() && tot > 0)
-				progressBar->setProgress((float)cur / (float)tot);
-			else if(!progressBar->isDragging())
-				progressBar->setProgress(0.0f);
+		if(!force && uiStateReady &&
+				lastPlaying == playingState &&
+				lastMuted == mutedState &&
+				lastLoop == loopState &&
+				lastCur == cur &&
+				lastTot == tot) {
+			return;
 		}
 
-		if(timeLabel != NULL) {
-			snprintf(buf, sizeof(buf) - 1, "%02d:%02d / %02d:%02d",
-					cur / 60000, (cur / 1000) % 60,
-					tot / 60000, (tot / 1000) % 60);
-			timeLabel->setLabel(buf);
+		playLabel = playingState ? "||" : ">";
+		muteLabel = mutedState ? "Muted" : "Sound";
+		loopLabel = loopState ? "Loop*" : "Loop";
+
+		if(playBtn != NULL && playBtn->getLabel() != playLabel)
+			playBtn->setLabel(playLabel);
+
+		if(muteBtn != NULL && muteBtn->getLabel() != muteLabel)
+			muteBtn->setLabel(muteLabel);
+
+		if(loopBtn != NULL && loopBtn->getLabel() != loopLabel)
+			loopBtn->setLabel(loopLabel);
+
+		if(progressBar != NULL) {
+			if(!progressBar->isDragging() && tot > 0) {
+				progress = (float)cur / (float)tot;
+				if(progressBar->getProgress() != progress)
+					progressBar->setProgress(progress);
+			}
+			else if(!progressBar->isDragging() && progressBar->getProgress() != 0.0f) {
+				progressBar->setProgress(0.0f);
+			}
 		}
+
+		snprintf(buf, sizeof(buf) - 1, "%02d:%02d / %02d:%02d",
+				cur / 60000, (cur / 1000) % 60,
+				tot / 60000, (tot / 1000) % 60);
+		if(timeLabel != NULL && timeLabel->getLabel() != buf)
+			timeLabel->setLabel(buf);
+
+		lastPlaying = playingState;
+		lastMuted = mutedState;
+		lastLoop = loopState;
+		lastCur = cur;
+		lastTot = tot;
+		uiStateReady = true;
 	}
 
 	void onTimer(uint32_t timerFPS, uint32_t timerSteps) {
 		(void)timerFPS;
 		(void)timerSteps;
-		updateUi();
+		updateUi(false);
 	}
 };
 
