@@ -51,6 +51,8 @@ static xwin_t *_main_xwin;
 static pthread_t _x_thread_id;
 static int _x_thread_started;
 static volatile int _video_closing;
+static volatile int _video_shutdown_done;
+static volatile int _video_thread_stopping;
 
 #ifdef HAVE_USPI
 #include "uspi.h"
@@ -69,6 +71,8 @@ static int EWOKOS_SetDisplayMode(_THIS, SDL_VideoDisplay * display, SDL_DisplayM
 static void EWOKOS_VideoQuit(_THIS);
 static int EWOKOS_GetDisplayBounds (_THIS, SDL_VideoDisplay * display, SDL_Rect * rect);
 static void EWOKOS_DestroyWindow(_THIS, SDL_Window * window);
+static void EWOKOS_CloseMainWindow(void);
+static void EWOKOS_DestroyClosedWindow(void);
 
 static int phys_width;
 static int phys_height;
@@ -82,7 +86,6 @@ static bool on_close(xwin_t* xwin) {
     SDL_Window * window = SDL_GetWindowFromID(xwin->xinfo->win);
     if(window == NULL)
         return false;
-
     SDL_SendWindowEvent(window, SDL_WINDOWEVENT_CLOSE, 0, 0);
     return false;
 }
@@ -180,14 +183,37 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
 
 static void EWOKOS_StopVideoThread(void)
 {
+    if (_video_thread_stopping) {
+        return;
+    }
     if (!_x_thread_started) {
         return;
     }
 
-    x_terminate(&_x_);
-    vfs_wakeup(_x_.dev_fsinfo.node, VFS_EVT_RD);
-    pthread_join(_x_thread_id, NULL);
+    _video_thread_stopping = 1;
+    pthread_t tid = _x_thread_id;
     _x_thread_started = 0;
+    x_terminate(&_x_);
+    if (_x_.evt_node != 0) {
+        vfs_wakeup(_x_.evt_node, VFS_EVT_RD);
+    } else if (_x_.dev_fsinfo.node != 0) {
+        vfs_wakeup(_x_.dev_fsinfo.node, VFS_EVT_RD);
+    }
+    pthread_join(tid, NULL);
+    _video_thread_stopping = 0;
+}
+
+static void EWOKOS_ShutdownVideoBackend(const char* from)
+{
+    if (_video_shutdown_done) {
+        return;
+    }
+
+    _video_closing = 1;
+    _video_shutdown_done = 1;
+    EWOKOS_CloseMainWindow();
+    EWOKOS_StopVideoThread();
+    EWOKOS_DestroyClosedWindow();
 }
 
 static void EWOKOS_CloseMainWindow(void)
@@ -441,6 +467,8 @@ EWOKOS_VideoInit(_THIS)
     _main_xwin = NULL;
     _x_thread_started = 0;
     _video_closing = 0;
+    _video_shutdown_done = 0;
+    _video_thread_stopping = 0;
     x_init(&_x_, NULL);    
     _this->driverdata = &_x_;
 
@@ -476,10 +504,7 @@ void
 EWOKOS_VideoQuit(_THIS)
 {
     (void)_this;
-    _video_closing = 1;
-    EWOKOS_CloseMainWindow();
-    EWOKOS_StopVideoThread();
-    EWOKOS_DestroyClosedWindow();
+    EWOKOS_ShutdownVideoBackend("video_quit");
 }
 
 static void
@@ -487,10 +512,7 @@ EWOKOS_DestroyWindow(_THIS, SDL_Window * window)
 {
     (void)_this;
     (void)window;
-    _video_closing = 1;
-    EWOKOS_CloseMainWindow();
-    EWOKOS_StopVideoThread();
-    EWOKOS_DestroyClosedWindow();
+    EWOKOS_ShutdownVideoBackend("destroy_window");
 }
 
 static int

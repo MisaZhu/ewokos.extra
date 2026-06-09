@@ -601,7 +601,9 @@ int main(int argc, char** argv) {
         last_time = current_time;
         accumulator += dt;
 
-        if (handle_events()) break;
+        if (handle_events()) {
+            break;
+        }
         frame_count++;
         if (current_time - fps_time > 3000) {
             klog("%d FPS (%dx%d)\n", frame_count * 1000 / (current_time - fps_time), width, height);
@@ -692,7 +694,9 @@ int handle_events() {
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
         case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_ESCAPE) return 1;
+            if (event.key.keysym.sym == SDLK_ESCAPE) {
+                return 1;
+            }
             break;
 
         case SDL_MOUSEBUTTONDOWN:
