@@ -45,7 +45,7 @@ static const int AUDIO_PACKET_HIGH_WATER = 96;
 static const size_t AUDIO_QUEUE_CAPACITY = 256 * 1024;
 static const size_t AUDIO_QUEUE_CHUNK = 8192;
 static const int AUDIO_WAIT_SLEEP_MS = 1;
-static const int AUDIO_QUEUE_WAIT_US = 1000;
+static const int AUDIO_QUEUE_WAIT_US = 10000;
 static const int DEMUX_BACKPRESSURE_US = 5000;
 
 typedef struct {
@@ -570,10 +570,9 @@ static void* audio_output_thread_entry(void* p) {
 	for(;;) {
 		size_t chunk = 0;
 		size_t first = 0;
-		bool stop = false;
 
 		pthread_mutex_lock(&audio->queue_mutex);
-		stop = audio->queue_stop;
+		bool stop = audio->queue_stop;
 		if(audio->queue_size > 0) {
 			chunk = audio->queue_size;
 			if(chunk > sizeof(tmp))
@@ -600,7 +599,6 @@ static void* audio_output_thread_entry(void* p) {
 			}
 			continue;
 		}
-
 		if(stop)
 			break;
 		proc_usleep(AUDIO_QUEUE_WAIT_US);
@@ -612,7 +610,7 @@ static void* audio_output_thread_entry(void* p) {
 	return NULL;
 }
 
-static int init_audio_playback(widget_video_audio_t* audio, AVCodecContext* codec_ctx) {
+static int init_audio_playback(widget_video_audio_t* audio, WidgetVideo* owner, AVCodecContext* codec_ctx) {
 	widget_video_pcm_config_t config;
 	AVChannelLayout stereo_layout;
 	unsigned int i;
@@ -620,6 +618,7 @@ static int init_audio_playback(widget_video_audio_t* audio, AVCodecContext* code
 
 	memset(audio, 0, sizeof(*audio));
 	memset(&stereo_layout, 0, sizeof(stereo_layout));
+	(void)owner;
 	av_channel_layout_default(&stereo_layout, 2);
 	audio->out_layout = stereo_layout;
 	audio->out_fmt = AV_SAMPLE_FMT_S16;
@@ -936,7 +935,7 @@ static void wait_if_paused(WidgetVideo* video, widget_video_clock_t* clock) {
 
 	begin = now_ms();
 	while(video->isPausedState() && !video->isStopRequested() && !video->hasPendingSeek())
-		proc_usleep(10000);
+		proc_usleep(50000);
 	delta = now_ms() - begin;
 	if(clock != NULL && clock->started)
 		clock->start_ticks_ms += delta;
@@ -1704,7 +1703,7 @@ void WidgetVideo::decodeLoop() {
 			}
 
 			if(audio_codec_ctx != NULL) {
-				err = init_audio_playback(&audio, audio_codec_ctx);
+				err = init_audio_playback(&audio, this, audio_codec_ctx);
 				if(err < 0) {
 					audio_status = "Audio disabled: open sound device failed: " + ffmpeg_error_string(err);
 					disable_audio_playback(&audio, &audio_codec_ctx);
