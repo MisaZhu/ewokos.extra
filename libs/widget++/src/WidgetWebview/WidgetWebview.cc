@@ -17,6 +17,8 @@
 
 using namespace Ewok;
 
+static const uint32_t kLayoutDebounceMs = 30;
+
 // Explicit template instantiation for deque<HttpTask>
 template class std::deque<HttpTask>;
 
@@ -34,10 +36,15 @@ WidgetWebview::WidgetWebview()
     , m_scrollX(0)
     , m_scrollY(0)
     , m_needsStyleUpdate(false)
+    , m_needsLayout(false)
     , m_buildNeedsStyleUpdate(false)
+    , m_buildNeedsLayout(false)
     , m_flushDeferredImages(false)
     , m_defaultCssPrepared(false)
+    , m_defaultCssLoading(false)
     , m_deferBuildStep(false)
+    , m_layoutDirtyAt(0)
+    , m_buildLayoutDirtyAt(0)
 {
     m_container = new XContainer(&m_browser_context, this);
     m_task_running = false;
@@ -77,9 +84,15 @@ void WidgetWebview::cleanupBuildResources()
     m_buildStatus.clear();
     m_buildProgress = 0;
     m_buildNeedsStyleUpdate = false;
+    m_buildNeedsLayout = false;
+    m_needsLayout = false;
+    m_needsStyleUpdate = false;
     m_flushDeferredImages = false;
     m_defaultCssPrepared = false;
+    m_defaultCssLoading = false;
     m_deferBuildStep = false;
+    m_layoutDirtyAt = 0;
+    m_buildLayoutDirtyAt = 0;
     m_seenCssUrls.clear();
     m_buildPhase = BUILD_IDLE;
     m_buildTargetContext = nullptr;
@@ -271,34 +284,6 @@ bool WidgetWebview::loadHtml(const std::string& url)
     m_buildTargetContext->master_css().clear();
     pthread_mutex_unlock(&m_renderMutex);
 
-    if(!m_defaultCSSUrl.empty()) {
-        uint64_t css_preload_start = kernel_tic_ms(0);
-        int css_sz = 0;
-        uint8_t* css_content = XContainer::loadURL(m_defaultCSSUrl, &css_sz);
-        if(css_content != NULL) {
-            std::string css_str;
-            if(css_sz > 0)
-                css_str.assign((char*)css_content, css_sz);
-            else
-                css_str = (char*)css_content;
-            free(css_content);
-            if(!css_str.empty()) {
-                uint64_t css_parse_start = kernel_tic_ms(0);
-                pthread_mutex_lock(&m_renderMutex);
-                if(m_buildTargetContext) {
-                    m_buildTargetContext->load_master_stylesheet(css_str.c_str());
-                    rememberCSS(m_defaultCSSUrl);
-                    m_defaultCssPrepared = true;
-                }
-                pthread_mutex_unlock(&m_renderMutex);
-                klog("[xBrowser] preload default css: %d bytes load+copy=%u ms parse=%u ms\n",
-                    (int)css_str.size(),
-                    (uint32_t)(css_parse_start - css_preload_start),
-                    (uint32_t)(kernel_tic_ms(0) - css_parse_start));
-            }
-        }
-    }
-
     addTask({url, HttpTask::TASK_HTML, false});
     return true;
 }
@@ -382,7 +367,7 @@ bool WidgetWebview::loadImageTask(const std::string& url)
     return result.ok;
 }
 
-bool WidgetWebview::loadCSSContent(const std::string& content)
+bool WidgetWebview::loadCSSContent(const std::string& url, const std::string& content)
 {
     bool res = false;
     if (!content.empty()) {
@@ -391,30 +376,40 @@ bool WidgetWebview::loadCSSContent(const std::string& content)
         litehtml::document::ptr target_doc = m_doc;
         bool target_build = false;
         pthread_mutex_lock(&m_renderMutex);
-        if (m_buildPhase != BUILD_IDLE || m_buildDoc != nullptr) {
+        if (m_buildPhase != BUILD_IDLE || m_buildDoc != nullptr || m_defaultCssLoading) {
             ctx = m_buildTargetContext ? m_buildTargetContext : &m_buildContext;
             target_doc = m_buildDoc;
             target_build = true;
         }
         ctx->load_master_stylesheet(content.c_str());
         uint32_t parse_ms = (uint32_t)(kernel_tic_ms(0) - parse_start);
-        klog("[xBrowser] parse css: size=%d cost=%u ms\n", (int)content.size(), parse_ms);
+        bool is_default_css = (!m_defaultCSSUrl.empty() && url == m_defaultCSSUrl);
+        if (is_default_css) {
+            m_defaultCssPrepared = true;
+            m_defaultCssLoading = false;
+        }
+        klog("[xBrowser] parse css: url=%s size=%d cost=%u ms\n", url.c_str(), (int)content.size(), parse_ms);
         if (target_doc) {
             if (target_build) {
-                target_doc->update_master_styles();
-                uint64_t render_start = kernel_tic_ms(0);
-                target_doc->render(m_clientWidth);
-                klog("[xBrowser] render(build-css-update): %u ms\n",
-                    (uint32_t)(kernel_tic_ms(0) - render_start));
+                m_buildNeedsStyleUpdate = true;
+                m_buildNeedsLayout = true;
+                m_buildLayoutDirtyAt = kernel_tic_ms(0);
             } else {
                 m_needsStyleUpdate = true;
+                m_needsLayout = true;
+                m_layoutDirtyAt = kernel_tic_ms(0);
+            }
+            res = true;
+        } else if (is_default_css) {
+            if (m_buildPhase == BUILD_PRELOAD_CSS) {
+                m_buildPhase = BUILD_CREATE_DOC;
             }
             res = true;
         }
         pthread_mutex_unlock(&m_renderMutex);
     }
     if(res)
-        update();  // Trigger repaint which will apply the styles
+        update();
     return res;
 }
 
@@ -436,10 +431,13 @@ bool WidgetWebview::loadImageContent(const std::string& url, uint8_t* content, i
         uint32_t decode_ms = (uint32_t)(kernel_tic_ms(0) - decode_start);
         klog("[xBrowser] decode image: url=%s size=%d cost=%u ms\n", url.c_str(), sz, decode_ms);
         if (res && target_doc) {
-            uint64_t render_start = kernel_tic_ms(0);
-            target_doc->render(m_clientWidth);
-            uint32_t render_ms = (uint32_t)(kernel_tic_ms(0) - render_start);
-            klog("[xBrowser] render(%simage): %u ms\n", target_build ? "build-" : "", render_ms);
+            if (target_build) {
+                m_buildNeedsLayout = true;
+                m_buildLayoutDirtyAt = kernel_tic_ms(0);
+            } else {
+                m_needsLayout = true;
+                m_layoutDirtyAt = kernel_tic_ms(0);
+            }
         }
     }
     pthread_mutex_unlock(&m_renderMutex);
@@ -452,33 +450,44 @@ bool WidgetWebview::loadHtmlContent(const std::string& content)
 {
     update();
     pthread_mutex_lock(&m_renderMutex);
-    if(m_defaultCssPrepared) {
-        m_buildHtmlContent.clear();
-        m_buildHtmlUrl.clear();
-        m_buildStatus.clear();
-        m_buildProgress = 0;
-        m_buildNeedsStyleUpdate = false;
-        m_flushDeferredImages = false;
-        m_buildPhase = BUILD_IDLE;
-        if(m_buildDoc) {
-            delete m_buildDoc;
-            m_buildDoc = nullptr;
-        }
-        if(m_buildContainer) {
-            delete m_buildContainer;
-            m_buildContainer = nullptr;
-        }
-    } else {
-        cleanupBuildResources();
-    }
+    cleanupBuildResources();
+    m_buildTargetContext = (m_activeContext == &m_browser_context) ? &m_buildContext : &m_browser_context;
+    m_buildTargetContext->master_css().clear();
     m_buildHtmlContent = content;
     m_buildHtmlUrl = m_currentHtmlUrl;
-    m_buildPhase = BUILD_CREATE_DOC;
+    if(!m_defaultCSSUrl.empty()) {
+        m_buildPhase = BUILD_PRELOAD_CSS;
+    } else {
+        m_defaultCssPrepared = true;
+        m_buildPhase = BUILD_CREATE_DOC;
+    }
     pthread_mutex_unlock(&m_renderMutex);
 
     pthread_mutex_lock(&m_taskMutex);
     m_taskQueue.clear();
     pthread_mutex_unlock(&m_taskMutex);
+
+    if(!m_defaultCSSUrl.empty()) {
+        bool queued = false;
+        pthread_mutex_lock(&m_renderMutex);
+        if(!m_defaultCssPrepared && !m_defaultCssLoading) {
+            rememberCSS(m_defaultCSSUrl);
+            m_defaultCssLoading = true;
+            queued = true;
+        }
+        pthread_mutex_unlock(&m_renderMutex);
+        if(queued) {
+            if(!addTask({m_defaultCSSUrl, HttpTask::TASK_CSS, false})) {
+                pthread_mutex_lock(&m_renderMutex);
+                m_defaultCssLoading = false;
+                m_defaultCssPrepared = true;
+                if(m_buildPhase == BUILD_PRELOAD_CSS) {
+                    m_buildPhase = BUILD_CREATE_DOC;
+                }
+                pthread_mutex_unlock(&m_renderMutex);
+            }
+        }
+    }
 
     setBuildStatus("preparing document", 5);
     klog("[xBrowser] build queued: content_size=%d client=%dx%d\n",
@@ -492,11 +501,6 @@ void WidgetWebview::pushResult(const HttpResult& result)
     pthread_mutex_lock(&m_resultMutex);
     m_resultQueue.push_back(result);
     pthread_mutex_unlock(&m_resultMutex);
-    update();
-    WidgetWin* win = getWin();
-    if(win != NULL) {
-        win->repaintReq();
-    }
 }
 
 bool WidgetWebview::getResult(HttpResult& result)
@@ -517,7 +521,15 @@ void WidgetWebview::processResults()
     HttpResult result;
     bool drive_build = false;
     while(getResult(result)) {
-        if(result.type != HttpTask::TASK_HTML && m_buildPhase != BUILD_IDLE) {
+        if(result.type == HttpTask::TASK_IMAGE && m_buildPhase != BUILD_IDLE) {
+            pthread_mutex_lock(&m_resultMutex);
+            m_resultQueue.insert(m_resultQueue.begin(), result);
+            pthread_mutex_unlock(&m_resultMutex);
+            break;
+        }
+        if(result.type == HttpTask::TASK_CSS &&
+                m_buildPhase != BUILD_IDLE &&
+                !(m_buildPhase == BUILD_PRELOAD_CSS && result.url == m_defaultCSSUrl)) {
             pthread_mutex_lock(&m_resultMutex);
             m_resultQueue.insert(m_resultQueue.begin(), result);
             pthread_mutex_unlock(&m_resultMutex);
@@ -529,6 +541,16 @@ void WidgetWebview::processResults()
         if(!result.ok) {
             if(result.type == HttpTask::TASK_CSS) {
                 forgetCSS(result.url);
+                if(result.url == m_defaultCSSUrl) {
+                    pthread_mutex_lock(&m_renderMutex);
+                    m_defaultCssLoading = false;
+                    m_defaultCssPrepared = true;
+                    if(m_buildPhase == BUILD_PRELOAD_CSS) {
+                        m_buildPhase = BUILD_CREATE_DOC;
+                    }
+                    pthread_mutex_unlock(&m_renderMutex);
+                    drive_build = true;
+                }
             }
             continue;
         }
@@ -541,7 +563,7 @@ void WidgetWebview::processResults()
             drive_build = true;
         }
         else if(result.type == HttpTask::TASK_CSS) {
-            loadCSSContent(result.content);
+            loadCSSContent(result.url, result.content);
         }
         else if(result.type == HttpTask::TASK_IMAGE) {
             loadImageContent(result.url, (uint8_t*)result.content.data(), result.content.size());
@@ -552,11 +574,6 @@ void WidgetWebview::processResults()
 
     if(drive_build) {
         m_deferBuildStep = true;
-        update();
-        WidgetWin* win = getWin();
-        if(win != NULL) {
-            win->repaintReq();
-        }
     }
 }
 
@@ -565,14 +582,102 @@ void WidgetWebview::onTimer(uint32_t timerFPS, uint32_t timerSteps)
     (void)timerFPS;
     (void)timerSteps;
     processResults();
+    if (applyPendingLayoutUpdates()) {
+        update();
+    }
     if (m_buildPhase != BUILD_IDLE) {
         if (m_deferBuildStep) {
             m_deferBuildStep = false;
-            update();
             return;
         }
         advanceBuildStep();
     }
+}
+
+bool WidgetWebview::applyPendingLayoutUpdates()
+{
+    bool updated = false;
+    uint64_t now = kernel_tic_ms(0);
+    pthread_mutex_lock(&m_renderMutex);
+
+    if (m_buildDoc) {
+        if ((m_buildNeedsStyleUpdate || m_buildNeedsLayout) &&
+                m_buildLayoutDirtyAt != 0 &&
+                (now - m_buildLayoutDirtyAt) < kLayoutDebounceMs) {
+            pthread_mutex_unlock(&m_renderMutex);
+            return false;
+        }
+        if (m_buildNeedsStyleUpdate) {
+            uint64_t style_start = kernel_tic_ms(0);
+            m_buildDoc->update_master_styles();
+            uint32_t style_ms = (uint32_t)(kernel_tic_ms(0) - style_start);
+            klog("[xBrowser] apply build styles: %u ms\n", style_ms);
+            m_buildNeedsStyleUpdate = false;
+            updated = true;
+        }
+        if (m_buildNeedsLayout) {
+            uint64_t render_start = kernel_tic_ms(0);
+            m_buildDoc->render(m_clientWidth);
+            uint32_t render_ms = (uint32_t)(kernel_tic_ms(0) - render_start);
+            klog("[xBrowser] render(build-pending): %u ms\n", render_ms);
+            m_buildNeedsLayout = false;
+            m_buildLayoutDirtyAt = 0;
+            updated = true;
+        }
+    } else {
+        m_buildNeedsStyleUpdate = false;
+        m_buildNeedsLayout = false;
+        m_buildLayoutDirtyAt = 0;
+    }
+
+    if (m_doc) {
+        if ((m_needsStyleUpdate || m_needsLayout) &&
+                m_layoutDirtyAt != 0 &&
+                (now - m_layoutDirtyAt) < kLayoutDebounceMs) {
+            pthread_mutex_unlock(&m_renderMutex);
+            return updated;
+        }
+        if (m_needsStyleUpdate) {
+            uint32_t text_width_calls = 0, text_width_ms = 0, draw_text_calls = 0, draw_text_ms = 0;
+            uint32_t text_width_hits = 0, text_width_misses = 0;
+            uint32_t char_width_hits = 0, char_width_misses = 0;
+            uint32_t create_font_calls = 0, create_font_ms = 0;
+            if (m_container) {
+                m_container->resetPerfStats();
+            }
+            uint64_t style_start = kernel_tic_ms(0);
+            m_doc->update_master_styles();
+            uint32_t style_ms = (uint32_t)(kernel_tic_ms(0) - style_start);
+            if (m_container) {
+                m_container->getPerfStats(text_width_calls, text_width_ms, draw_text_calls, draw_text_ms,
+                                          text_width_hits, text_width_misses,
+                                          char_width_hits, char_width_misses,
+                                          create_font_calls, create_font_ms);
+            }
+            klog("[xBrowser] apply css-update: style=%u ms text_width=%u/%u ms hit=%u miss=%u char_hit=%u char_miss=%u create_font=%u/%u ms\n",
+                style_ms, text_width_calls, text_width_ms, text_width_hits, text_width_misses,
+                char_width_hits, char_width_misses,
+                create_font_calls, create_font_ms);
+            m_needsStyleUpdate = false;
+            updated = true;
+        }
+        if (m_needsLayout) {
+            uint64_t render_start = kernel_tic_ms(0);
+            m_doc->render(m_clientWidth);
+            uint32_t layout_ms = (uint32_t)(kernel_tic_ms(0) - render_start);
+            klog("[xBrowser] render(pending): %u ms\n", layout_ms);
+            m_needsLayout = false;
+            m_layoutDirtyAt = 0;
+            updated = true;
+        }
+    } else {
+        m_needsStyleUpdate = false;
+        m_needsLayout = false;
+        m_layoutDirtyAt = 0;
+    }
+
+    pthread_mutex_unlock(&m_renderMutex);
+    return updated;
 }
 
 void WidgetWebview::advanceBuildStep()
@@ -584,37 +689,16 @@ void WidgetWebview::advanceBuildStep()
     if (m_buildPhase == BUILD_PRELOAD_CSS) {
         setBuildStatus("loading styles", 15);
         pthread_mutex_lock(&m_renderMutex);
-        m_buildTargetContext = (m_activeContext == &m_browser_context) ? &m_buildContext : &m_browser_context;
-        m_buildTargetContext->master_css().clear();
+        bool ready = m_defaultCssPrepared || m_defaultCSSUrl.empty();
+        bool waiting = m_defaultCssLoading;
         pthread_mutex_unlock(&m_renderMutex);
-        if(!m_defaultCSSUrl.empty()) {
-            uint64_t css_preload_start = kernel_tic_ms(0);
-            int css_sz = 0;
-            uint8_t* css_content = XContainer::loadURL(m_defaultCSSUrl, &css_sz);
-            if(css_content != NULL) {
-                std::string css_str;
-                if(css_sz > 0)
-                    css_str.assign((char*)css_content, css_sz);
-                else
-                    css_str = (char*)css_content;
-                free(css_content);
-                if(!css_str.empty()) {
-                    uint64_t css_parse_start = kernel_tic_ms(0);
-                    pthread_mutex_lock(&m_renderMutex);
-                    if (m_buildTargetContext) {
-                        m_buildTargetContext->load_master_stylesheet(css_str.c_str());
-                        rememberCSS(m_defaultCSSUrl);
-                    }
-                    pthread_mutex_unlock(&m_renderMutex);
-                    klog("[xBrowser] preload default css: %d bytes load+copy=%u ms parse=%u ms\n",
-                        (int)css_str.size(),
-                        (uint32_t)(css_parse_start - css_preload_start),
-                        (uint32_t)(kernel_tic_ms(0) - css_parse_start));
-                }
-            }
+        if(ready) {
+            m_buildPhase = BUILD_CREATE_DOC;
+            update();
+        } else if(!waiting) {
+            m_buildPhase = BUILD_CREATE_DOC;
+            update();
         }
-        m_buildPhase = BUILD_CREATE_DOC;
-        update();
         return;
     }
 
@@ -710,6 +794,7 @@ void WidgetWebview::advanceBuildStep()
         m_buildHtmlUrl.clear();
         m_buildPhase = BUILD_IDLE;
         m_defaultCssPrepared = false;
+        m_defaultCssLoading = false;
         m_buildTargetContext = nullptr;
         m_flushDeferredImages = true;
         m_scrollX = 0;
@@ -749,36 +834,6 @@ void WidgetWebview::onRepaint(graph_t* g, XTheme* theme, const grect_t& r)
     XContainer* deferred_image_container = nullptr;
 
     pthread_mutex_lock(&m_renderMutex);
-    // Apply pending style update if any (must be done in main thread)
-    if (m_needsStyleUpdate && m_doc) {
-        uint32_t text_width_calls = 0, text_width_ms = 0, draw_text_calls = 0, draw_text_ms = 0;
-        uint32_t text_width_hits = 0, text_width_misses = 0;
-        uint32_t char_width_hits = 0, char_width_misses = 0;
-        uint32_t create_font_calls = 0, create_font_ms = 0;
-        if (m_container) {
-            m_container->resetPerfStats();
-        }
-        uint64_t style_start = kernel_tic_ms(0);
-        m_doc->update_master_styles();
-        uint32_t style_ms = (uint32_t)(kernel_tic_ms(0) - style_start);
-        uint64_t render_start = kernel_tic_ms(0);
-        m_doc->render(m_clientWidth);
-        uint32_t layout_ms = (uint32_t)(kernel_tic_ms(0) - render_start);
-        if (m_container) {
-            m_container->getPerfStats(text_width_calls, text_width_ms, draw_text_calls, draw_text_ms,
-                                      text_width_hits, text_width_misses,
-                                      char_width_hits, char_width_misses,
-                                      create_font_calls, create_font_ms);
-        }
-        klog("[xBrowser] render(css-update): style=%u ms layout=%u ms total=%u ms\n",
-            style_ms, layout_ms, style_ms + layout_ms);
-        klog("[xBrowser] css-update perf: text_width=%u/%u ms hit=%u miss=%u char_hit=%u char_miss=%u create_font=%u/%u ms\n",
-            text_width_calls, text_width_ms, text_width_hits, text_width_misses,
-            char_width_hits, char_width_misses,
-            create_font_calls, create_font_ms);
-        m_needsStyleUpdate = false;
-    }
-    
     if (m_container) {
         m_container->setGraph(g);
         m_container->resetPerfStats();

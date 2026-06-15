@@ -46,6 +46,10 @@ $(BROWSER): $(BROWSER_OBJS) \
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+src/main.o: src/main.cpp \
+	$(BUILD_DIR)/include/WidgetWebview/WidgetWebview.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 clean:
 	rm -f $(BROWSER_OBJS)
 	rm -fr $(BROWSER_DIR)

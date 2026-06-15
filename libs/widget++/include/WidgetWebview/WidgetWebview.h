@@ -55,7 +55,7 @@ public:
     bool loadCSS(const std::string& url);
     bool loadImage(const std::string& url);
 
-    bool loadCSSContent(const std::string& content);
+    bool loadCSSContent(const std::string& url, const std::string& content);
     bool loadHtmlContent(const std::string& content);
     bool loadImageContent(const std::string& url, uint8_t* data, int sz);
 
@@ -85,6 +85,7 @@ protected:
     void cleanupBuildResources();
     void setBuildStatus(const std::string& status, int progress);
     void advanceBuildStep();
+    bool applyPendingLayoutUpdates();
     void clampScrollLocked(int docWidth, int docHeight);
     bool hasSeenCSS(const std::string& url) const;
     void rememberCSS(const std::string& url);
@@ -125,12 +126,17 @@ private:
     int m_scrollX;
     int m_scrollY;
     
-    // Flag to indicate that styles need to be updated (set by loadCSSContent, applied in onRepaint)
+    // Dirty flags consumed by onTimer so repaint stays draw-only.
     bool m_needsStyleUpdate;
+    bool m_needsLayout;
     bool m_buildNeedsStyleUpdate;
+    bool m_buildNeedsLayout;
     bool m_flushDeferredImages;
     bool m_defaultCssPrepared;
+    bool m_defaultCssLoading;
     bool m_deferBuildStep;
+    uint64_t m_layoutDirtyAt;
+    uint64_t m_buildLayoutDirtyAt;
 };
 
 }
