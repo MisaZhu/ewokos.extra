@@ -16,6 +16,7 @@ public:
 	pthread_mutex_t renderMutex;
 
 	graph_t* frameGraph;
+	graph_t* spareFrameGraph;
 
 	bool autoPlay;
 	bool loopPlay;

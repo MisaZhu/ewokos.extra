@@ -166,6 +166,9 @@ typedef struct {
 	int err;
 } widget_video_audio_worker_t;
 
+static void* video_decode_thread_entry(void* p);
+static void* audio_decode_thread_entry(void* p);
+
 static int64_t now_ms(void) {
 	uint64_t usec = 0;
 	kernel_tic(NULL, &usec);
@@ -212,6 +215,24 @@ static void packet_queue_destroy(widget_video_packet_queue_t* queue) {
 	pthread_mutex_unlock(&queue->mutex);
 	pthread_cond_destroy(&queue->cond);
 	pthread_mutex_destroy(&queue->mutex);
+}
+
+static void packet_queue_reset(widget_video_packet_queue_t* queue) {
+	int i;
+
+	pthread_mutex_lock(&queue->mutex);
+	for(i = 0; i < queue->count; ++i) {
+		int idx = (queue->read_pos + i) % queue->capacity;
+		av_packet_free(&queue->packets[idx]);
+		queue->packets[idx] = NULL;
+	}
+	queue->read_pos = 0;
+	queue->write_pos = 0;
+	queue->count = 0;
+	queue->eof = false;
+	queue->abort = false;
+	pthread_cond_broadcast(&queue->cond);
+	pthread_mutex_unlock(&queue->mutex);
 }
 
 static int packet_queue_push_clone(widget_video_packet_queue_t* queue, const AVPacket* packet) {
@@ -295,8 +316,10 @@ static void pipeline_abort(widget_video_pipeline_t* pipeline) {
 		pipeline->abort_requested = true;
 		pthread_mutex_unlock(&pipeline->state_mutex);
 	}
-	packet_queue_abort(&pipeline->video_queue);
-	packet_queue_abort(&pipeline->audio_queue);
+	if(pipeline->video_queue.packets != NULL)
+		packet_queue_abort(&pipeline->video_queue);
+	if(pipeline->audio_queue.packets != NULL)
+		packet_queue_abort(&pipeline->audio_queue);
 }
 
 static bool pipeline_is_aborted(widget_video_pipeline_t* pipeline) {
@@ -320,6 +343,20 @@ static void pipeline_destroy(widget_video_pipeline_t* pipeline) {
 	if(pipeline->state_mutex_ready)
 		pthread_mutex_destroy(&pipeline->state_mutex);
 	memset(pipeline, 0, sizeof(*pipeline));
+}
+
+static void pipeline_reset(widget_video_pipeline_t* pipeline) {
+	if(pipeline == NULL)
+		return;
+	if(pipeline->state_mutex_ready) {
+		pthread_mutex_lock(&pipeline->state_mutex);
+		pipeline->abort_requested = false;
+		pthread_mutex_unlock(&pipeline->state_mutex);
+	}
+	if(pipeline->video_queue.packets != NULL)
+		packet_queue_reset(&pipeline->video_queue);
+	if(pipeline->audio_queue.packets != NULL)
+		packet_queue_reset(&pipeline->audio_queue);
 }
 
 static string ffmpeg_error_string(int err) {
@@ -528,8 +565,8 @@ static int open_decoder(AVFormatContext* fmt_ctx, int stream_idx, AVCodecContext
 	}
 
 	if(codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-		codec_ctx->thread_count = 1;
-		codec_ctx->thread_type = 0;
+		codec_ctx->thread_count = 0;
+		codec_ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
 	}
 
 	err = avcodec_open2(codec_ctx, codec, NULL);
@@ -716,6 +753,28 @@ static void disable_audio_playback(widget_video_audio_t* audio, AVCodecContext**
 		avcodec_free_context(codec_ctx);
 }
 
+static int audio_reset_playback(widget_video_audio_t* audio) {
+	int err = 0;
+
+	if(audio == NULL)
+		return 0;
+	if(audio->queue_mutex_ready) {
+		pthread_mutex_lock(&audio->queue_mutex);
+		audio->queue_start = 0;
+		audio->queue_size = 0;
+		pthread_mutex_unlock(&audio->queue_mutex);
+	}
+	if(audio->pcm != NULL) {
+		audio->pcm->running = 0;
+		audio->pcm->prepared = 0;
+	}
+	if(audio->swr != NULL) {
+		swr_close(audio->swr);
+		err = swr_init(audio->swr);
+	}
+	return err;
+}
+
 static int queue_audio_frame(widget_video_audio_t* audio, AVFrame* frame) {
 	int out_samples;
 	int out_buf_size;
@@ -876,39 +935,15 @@ static int widget_video_get_present_lead_ms(WidgetVideo* video) {
 	return lead;
 }
 
-static uint32_t widget_video_queue_present(WidgetVideo* video) {
-	uint32_t serial = 0;
-
+static void widget_video_queue_present(WidgetVideo* video) {
 	ensure_present_mutex_ready();
 	pthread_mutex_lock(&g_present_mutex);
 	g_present_state.owner = video;
 	g_present_state.present_serial++;
 	g_present_state.present_submit_ms = now_ms();
-	serial = g_present_state.present_serial;
 	pthread_mutex_unlock(&g_present_mutex);
 
 	video->update();
-	return serial;
-}
-
-static bool widget_video_wait_present_done(WidgetVideo* video, uint32_t serial, uint32_t timeout_ms) {
-	uint32_t waited = 0;
-
-	ensure_present_mutex_ready();
-	while(waited < timeout_ms && !video->isStopRequested()) {
-		bool done = false;
-
-		pthread_mutex_lock(&g_present_mutex);
-		done = (g_present_state.owner == video &&
-				g_present_state.painted_serial >= serial);
-		pthread_mutex_unlock(&g_present_mutex);
-		if(done)
-			return true;
-
-		proc_usleep(1000);
-		waited++;
-	}
-	return false;
 }
 
 static int ensure_scaler(struct SwsContext** sws_ctx, AVFrame* frame) {
@@ -1027,42 +1062,157 @@ static int frame_delay_ms(AVStream* stream) {
 	return 40;
 }
 
+static void join_video_worker(widget_video_video_worker_t* worker) {
+	if(worker != NULL && worker->thread_running) {
+		pthread_join(worker->thread, NULL);
+		worker->thread_running = false;
+	}
+}
+
+static void join_audio_worker(widget_video_audio_worker_t* worker) {
+	if(worker != NULL && worker->thread_running) {
+		pthread_join(worker->thread, NULL);
+		worker->thread_running = false;
+	}
+}
+
+static int start_video_worker(widget_video_video_worker_t* worker,
+		widget_video_pipeline_t* pipeline, AVCodecContext* codec_ctx,
+		AVStream* stream, widget_video_audio_t* audio, int delay_ms) {
+	memset(worker, 0, sizeof(*worker));
+	worker->pipeline = pipeline;
+	worker->codec_ctx = codec_ctx;
+	worker->stream = stream;
+	worker->audio = audio;
+	worker->delay_ms = delay_ms;
+	worker->thread_running = true;
+	if(pthread_create(&worker->thread, NULL, video_decode_thread_entry, worker) != 0) {
+		worker->thread_running = false;
+		return AVERROR_EXTERNAL;
+	}
+	return 0;
+}
+
+static int start_audio_worker(widget_video_audio_worker_t* worker,
+		widget_video_pipeline_t* pipeline, AVCodecContext* codec_ctx,
+		widget_video_audio_t* audio) {
+	memset(worker, 0, sizeof(*worker));
+	worker->pipeline = pipeline;
+	worker->codec_ctx = codec_ctx;
+	worker->audio = audio;
+	worker->thread_running = true;
+	if(pthread_create(&worker->thread, NULL, audio_decode_thread_entry, worker) != 0) {
+		worker->thread_running = false;
+		return AVERROR_EXTERNAL;
+	}
+	return 0;
+}
+
+static int restart_playback_at_ms(widget_video_pipeline_t* pipeline,
+		widget_video_video_worker_t* video_worker,
+		widget_video_audio_worker_t* audio_worker,
+		widget_video_audio_t* audio,
+		AVFormatContext* fmt_ctx, int video_stream_idx, int audio_stream_idx,
+		AVStream* video_stream, AVCodecContext** video_codec_ctx,
+		AVCodecContext** audio_codec_ctx,
+		int delay_ms, uint32_t target_ms, string* warning) {
+	int err;
+
+	if(warning != NULL)
+		*warning = "";
+
+	packet_queue_abort(&pipeline->video_queue);
+	packet_queue_abort(&pipeline->audio_queue);
+	join_video_worker(video_worker);
+	join_audio_worker(audio_worker);
+
+	err = widget_video_seek(fmt_ctx, video_stream_idx, video_stream, target_ms);
+	if(err < 0)
+		return err;
+
+	/*
+	 * On this target, avcodec_flush_buffers() can crash inside
+	 * ff_decode_flush_buffers()->av_bsf_flush(NULL) for some codecs after seek.
+	 * Re-open decoder contexts instead of flushing in place.
+	 */
+	avcodec_free_context(video_codec_ctx);
+	err = open_decoder(fmt_ctx, video_stream_idx, video_codec_ctx);
+	if(err < 0)
+		return err;
+	if(audio_codec_ctx != NULL && *audio_codec_ctx != NULL) {
+		avcodec_free_context(audio_codec_ctx);
+		err = open_decoder(fmt_ctx, audio_stream_idx, audio_codec_ctx);
+		if(err < 0) {
+			if(warning != NULL)
+				*warning = "Audio disabled: reopen audio stream failed: " + ffmpeg_error_string(err);
+			*audio_codec_ctx = NULL;
+		}
+	}
+
+	err = audio_reset_playback(audio);
+	if(err < 0 && warning != NULL)
+		*warning = "Audio reset failed: " + ffmpeg_error_string(err);
+
+	pipeline_reset(pipeline);
+
+	err = start_video_worker(video_worker, pipeline, *video_codec_ctx, video_stream, audio, delay_ms);
+	if(err < 0)
+		return err;
+
+	if(err >= 0 && audio->enabled && audio_codec_ctx != NULL && *audio_codec_ctx != NULL) {
+		err = start_audio_worker(audio_worker, pipeline, *audio_codec_ctx, audio);
+		if(err < 0 && warning != NULL)
+			*warning = "Audio disabled: create audio thread failed";
+	}
+
+	return 0;
+}
+
 static int video_worker_present_frame(widget_video_video_worker_t* worker,
 		struct SwsContext** sws_ctx, AVFrame* video_frame, AVFrame* rgba_frame) {
 	WidgetVideo* video = worker->pipeline->owner;
 	int err;
-	uint32_t present_serial;
+	graph_t* target_graph = NULL;
 
 	err = ensure_scaler(sws_ctx, video_frame);
 	if(err < 0)
 		return err;
 
 	pthread_mutex_lock(&video->renderMutex);
-	if(video->frameGraph == NULL ||
-			video->frameGraph->w != video_frame->width ||
-			video->frameGraph->h != video_frame->height) {
-		if(video->frameGraph != NULL)
-			graph_free(video->frameGraph);
-		video->frameGraph = graph_new(NULL, video_frame->width, video_frame->height);
+	if(video->spareFrameGraph == NULL ||
+			video->spareFrameGraph->w != video_frame->width ||
+			video->spareFrameGraph->h != video_frame->height) {
+		if(video->spareFrameGraph != NULL)
+			graph_free(video->spareFrameGraph);
+		video->spareFrameGraph = graph_new(NULL, video_frame->width, video_frame->height);
 	}
-	if(video->frameGraph == NULL) {
-		pthread_mutex_unlock(&video->renderMutex);
+	target_graph = video->spareFrameGraph;
+	pthread_mutex_unlock(&video->renderMutex);
+
+	if(target_graph == NULL)
 		return AVERROR(ENOMEM);
-	}
 
 	err = av_image_fill_arrays(rgba_frame->data, rgba_frame->linesize,
-			(uint8_t*)video->frameGraph->buffer, AV_PIX_FMT_BGRA,
-			video->frameGraph->w, video->frameGraph->h, 1);
+			(uint8_t*)target_graph->buffer, AV_PIX_FMT_BGRA,
+			target_graph->w, target_graph->h, 1);
 	if(err >= 0) {
-		rgba_frame->width = video->frameGraph->w;
-		rgba_frame->height = video->frameGraph->h;
+		rgba_frame->width = target_graph->w;
+		rgba_frame->height = target_graph->h;
 		rgba_frame->format = AV_PIX_FMT_BGRA;
 		sws_scale(*sws_ctx, (const uint8_t* const*)video_frame->data, video_frame->linesize,
 				0, video_frame->height, rgba_frame->data, rgba_frame->linesize);
 	}
-	pthread_mutex_unlock(&video->renderMutex);
 	if(err < 0)
 		return err;
+
+	pthread_mutex_lock(&video->renderMutex);
+	if(video->spareFrameGraph != target_graph) {
+		pthread_mutex_unlock(&video->renderMutex);
+		return 0;
+	}
+	video->spareFrameGraph = video->frameGraph;
+	video->frameGraph = target_graph;
+	pthread_mutex_unlock(&video->renderMutex);
 
 	if(!sync_video_clock(video, &worker->clock, worker->audio,
 				frame_pts_ms(video_frame, worker->stream), worker->delay_ms)) {
@@ -1071,8 +1221,7 @@ static int video_worker_present_frame(widget_video_video_worker_t* worker,
 		return 0;
 	}
 
-	present_serial = widget_video_queue_present(video);
-	widget_video_wait_present_done(video, present_serial, 100);
+	widget_video_queue_present(video);
 
 	pthread_mutex_lock(&video->stateMutex);
 	{
@@ -1297,6 +1446,7 @@ out:
 
 WidgetVideo::WidgetVideo(const string& file) {
 	frameGraph = NULL;
+	spareFrameGraph = NULL;
 	sourceFile = file;
 	statusText = "Idle";
 	seekPending = false;
@@ -1331,6 +1481,10 @@ WidgetVideo::~WidgetVideo(void) {
 	if(frameGraph != NULL) {
 		graph_free(frameGraph);
 		frameGraph = NULL;
+	}
+	if(spareFrameGraph != NULL) {
+		graph_free(spareFrameGraph);
+		spareFrameGraph = NULL;
 	}
 	pthread_mutex_unlock(&renderMutex);
 
@@ -1392,6 +1546,10 @@ bool WidgetVideo::loadVideo(const string& file) {
 	if(frameGraph != NULL) {
 		graph_free(frameGraph);
 		frameGraph = NULL;
+	}
+	if(spareFrameGraph != NULL) {
+		graph_free(spareFrameGraph);
+		spareFrameGraph = NULL;
 	}
 	pthread_mutex_unlock(&renderMutex);
 
@@ -1637,10 +1795,28 @@ void* WidgetVideo::decodeThreadEntry(void* p) {
 
 void WidgetVideo::decodeLoop() {
 	string file;
-	bool keep_looping = false;
-	bool restart_for_seek = false;
-	bool apply_seek = false;
+	string audio_status;
+	AVDictionary* format_opts = NULL;
+	AVFormatContext* fmt_ctx = NULL;
+	AVCodecContext* video_codec_ctx = NULL;
+	AVCodecContext* audio_codec_ctx = NULL;
+	AVPacket* packet = NULL;
+	AVStream* video_stream = NULL;
+	AVStream* audio_stream = NULL;
+	widget_video_audio_t audio;
+	widget_video_pipeline_t pipeline;
+	widget_video_video_worker_t video_worker;
+	widget_video_audio_worker_t audio_worker;
+	int video_stream_idx;
+	int audio_stream_idx;
+	int delay_ms;
+	int err = 0;
 	uint32_t pending_seek_ms = 0;
+
+	memset(&audio, 0, sizeof(audio));
+	memset(&pipeline, 0, sizeof(pipeline));
+	memset(&video_worker, 0, sizeof(video_worker));
+	memset(&audio_worker, 0, sizeof(audio_worker));
 
 	av_log_set_level(AV_LOG_ERROR);
 	file = resolveSourceFile();
@@ -1649,225 +1825,203 @@ void WidgetVideo::decodeLoop() {
 		goto out;
 	}
 
-	do {
-		AVFormatContext* fmt_ctx = NULL;
-		AVCodecContext* video_codec_ctx = NULL;
-		AVCodecContext* audio_codec_ctx = NULL;
-		AVPacket* packet = NULL;
-		AVStream* video_stream = NULL;
-		AVStream* audio_stream = NULL;
-		widget_video_audio_t audio;
-		widget_video_pipeline_t pipeline;
-		widget_video_video_worker_t video_worker;
-		widget_video_audio_worker_t audio_worker;
-		string audio_status;
-		int video_stream_idx;
-		int audio_stream_idx;
-		int delay_ms;
-		int err = 0;
+	/*
+	 * Some MP4/MOV files trip a data abort in FFmpeg's mov chapter-track
+	 * parsing on this target. Disable chapter import so playback can still
+	 * open the container without touching the decode path.
+	 */
+	av_dict_set(&format_opts, "ignore_chapters", "1", 0);
+	updateStatus("Loading...");
+	err = avformat_open_input(&fmt_ctx, file.c_str(), NULL, &format_opts);
+	av_dict_free(&format_opts);
+	if(err < 0) {
+		updateStatus("Open failed: " + ffmpeg_error_string(err));
+		goto out_cleanup;
+	}
 
-		restart_for_seek = false;
+	err = avformat_find_stream_info(fmt_ctx, NULL);
+	if(err < 0) {
+		updateStatus("Stream info failed: " + ffmpeg_error_string(err));
+		goto out_cleanup;
+	}
 
-		memset(&audio, 0, sizeof(audio));
-		memset(&pipeline, 0, sizeof(pipeline));
-		memset(&video_worker, 0, sizeof(video_worker));
-		memset(&audio_worker, 0, sizeof(audio_worker));
+	video_stream_idx = find_stream(fmt_ctx, AVMEDIA_TYPE_VIDEO);
+	if(video_stream_idx < 0) {
+		updateStatus("No video stream");
+		goto out_cleanup;
+	}
+	video_stream = fmt_ctx->streams[video_stream_idx];
+	audio_stream_idx = find_stream(fmt_ctx, AVMEDIA_TYPE_AUDIO);
+	if(audio_stream_idx >= 0)
+		audio_stream = fmt_ctx->streams[audio_stream_idx];
 
-		updateStatus("Loading...");
-		err = avformat_open_input(&fmt_ctx, file.c_str(), NULL, NULL);
+	pthread_mutex_lock(&stateMutex);
+	totalMs = stream_duration_ms(fmt_ctx, video_stream, audio_stream);
+	currentMs = 0;
+	pthread_mutex_unlock(&stateMutex);
+
+	err = open_decoder(fmt_ctx, video_stream_idx, &video_codec_ctx);
+	if(err < 0) {
+		updateStatus("Open video failed: " + ffmpeg_error_string(err));
+		goto out_cleanup;
+	}
+
+	if(audio_stream != NULL && !isMutedState()) {
+		err = open_decoder(fmt_ctx, audio_stream_idx, &audio_codec_ctx);
 		if(err < 0) {
-			updateStatus("Open failed: " + ffmpeg_error_string(err));
-			goto play_once_done;
+			audio_status = "Audio disabled: open audio stream failed: " + ffmpeg_error_string(err);
 		}
 
-		err = avformat_find_stream_info(fmt_ctx, NULL);
-		if(err < 0) {
-			updateStatus("Stream info failed: " + ffmpeg_error_string(err));
-			goto play_once_done;
+		if(audio_codec_ctx != NULL) {
+			err = init_audio_playback(&audio, this, audio_codec_ctx);
+			if(err < 0) {
+				audio_status = "Audio disabled: open sound device failed: " + ffmpeg_error_string(err);
+				disable_audio_playback(&audio, &audio_codec_ctx);
+			}
 		}
+	}
 
-		video_stream_idx = find_stream(fmt_ctx, AVMEDIA_TYPE_VIDEO);
-		if(video_stream_idx < 0) {
-			updateStatus("No video stream");
-			goto play_once_done;
-		}
-		video_stream = fmt_ctx->streams[video_stream_idx];
-		audio_stream_idx = find_stream(fmt_ctx, AVMEDIA_TYPE_AUDIO);
-		if(audio_stream_idx >= 0)
-			audio_stream = fmt_ctx->streams[audio_stream_idx];
+	err = pipeline_init(&pipeline, this);
+	if(err < 0) {
+		updateStatus("Pipeline init failed: " + ffmpeg_error_string(err));
+		goto out_cleanup;
+	}
 
-		if(apply_seek) {
-			err = widget_video_seek(fmt_ctx, video_stream_idx, video_stream, pending_seek_ms);
+	delay_ms = frame_delay_ms(video_stream);
+	err = start_video_worker(&video_worker, &pipeline, video_codec_ctx, video_stream, &audio, delay_ms);
+	if(err < 0) {
+		updateStatus("Create video thread failed");
+		goto out_cleanup;
+	}
+
+	if(audio.enabled && audio_codec_ctx != NULL) {
+		err = start_audio_worker(&audio_worker, &pipeline, audio_codec_ctx, &audio);
+		if(err < 0)
+			audio_status = "Audio disabled: create audio thread failed";
+	}
+
+	packet = av_packet_alloc();
+	if(packet == NULL) {
+		updateStatus("ffmpeg alloc failed");
+		pipeline_abort(&pipeline);
+		goto out_cleanup;
+	}
+
+	if(audio_status.empty())
+		updateStatus("");
+	else
+		updateStatus(audio_status);
+
+	while(!isStopRequested()) {
+		int video_backlog;
+		int audio_backlog;
+		string restart_warning;
+
+		if(pipeline_is_aborted(&pipeline))
+			break;
+
+		if(takeSeekRequest(&pending_seek_ms)) {
+			err = restart_playback_at_ms(&pipeline, &video_worker, &audio_worker, &audio,
+					fmt_ctx, video_stream_idx, audio_stream_idx, video_stream,
+					&video_codec_ctx, &audio_codec_ctx, delay_ms, pending_seek_ms,
+					&restart_warning);
 			if(err < 0) {
 				updateStatus("Seek failed: " + ffmpeg_error_string(err));
-				goto play_once_done;
-			}
-		}
-
-		pthread_mutex_lock(&stateMutex);
-		totalMs = stream_duration_ms(fmt_ctx, video_stream, audio_stream);
-		currentMs = apply_seek ? pending_seek_ms : 0;
-		pthread_mutex_unlock(&stateMutex);
-
-		err = open_decoder(fmt_ctx, video_stream_idx, &video_codec_ctx);
-		if(err < 0) {
-			updateStatus("Open video failed: " + ffmpeg_error_string(err));
-			goto play_once_done;
-		}
-
-		if(audio_stream != NULL && !isMutedState()) {
-			err = open_decoder(fmt_ctx, audio_stream_idx, &audio_codec_ctx);
-			if(err < 0) {
-				audio_status = "Audio disabled: open audio stream failed: " + ffmpeg_error_string(err);
-			}
-
-			if(audio_codec_ctx != NULL) {
-				err = init_audio_playback(&audio, this, audio_codec_ctx);
-				if(err < 0) {
-					audio_status = "Audio disabled: open sound device failed: " + ffmpeg_error_string(err);
-					disable_audio_playback(&audio, &audio_codec_ctx);
-				}
-			}
-		}
-
-		err = pipeline_init(&pipeline, this);
-		if(err < 0) {
-			updateStatus("Pipeline init failed: " + ffmpeg_error_string(err));
-			goto play_once_done;
-		}
-
-		delay_ms = frame_delay_ms(video_stream);
-		video_worker.pipeline = &pipeline;
-		video_worker.codec_ctx = video_codec_ctx;
-		video_worker.stream = video_stream;
-		video_worker.audio = &audio;
-		video_worker.delay_ms = delay_ms;
-		video_worker.thread_running = true;
-		err = pthread_create(&video_worker.thread, NULL, video_decode_thread_entry, &video_worker);
-		if(err != 0) {
-			video_worker.thread_running = false;
-			updateStatus("Create video thread failed");
-			goto play_once_done;
-		}
-
-		if(audio.enabled && audio_codec_ctx != NULL) {
-			audio_worker.pipeline = &pipeline;
-			audio_worker.codec_ctx = audio_codec_ctx;
-			audio_worker.audio = &audio;
-			audio_worker.thread_running = true;
-			err = pthread_create(&audio_worker.thread, NULL, audio_decode_thread_entry, &audio_worker);
-			if(err != 0) {
-				audio_worker.thread_running = false;
-				audio_status = "Audio disabled: create audio thread failed";
-				cleanup_audio_playback(&audio);
-				avcodec_free_context(&audio_codec_ctx);
-			}
-		}
-
-		packet = av_packet_alloc();
-		if(packet == NULL) {
-			updateStatus("ffmpeg alloc failed");
-			pipeline_abort(&pipeline);
-			goto play_once_done;
-		}
-
-		updateStatus("");
-		if(!audio_status.empty())
-			updateStatus(audio_status);
-
-		while(!isStopRequested() && !pipeline_is_aborted(&pipeline)) {
-			int video_backlog = packet_queue_count(&pipeline.video_queue);
-			int audio_backlog = audio_worker.thread_running ?
-					packet_queue_count(&pipeline.audio_queue) : 0;
-
-			if(takeSeekRequest(&pending_seek_ms)) {
-				restart_for_seek = true;
-				apply_seek = true;
 				pipeline_abort(&pipeline);
 				break;
 			}
 
-			wait_if_paused(this, NULL);
-			if(isStopRequested())
-				break;
+			pthread_mutex_lock(&stateMutex);
+			currentMs = pending_seek_ms;
+			eof = false;
+			pthread_mutex_unlock(&stateMutex);
 
-			if(video_backlog >= VIDEO_PACKET_HIGH_WATER ||
-					(audio_worker.thread_running &&
-					 audio_backlog >= AUDIO_PACKET_HIGH_WATER)) {
-				proc_usleep(DEMUX_BACKPRESSURE_US);
+			if(restart_warning.empty())
+				updateStatus("");
+			else
+				updateStatus(restart_warning);
+			continue;
+		}
+
+		wait_if_paused(this, NULL);
+		if(isStopRequested() || pipeline_is_aborted(&pipeline))
+			break;
+
+		video_backlog = packet_queue_count(&pipeline.video_queue);
+		audio_backlog = audio_worker.thread_running ?
+				packet_queue_count(&pipeline.audio_queue) : 0;
+		if(video_backlog >= VIDEO_PACKET_HIGH_WATER ||
+				(audio_worker.thread_running &&
+				 audio_backlog >= AUDIO_PACKET_HIGH_WATER)) {
+			proc_usleep(DEMUX_BACKPRESSURE_US);
+			continue;
+		}
+
+		err = av_read_frame(fmt_ctx, packet);
+		if(err < 0) {
+			packet_queue_set_eof(&pipeline.video_queue);
+			packet_queue_set_eof(&pipeline.audio_queue);
+			join_video_worker(&video_worker);
+			join_audio_worker(&audio_worker);
+
+			if(isStopRequested() || pipeline_is_aborted(&pipeline))
+				break;
+			if(isLoopState()) {
+				setPlaybackState(true, false, false);
+				err = restart_playback_at_ms(&pipeline, &video_worker, &audio_worker, &audio,
+						fmt_ctx, video_stream_idx, audio_stream_idx, video_stream,
+						&video_codec_ctx, &audio_codec_ctx, delay_ms, 0,
+						&restart_warning);
+				if(err < 0) {
+					updateStatus("Loop seek failed: " + ffmpeg_error_string(err));
+					pipeline_abort(&pipeline);
+					break;
+				}
+
+				pthread_mutex_lock(&stateMutex);
+				currentMs = 0;
+				eof = false;
+				pthread_mutex_unlock(&stateMutex);
+
+				if(restart_warning.empty())
+					updateStatus("");
+				else
+					updateStatus(restart_warning);
 				continue;
 			}
 
-			err = av_read_frame(fmt_ctx, packet);
-			if(err < 0) {
-				packet_queue_set_eof(&pipeline.video_queue);
-				packet_queue_set_eof(&pipeline.audio_queue);
-				break;
-			}
-
-			if(packet->stream_index == video_stream_idx) {
-				err = packet_queue_push_clone(&pipeline.video_queue, packet);
-			}
-			else if(audio_worker.thread_running && packet->stream_index == audio_stream_idx) {
-				err = packet_queue_push_clone(&pipeline.audio_queue, packet);
-			}
-
-			av_packet_unref(packet);
-			if(err < 0) {
-				if(err != AVERROR_EXIT)
-					updateStatus("Queue packet failed: " + ffmpeg_error_string(err));
-				pipeline_abort(&pipeline);
-				break;
-			}
-		}
-
-		av_packet_free(&packet);
-		packet = NULL;
-
-		/*
-		 * On close/stop, worker threads may still be blocked in packet_queue_pop().
-		 * Abort the pipeline before joining so queue waits are released promptly.
-		 */
-		if(isStopRequested() || restart_for_seek || pipeline_is_aborted(&pipeline))
-			pipeline_abort(&pipeline);
-
-		if(video_worker.thread_running) {
-			pthread_join(video_worker.thread, NULL);
-			video_worker.thread_running = false;
-		}
-		if(audio_worker.thread_running) {
-			pthread_join(audio_worker.thread, NULL);
-			audio_worker.thread_running = false;
-		}
-
-		if(!isStopRequested() && !restart_for_seek && !pipeline_is_aborted(&pipeline)) {
 			updateStatus("Done");
 			setPlaybackState(false, false, true);
+			break;
 		}
 
-play_once_done:
-		av_packet_free(&packet);
-		pipeline_abort(&pipeline);
-		if(video_worker.thread_running)
-			pthread_join(video_worker.thread, NULL);
-		if(audio_worker.thread_running)
-			pthread_join(audio_worker.thread, NULL);
-		pipeline_destroy(&pipeline);
-		cleanup_audio_playback(&audio);
-		avcodec_free_context(&audio_codec_ctx);
-		avcodec_free_context(&video_codec_ctx);
-		avformat_close_input(&fmt_ctx);
-
-		keep_looping = (!isStopRequested() && restart_for_seek);
-		if(!keep_looping)
-			keep_looping = (!isStopRequested() && isLoopState() && isEOF());
-		if(keep_looping) {
-			setPlaybackState(true, false, false);
-			updateStatus(restart_for_seek ? "" : "Loading...");
+		err = 0;
+		if(packet->stream_index == video_stream_idx) {
+			err = packet_queue_push_clone(&pipeline.video_queue, packet);
 		}
-		else
-			apply_seek = false;
-	} while(keep_looping);
+		else if(audio_worker.thread_running && packet->stream_index == audio_stream_idx) {
+			err = packet_queue_push_clone(&pipeline.audio_queue, packet);
+		}
+
+		av_packet_unref(packet);
+		if(err < 0) {
+			if(err != AVERROR_EXIT)
+				updateStatus("Queue packet failed: " + ffmpeg_error_string(err));
+			pipeline_abort(&pipeline);
+			break;
+		}
+	}
+
+out_cleanup:
+	av_packet_free(&packet);
+	pipeline_abort(&pipeline);
+	join_video_worker(&video_worker);
+	join_audio_worker(&audio_worker);
+	pipeline_destroy(&pipeline);
+	cleanup_audio_playback(&audio);
+	avcodec_free_context(&audio_codec_ctx);
+	avcodec_free_context(&video_codec_ctx);
+	avformat_close_input(&fmt_ctx);
 
 out:
 	pthread_mutex_lock(&stateMutex);
