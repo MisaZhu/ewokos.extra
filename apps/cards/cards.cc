@@ -133,6 +133,21 @@ private:
     bool won;
     uint64_t winStartTime;
     uint32_t winFrame;
+    bool autoFinishing;
+
+    struct AutoMoveAnimation {
+        bool active;
+        Card card;
+        Pile* srcPile;
+        Pile* dstPile;
+        bool revealSrcTop;
+        int startX;
+        int startY;
+        int endX;
+        int endY;
+        int step;
+        int steps;
+    } autoMoveAnim;
 
     int clampInt(int value, int minValue, int maxValue) const {
         if(value < minValue) return minValue;
@@ -336,6 +351,13 @@ private:
         won = false;
         winStartTime = 0;
         winFrame = 0;
+        autoFinishing = false;
+        autoMoveAnim.active = false;
+        autoMoveAnim.srcPile = NULL;
+        autoMoveAnim.dstPile = NULL;
+        autoMoveAnim.revealSrcTop = false;
+        autoMoveAnim.step = 0;
+        autoMoveAnim.steps = 0;
         dragging = false;
         pressedPile = NULL;
         pressedIndex = -1;
@@ -355,7 +377,7 @@ private:
             c.faceUp = true;
             waste.cards[waste.count++] = c;
             moves++;
-            tryAutoFinishGame();
+            requestAutoFinishGame();
             update();
         }
         else if(waste.count > 0) {
@@ -366,7 +388,7 @@ private:
                 stock.cards[stock.count++] = c;
             }
             moves++;
-            tryAutoFinishGame();
+            requestAutoFinishGame();
             update();
         }
     }
@@ -595,35 +617,105 @@ private:
         return total == 52;
     }
 
-    bool tryAutoFinishGame() {
-        if(!canAutoFinishGame()) {
+    bool requestAutoFinishGame() {
+        if(autoFinishing || autoMoveAnim.active || !canAutoFinishGame()) {
+            return false;
+        }
+        autoFinishing = true;
+        return true;
+    }
+
+    bool findNextAutoFinishMove(Pile*& srcPile, int& srcIndex, Pile*& dstPile) {
+        srcPile = NULL;
+        dstPile = NULL;
+        srcIndex = -1;
+
+        if(waste.count > 0) {
+            Card c = waste.cards[waste.count - 1];
+            for(int i = 0; i < 4; i++) {
+                if(canPlaceOn(c, &foundation[i])) {
+                    srcPile = &waste;
+                    srcIndex = waste.count - 1;
+                    dstPile = &foundation[i];
+                    return true;
+                }
+            }
+        }
+
+        for(int i = 0; i < 7; i++) {
+            if(tableau[i].count <= 0) {
+                continue;
+            }
+            int idx = tableau[i].count - 1;
+            Card c = tableau[i].cards[idx];
+            for(int j = 0; j < 4; j++) {
+                if(canPlaceOn(c, &foundation[j])) {
+                    srcPile = &tableau[i];
+                    srcIndex = idx;
+                    dstPile = &foundation[j];
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool beginAutoFinishMove(const LayoutMetrics& layout) {
+        if(!autoFinishing || autoMoveAnim.active) {
             return false;
         }
 
-        bool movedAny = false;
-        bool moved = true;
-        while(moved) {
-            moved = false;
-            if(waste.count > 0 &&
-               moveTopCardToFoundationSet(&waste, waste.count - 1, foundation, false)) {
-                moved = true;
-                movedAny = true;
-            }
-
-            for(int i = 0; i < 7; i++) {
-                if(tableau[i].count <= 0) {
-                    continue;
-                }
-                if(moveTopCardToFoundationSet(&tableau[i], tableau[i].count - 1,
-                        foundation, false)) {
-                    moved = true;
-                    movedAny = true;
-                }
-            }
+        Pile* srcPile = NULL;
+        Pile* dstPile = NULL;
+        int srcIndex = -1;
+        if(!findNextAutoFinishMove(srcPile, srcIndex, dstPile)) {
+            return false;
         }
 
+        int startX, startY;
+        getCardPos(srcPile, srcIndex, startX, startY, layout);
+        autoMoveAnim.active = true;
+        autoMoveAnim.card = srcPile->cards[srcIndex];
+        autoMoveAnim.srcPile = srcPile;
+        autoMoveAnim.dstPile = dstPile;
+        autoMoveAnim.revealSrcTop = (srcPile->type == PILE_TABLEAU && srcIndex > 0);
+        autoMoveAnim.startX = startX;
+        autoMoveAnim.startY = startY;
+        autoMoveAnim.endX = dstPile->x;
+        autoMoveAnim.endY = dstPile->y;
+        autoMoveAnim.step = 0;
+        autoMoveAnim.steps = 2;
+
+        srcPile->count--;
+        update();
+        return true;
+    }
+
+    void finishAutoFinishMove() {
+        if(!autoMoveAnim.active) {
+            return;
+        }
+
+        if(autoMoveAnim.revealSrcTop && autoMoveAnim.srcPile != NULL &&
+           autoMoveAnim.srcPile->count > 0) {
+            autoMoveAnim.srcPile->cards[autoMoveAnim.srcPile->count - 1].faceUp = true;
+        }
+        if(autoMoveAnim.dstPile != NULL) {
+            autoMoveAnim.dstPile->cards[autoMoveAnim.dstPile->count++] = autoMoveAnim.card;
+        }
+
+        autoMoveAnim.active = false;
+        autoMoveAnim.srcPile = NULL;
+        autoMoveAnim.dstPile = NULL;
+        autoMoveAnim.revealSrcTop = false;
+        autoMoveAnim.step = 0;
+        autoMoveAnim.steps = 0;
+
         checkWin();
-        return movedAny;
+        if(won) {
+            autoFinishing = false;
+        }
+        update();
     }
 
     // 自动放到终结堆
@@ -631,7 +723,7 @@ private:
         if(moveTopCardToFoundationSet(srcPile, srcIndex, foundation, true)) {
             checkWin();
             if(!won) {
-                tryAutoFinishGame();
+                requestAutoFinishGame();
             }
             return true;
         }
@@ -773,6 +865,13 @@ protected:
                 int cy = drag.curY + i * layout.cardOffsetOpen;
                 drawCard(g, cx, cy, drag.cards[i], theme, true, layout);
             }
+        }
+        else if(autoMoveAnim.active && autoMoveAnim.steps > 0) {
+            int cx = autoMoveAnim.startX +
+                (autoMoveAnim.endX - autoMoveAnim.startX) * autoMoveAnim.step / autoMoveAnim.steps;
+            int cy = autoMoveAnim.startY +
+                (autoMoveAnim.endY - autoMoveAnim.startY) * autoMoveAnim.step / autoMoveAnim.steps;
+            drawCard(g, cx, cy, autoMoveAnim.card, theme, true, layout);
         }
 
         // 胜利动画
@@ -993,6 +1092,14 @@ protected:
         int x = pos.x;
         int y = pos.y;
 
+        if(autoFinishing || autoMoveAnim.active) {
+            if(ev->state == MOUSE_STATE_DOWN && inRect(x, y, newGameBtn)) {
+                newGame();
+                return true;
+            }
+            return true;
+        }
+
         if(ev->state == MOUSE_STATE_DOWN) {
             clearPendingPress();
             if(inRect(x, y, newGameBtn)) {
@@ -1092,7 +1199,7 @@ protected:
                     moves++;
                     checkWin();
                     if(!won) {
-                        tryAutoFinishGame();
+                        requestAutoFinishGame();
                     }
                 }
                 else {
@@ -1147,6 +1254,9 @@ protected:
                 newGame();
                 return true;
             }
+            if(autoFinishing || autoMoveAnim.active) {
+                return true;
+            }
             // S 键：发牌
             if(key == 's' || key == 'S') {
                 drawFromStock();
@@ -1156,10 +1266,28 @@ protected:
         return false;
     }
 
-    // 定时器回调 - 用于胜利动画
+    // 定时器回调 - 用于自动收牌和胜利动画
     void onTimer(uint32_t timerFPS, uint32_t timerSteps) {
         (void)timerFPS;
         (void)timerSteps;
+        if(autoMoveAnim.active) {
+            autoMoveAnim.step++;
+            if(autoMoveAnim.step >= autoMoveAnim.steps) {
+                finishAutoFinishMove();
+            }
+            else {
+                update();
+            }
+            return;
+        }
+        if(autoFinishing) {
+            LayoutMetrics layout = getLayoutMetrics();
+            if(!beginAutoFinishMove(layout)) {
+                autoFinishing = false;
+                checkWin();
+            }
+            return;
+        }
         if(won) {
             winFrame++;
             update();
@@ -1168,6 +1296,10 @@ protected:
 
     void onResize() {
         applyLayout();
+        if(autoMoveAnim.active) {
+            finishAutoFinishMove();
+        }
+        autoFinishing = false;
         if(dragging) {
             dragging = false;
             drag.count = 0;
@@ -1190,6 +1322,13 @@ public:
         moves = 0;
         won = false;
         winFrame = 0;
+        autoFinishing = false;
+        autoMoveAnim.active = false;
+        autoMoveAnim.srcPile = NULL;
+        autoMoveAnim.dstPile = NULL;
+        autoMoveAnim.revealSrcTop = false;
+        autoMoveAnim.step = 0;
+        autoMoveAnim.steps = 0;
         newGame();
     }
 };
