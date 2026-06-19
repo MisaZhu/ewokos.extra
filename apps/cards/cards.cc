@@ -29,17 +29,24 @@ static const uint32_t COLOR_BTN_TEXT    = 0xFF000000; // 按钮文字黑色
 static const uint32_t COLOR_TITLE_BAR  = 0xFF000080; // 标题栏深蓝
 static const uint32_t COLOR_TITLE_TEXT  = 0xFFFFFFFF; // 标题白色
 
-// 卡牌尺寸
-static const int CARD_W = 56;
-static const int CARD_H = 80;
-static const int CARD_OFFSET_OPEN  = 22; // 翻开的牌叠偏移
-static const int CARD_OFFSET_CLOSE = 8;  // 未翻开的牌叠偏移
-static const int PILE_SPACING_X    = 12; // 列间距
-static const int PILE_SPACING_Y    = 16; // 行间距
-static const int HEADER_HEIGHT     = 28; // 顶部文字栏高度
-static const int TOP_PADDING       = HEADER_HEIGHT + 8; // 顶部牌堆起始Y
-static const int LEFT_PADDING      = 12;
-static const int TOP_ROW_HEIGHT    = CARD_H + PILE_SPACING_Y;
+// 基准布局尺寸，实际绘制时会按窗口大小缩放
+static const int BASE_CARD_W = 56;
+static const int BASE_CARD_H = 80;
+static const int BASE_CARD_OFFSET_OPEN  = 22; // 翻开的牌叠偏移
+static const int BASE_CARD_OFFSET_CLOSE = 8;  // 未翻开的牌叠偏移
+static const int BASE_PILE_SPACING_X    = 12; // 列间距
+static const int BASE_PILE_SPACING_Y    = 16; // 行间距
+static const int BASE_HEADER_HEIGHT     = 28; // 顶部文字栏高度
+static const int BASE_TOP_PADDING       = BASE_HEADER_HEIGHT + 8; // 顶部牌堆起始Y
+static const int BASE_LEFT_PADDING      = 12;
+static const int BASE_TOP_ROW_HEIGHT    = BASE_CARD_H + BASE_PILE_SPACING_Y;
+static const int BASE_BOTTOM_PADDING    = 20;
+static const int MAX_TABLEAU_VISIBLE    = 19;
+static const int BASE_BOARD_W =
+    BASE_LEFT_PADDING * 2 + 7 * BASE_CARD_W + 6 * BASE_PILE_SPACING_X;
+static const int BASE_BOARD_H =
+    BASE_TOP_PADDING + BASE_TOP_ROW_HEIGHT +
+    MAX_TABLEAU_VISIBLE * BASE_CARD_OFFSET_OPEN + BASE_CARD_H + BASE_BOTTOM_PADDING;
 
 // 花色
 enum Suit {
@@ -85,6 +92,27 @@ typedef struct {
 // 卡牌游戏主组件
 class CardsWidget : public Widget {
 private:
+    struct LayoutMetrics {
+        int cardW;
+        int cardH;
+        int cardOffsetOpen;
+        int cardOffsetClose;
+        int pileSpacingX;
+        int pileSpacingY;
+        int headerHeight;
+        int topPadding;
+        int leftPadding;
+        int topRowHeight;
+        int boardLeft;
+        int boardW;
+        int tableauBaseY;
+        int infoFontSize;
+        int cardFontSize;
+        int foundationHintSize;
+        int centerSuitSize;
+        int smallSuitSize;
+    };
+
     Pile stock;       // 发牌堆
     Pile waste;       // 弃牌堆
     Pile foundation[4]; // 终结堆
@@ -98,6 +126,98 @@ private:
     bool won;
     uint64_t winStartTime;
     uint32_t winFrame;
+
+    int clampInt(int value, int minValue, int maxValue) const {
+        if(value < minValue) return minValue;
+        if(value > maxValue) return maxValue;
+        return value;
+    }
+
+    int scaleMetric(int baseValue, float scale, int minValue) const {
+        int scaled = (int)(baseValue * scale + 0.5f);
+        if(scaled < minValue) return minValue;
+        return scaled;
+    }
+
+    LayoutMetrics getLayoutMetrics() const {
+        LayoutMetrics layout;
+        int widgetW = area.w > 0 ? area.w : BASE_BOARD_W;
+        int widgetH = area.h > 0 ? area.h : BASE_BOARD_H;
+        float scaleW = (float)widgetW / (float)BASE_BOARD_W;
+        float scaleH = (float)widgetH / (float)BASE_BOARD_H;
+        float scale = scaleW < scaleH ? scaleW : scaleH;
+        if(scale > 2.0f) {
+            scale = 2.0f;
+        }
+        if(scale <= 0.0f) {
+            scale = 1.0f;
+        }
+
+        layout.cardW = scaleMetric(BASE_CARD_W, scale, 18);
+        layout.cardH = scaleMetric(BASE_CARD_H, scale, 26);
+        layout.cardOffsetOpen = scaleMetric(BASE_CARD_OFFSET_OPEN, scale, 6);
+        layout.cardOffsetClose = scaleMetric(BASE_CARD_OFFSET_CLOSE, scale, 3);
+        layout.pileSpacingX = scaleMetric(BASE_PILE_SPACING_X, scale, 4);
+        layout.pileSpacingY = scaleMetric(BASE_PILE_SPACING_Y, scale, 6);
+        layout.headerHeight = scaleMetric(BASE_HEADER_HEIGHT, scale, 20);
+        layout.leftPadding = scaleMetric(BASE_LEFT_PADDING, scale, 4);
+        layout.topPadding = layout.headerHeight + scaleMetric(8, scale, 4);
+        layout.topRowHeight = layout.cardH + layout.pileSpacingY;
+        layout.boardW = layout.leftPadding * 2 +
+            7 * layout.cardW + 6 * layout.pileSpacingX;
+        layout.boardLeft = 0;
+        if(widgetW > layout.boardW) {
+            layout.boardLeft = (widgetW - layout.boardW) / 2;
+        }
+        layout.tableauBaseY = layout.topPadding + layout.topRowHeight;
+        layout.infoFontSize = clampInt(scaleMetric(12, scale, 10), 10, 24);
+        layout.cardFontSize = clampInt(scaleMetric(12, scale, 8), 8, 24);
+        layout.foundationHintSize = scaleMetric(24, scale, 10);
+        layout.centerSuitSize = scaleMetric(32, scale, 12);
+        layout.smallSuitSize = scaleMetric(10, scale, 4);
+        return layout;
+    }
+
+    void applyLayout() {
+        LayoutMetrics layout = getLayoutMetrics();
+
+        stock.type = PILE_STOCK;
+        stock.x = layout.boardLeft + layout.leftPadding;
+        stock.y = layout.topPadding;
+
+        waste.type = PILE_WASTE;
+        waste.x = layout.boardLeft + layout.leftPadding +
+            (layout.cardW + layout.pileSpacingX);
+        waste.y = layout.topPadding;
+
+        for(int i = 0; i < 4; i++) {
+            foundation[i].type = PILE_FOUNDATION;
+            foundation[i].x = layout.boardLeft + layout.leftPadding +
+                (3 + i) * (layout.cardW + layout.pileSpacingX);
+            foundation[i].y = layout.topPadding;
+        }
+
+        for(int i = 0; i < 7; i++) {
+            tableau[i].type = PILE_TABLEAU;
+            tableau[i].x = layout.boardLeft + layout.leftPadding +
+                i * (layout.cardW + layout.pileSpacingX);
+            tableau[i].y = layout.tableauBaseY;
+        }
+    }
+
+    grect_t getNewGameButtonRect(const LayoutMetrics& layout) const {
+        grect_t rect;
+        rect.w = scaleMetric(84, (float)layout.cardW / (float)BASE_CARD_W, 56);
+        rect.h = layout.headerHeight - scaleMetric(8, (float)layout.cardH / (float)BASE_CARD_H, 6);
+        rect.x = area.w - rect.w - scaleMetric(8, (float)layout.cardW / (float)BASE_CARD_W, 6);
+        rect.y = (layout.headerHeight - rect.h) / 2;
+        return rect;
+    }
+
+    bool inRect(int x, int y, const grect_t& rect) const {
+        return x >= rect.x && x < (rect.x + rect.w) &&
+               y >= rect.y && y < (rect.y + rect.h);
+    }
 
     // 获取花色字符
     const char* getSuitChar(int suit) {
@@ -137,32 +257,15 @@ private:
 
     // 初始化牌堆位置
     void initPiles() {
-        // 顶部行：发牌堆、弃牌堆、空、4个终结堆
-        stock.type = PILE_STOCK;
-        stock.x = LEFT_PADDING;
-        stock.y = TOP_PADDING;
         stock.count = 0;
-
-        waste.type = PILE_WASTE;
-        waste.x = LEFT_PADDING + (CARD_W + PILE_SPACING_X);
-        waste.y = TOP_PADDING;
         waste.count = 0;
-
-        // 4个终结堆在右侧
         for(int i = 0; i < 4; i++) {
-            foundation[i].type = PILE_FOUNDATION;
-            foundation[i].x = LEFT_PADDING + (3 + i) * (CARD_W + PILE_SPACING_X);
-            foundation[i].y = TOP_PADDING;
             foundation[i].count = 0;
         }
-
-        // 7个桌面堆
         for(int i = 0; i < 7; i++) {
-            tableau[i].type = PILE_TABLEAU;
-            tableau[i].x = LEFT_PADDING + i * (CARD_W + PILE_SPACING_X);
-            tableau[i].y = TOP_PADDING + TOP_ROW_HEIGHT;
             tableau[i].count = 0;
         }
+        applyLayout();
     }
 
     // 创建一副牌并洗牌
@@ -239,23 +342,23 @@ private:
     }
 
     // 获取牌堆中第idx张牌的实际位置
-    void getCardPos(Pile* p, int idx, int& cx, int& cy) {
+    void getCardPos(Pile* p, int idx, int& cx, int& cy, const LayoutMetrics& layout) {
         cx = p->x;
         cy = p->y;
         if(p->type == PILE_TABLEAU) {
             // 桌面堆：根据每张牌的状态计算偏移
             for(int i = 0; i < idx; i++) {
                 if(p->cards[i].faceUp)
-                    cy += CARD_OFFSET_OPEN;
+                    cy += layout.cardOffsetOpen;
                 else
-                    cy += CARD_OFFSET_CLOSE;
+                    cy += layout.cardOffsetClose;
             }
         }
         else if(p->type == PILE_WASTE) {
             // 弃牌堆：最多显示3张展开
             int visible = p->count - idx;
             if(visible > 3) visible = 3;
-            cx += (3 - visible) * 14;
+            cx += (3 - visible) * scaleMetric(14, (float)layout.cardW / (float)BASE_CARD_W, 4);
         }
     }
 
@@ -306,15 +409,15 @@ private:
     }
 
     // 查找鼠标点击的卡牌
-    bool findCardAt(int x, int y, Pile*& outPile, int& outIndex) {
+    bool findCardAt(int x, int y, Pile*& outPile, int& outIndex, const LayoutMetrics& layout) {
         // 从后往前查找（后绘制的在上层）
         // 先查桌面堆
         for(int i = 6; i >= 0; i--) {
             Pile* p = &tableau[i];
             for(int j = p->count - 1; j >= 0; j--) {
                 int cx, cy;
-                getCardPos(p, j, cx, cy);
-                if(x >= cx && x < cx + CARD_W && y >= cy && y < cy + CARD_H) {
+                getCardPos(p, j, cx, cy, layout);
+                if(x >= cx && x < cx + layout.cardW && y >= cy && y < cy + layout.cardH) {
                     outPile = p;
                     outIndex = j;
                     return true;
@@ -322,7 +425,8 @@ private:
             }
             // 检查空牌堆位置
             if(p->count == 0) {
-                if(x >= p->x && x < p->x + CARD_W && y >= p->y && y < p->y + CARD_H) {
+                if(x >= p->x && x < p->x + layout.cardW &&
+                   y >= p->y && y < p->y + layout.cardH) {
                     outPile = p;
                     outIndex = -1;
                     return true;
@@ -332,8 +436,8 @@ private:
         // 弃牌堆
         if(waste.count > 0) {
             int cx, cy;
-            getCardPos(&waste, waste.count - 1, cx, cy);
-            if(x >= cx && x < cx + CARD_W && y >= cy && y < cy + CARD_H) {
+            getCardPos(&waste, waste.count - 1, cx, cy, layout);
+            if(x >= cx && x < cx + layout.cardW && y >= cy && y < cy + layout.cardH) {
                 outPile = &waste;
                 outIndex = waste.count - 1;
                 return true;
@@ -344,15 +448,16 @@ private:
             Pile* p = &foundation[i];
             if(p->count > 0) {
                 int cx, cy;
-                getCardPos(p, p->count - 1, cx, cy);
-                if(x >= cx && x < cx + CARD_W && y >= cy && y < cy + CARD_H) {
+                getCardPos(p, p->count - 1, cx, cy, layout);
+                if(x >= cx && x < cx + layout.cardW && y >= cy && y < cy + layout.cardH) {
                     outPile = p;
                     outIndex = p->count - 1;
                     return true;
                 }
             }
             else {
-                if(x >= p->x && x < p->x + CARD_W && y >= p->y && y < p->y + CARD_H) {
+                if(x >= p->x && x < p->x + layout.cardW &&
+                   y >= p->y && y < p->y + layout.cardH) {
                     outPile = p;
                     outIndex = -1;
                     return true;
@@ -360,7 +465,8 @@ private:
             }
         }
         // 发牌堆
-        if(x >= stock.x && x < stock.x + CARD_W && y >= stock.y && y < stock.y + CARD_H) {
+        if(x >= stock.x && x < stock.x + layout.cardW &&
+           y >= stock.y && y < stock.y + layout.cardH) {
             outPile = &stock;
             outIndex = stock.count - 1;
             return true;
@@ -400,10 +506,10 @@ private:
     }
 
     // 双击事件：尝试自动放到终结堆
-    void onDoubleClick(int x, int y) {
+    void onDoubleClick(int x, int y, const LayoutMetrics& layout) {
         Pile* p;
         int idx;
-        if(findCardAt(x, y, p, idx) && idx >= 0) {
+        if(findCardAt(x, y, p, idx, layout) && idx >= 0) {
             if(tryAutoMoveToFoundation(p, idx)) {
                 update();
             }
@@ -412,60 +518,82 @@ private:
 
 protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
+        applyLayout();
+        LayoutMetrics layout = getLayoutMetrics();
+        grect_t newGameBtn = getNewGameButtonRect(layout);
+
         // 背景
         graph_fill_rect(g, r.x, r.y, r.w, r.h, COLOR_BG);
 
         // 绘制顶部信息栏（深蓝色背景，不被牌堆覆盖）
-        graph_fill_rect(g, r.x, r.y, r.w, HEADER_HEIGHT, COLOR_TITLE_BAR);
+        graph_fill_rect(g, r.x, r.y, r.w, layout.headerHeight, COLOR_TITLE_BAR);
         // 信息栏下边界线
-        graph_line(g, r.x, r.y + HEADER_HEIGHT - 1, r.x + r.w, r.y + HEADER_HEIGHT - 1, 0xFF000000);
+        graph_line(g, r.x, r.y + layout.headerHeight - 1,
+            r.x + r.w, r.y + layout.headerHeight - 1, 0xFF000000);
 
         // 绘制顶部分数文字
         char info[64];
         snprintf(info, sizeof(info), "Score: %d   Moves: %d", score, moves);
         uint32_t tw, th;
-        font_text_size(info, theme->getFont(), theme->basic.fontSize, &tw, &th);
-        graph_draw_text_font(g, r.x + 8, r.y + (HEADER_HEIGHT - th) / 2, info,
-            theme->getFont(), theme->basic.fontSize, COLOR_TITLE_TEXT);
+        font_text_size(info, theme->getFont(), layout.infoFontSize, &tw, &th);
+        graph_draw_text_font(g, r.x + 8, r.y + (layout.headerHeight - th) / 2, info,
+            theme->getFont(), layout.infoFontSize, COLOR_TITLE_TEXT);
+
+        // 绘制顶部“重新开始”按钮，方便鼠标操作
+        int btnRadius = scaleMetric(5, (float)layout.cardH / (float)BASE_CARD_H, 3);
+        graph_fill_round(g, newGameBtn.x, newGameBtn.y, newGameBtn.w, newGameBtn.h,
+            btnRadius, COLOR_BTN_BG);
+        graph_round(g, newGameBtn.x, newGameBtn.y, newGameBtn.w, newGameBtn.h,
+            btnRadius, 1, COLOR_CARD_BORDER);
+        const char* restartText = "Restart";
+        uint32_t rw, rh;
+        font_text_size(restartText, theme->getFont(), layout.infoFontSize, &rw, &rh);
+        graph_draw_text_font(g,
+            newGameBtn.x + (newGameBtn.w - (int)rw) / 2,
+            newGameBtn.y + (newGameBtn.h - (int)rh) / 2,
+            restartText, theme->getFont(), layout.infoFontSize, COLOR_BTN_TEXT);
 
         // 绘制按钮提示
-        const char* hint = "N:New  S:Stock  Dbl:Auto";
+        const char* hint = "S:Stock  Dbl:Auto";
         uint32_t hw, hh;
-        font_text_size(hint, theme->getFont(), theme->basic.fontSize, &hw, &hh);
-        graph_draw_text_font(g, r.x + r.w - hw - 8, r.y + (HEADER_HEIGHT - hh) / 2, hint,
-            theme->getFont(), theme->basic.fontSize, COLOR_TITLE_TEXT);
+        font_text_size(hint, theme->getFont(), layout.infoFontSize, &hw, &hh);
+        int hintRight = newGameBtn.x - scaleMetric(10, (float)layout.cardW / (float)BASE_CARD_W, 6);
+        graph_draw_text_font(g, hintRight - hw, r.y + (layout.headerHeight - hh) / 2, hint,
+            theme->getFont(), layout.infoFontSize, COLOR_TITLE_TEXT);
 
         // 绘制发牌堆
-        drawPileSlot(g, stock.x, stock.y, stock.count == 0);
-        drawPile(g, &stock, theme);
+        drawPileSlot(g, stock.x, stock.y, stock.count == 0, layout);
+        drawPile(g, &stock, theme, layout);
 
         // 绘制弃牌堆
-        drawPileSlot(g, waste.x, waste.y, waste.count == 0);
-        drawPile(g, &waste, theme);
+        drawPileSlot(g, waste.x, waste.y, waste.count == 0, layout);
+        drawPile(g, &waste, theme, layout);
 
         // 绘制终结堆
         for(int i = 0; i < 4; i++) {
-            drawPileSlot(g, foundation[i].x, foundation[i].y, foundation[i].count == 0);
+            drawPileSlot(g, foundation[i].x, foundation[i].y, foundation[i].count == 0, layout);
             // 显示花色提示图形
             if(foundation[i].count == 0) {
                 uint32_t col = isRed(i) ? 0xFF884444 : 0xFF444444;
-                drawSuit(g, foundation[i].x + CARD_W / 2, foundation[i].y + CARD_H / 2, 24, i, col);
+                drawSuit(g, foundation[i].x + layout.cardW / 2,
+                    foundation[i].y + layout.cardH / 2,
+                    layout.foundationHintSize, i, col);
             }
-            drawPile(g, &foundation[i], theme);
+            drawPile(g, &foundation[i], theme, layout);
         }
 
         // 绘制桌面堆
         for(int i = 0; i < 7; i++) {
-            drawPileSlot(g, tableau[i].x, tableau[i].y, tableau[i].count == 0);
-            drawPile(g, &tableau[i], theme);
+            drawPileSlot(g, tableau[i].x, tableau[i].y, tableau[i].count == 0, layout);
+            drawPile(g, &tableau[i], theme, layout);
         }
 
         // 绘制拖拽中的卡牌（最上层）
         if(dragging && drag.count > 0) {
             for(int i = 0; i < drag.count; i++) {
                 int cx = drag.curX;
-                int cy = drag.curY + i * CARD_OFFSET_OPEN;
-                drawCard(g, cx, cy, drag.cards[i], theme, true);
+                int cy = drag.curY + i * layout.cardOffsetOpen;
+                drawCard(g, cx, cy, drag.cards[i], theme, true, layout);
             }
         }
 
@@ -477,13 +605,13 @@ protected:
             for(int i = 0; i < 4; i++) {
                 if(foundation[i].count > 0) {
                     int baseX, baseY;
-                    getCardPos(&foundation[i], foundation[i].count - 1, baseX, baseY);
+                    getCardPos(&foundation[i], foundation[i].count - 1, baseX, baseY, layout);
                     // 给每张牌一个基于时间的不同浮动偏移
                     int offsetY = ((phase + i * 3) % 7 - 3) * 2;
                     int offsetX = ((phase + i * 2) % 5 - 2) * 2;
                     // 重绘最上面的牌，让它们漂浮
                     Card c = foundation[i].cards[foundation[i].count - 1];
-                    drawCard(g, baseX + offsetX, baseY + offsetY, c, theme, true);
+                    drawCard(g, baseX + offsetX, baseY + offsetY, c, theme, true, layout);
                 }
             }
 
@@ -511,37 +639,43 @@ protected:
             }
 
             // 胜利文字框
-            graph_fill_round(g, r.x + r.w/2 - 110, r.y + r.h/2 - 35, 220, 70, 14, 0xFF000080);
-            graph_round(g, r.x + r.w/2 - 110, r.y + r.h/2 - 35, 220, 70, 14, 3, 0xFFFFFFFF);
+            int winBoxW = scaleMetric(220, (float)layout.cardW / (float)BASE_CARD_W, 120);
+            int winBoxH = scaleMetric(70, (float)layout.cardH / (float)BASE_CARD_H, 42);
+            int winBoxR = scaleMetric(14, (float)layout.cardH / (float)BASE_CARD_H, 8);
+            graph_fill_round(g, r.x + r.w/2 - winBoxW/2, r.y + r.h/2 - winBoxH/2,
+                winBoxW, winBoxH, winBoxR, 0xFF000080);
+            graph_round(g, r.x + r.w/2 - winBoxW/2, r.y + r.h/2 - winBoxH/2,
+                winBoxW, winBoxH, winBoxR, 3, 0xFFFFFFFF);
             const char* win = "You Win!  Score: 1000";
             uint32_t ww, wh;
-            font_text_size(win, theme->getFont(), theme->basic.fontSize + 2, &ww, &wh);
+            int winFontSize = clampInt(layout.infoFontSize + 2, 12, 28);
+            font_text_size(win, theme->getFont(), winFontSize, &ww, &wh);
             graph_draw_text_font(g, r.x + r.w/2 - ww/2, r.y + r.h/2 - wh,
-                win, theme->getFont(), theme->basic.fontSize + 2, 0xFFFFFFFF);
+                win, theme->getFont(), winFontSize, 0xFFFFFFFF);
             const char* hint = "Press N for new game";
-            uint32_t hw, hh;
-            font_text_size(hint, theme->getFont(), theme->basic.fontSize, &hw, &hh);
+            font_text_size(hint, theme->getFont(), layout.infoFontSize, &hw, &hh);
             graph_draw_text_font(g, r.x + r.w/2 - hw/2, r.y + r.h/2 + 4,
-                hint, theme->getFont(), theme->basic.fontSize, 0xFFFFFF00);
+                hint, theme->getFont(), layout.infoFontSize, 0xFFFFFF00);
         }
     }
 
     // 绘制牌堆空槽
-    void drawPileSlot(graph_t* g, int x, int y, bool empty) {
+    void drawPileSlot(graph_t* g, int x, int y, bool empty, const LayoutMetrics& layout) {
         if(empty) {
-            graph_fill_round(g, x, y, CARD_W, CARD_H, 6, COLOR_SLOT);
-            graph_round(g, x, y, CARD_W, CARD_H, 6, 2, COLOR_SLOT_BORDER);
+            int radius = scaleMetric(6, (float)layout.cardH / (float)BASE_CARD_H, 2);
+            graph_fill_round(g, x, y, layout.cardW, layout.cardH, radius, COLOR_SLOT);
+            graph_round(g, x, y, layout.cardW, layout.cardH, radius, 2, COLOR_SLOT_BORDER);
         }
     }
 
     // 绘制牌堆
-    void drawPile(graph_t* g, Pile* p, XTheme* theme) {
+    void drawPile(graph_t* g, Pile* p, XTheme* theme, const LayoutMetrics& layout) {
         for(int i = 0; i < p->count; i++) {
             int cx, cy;
-            getCardPos(p, i, cx, cy);
+            getCardPos(p, i, cx, cy, layout);
             // 桌面堆只绘制最后一张需要全部显示，前面的部分被覆盖
             // 但为了简化，全部绘制（性能足够）
-            drawCard(g, cx, cy, p->cards[i], theme, p->cards[i].faceUp);
+            drawCard(g, cx, cy, p->cards[i], theme, p->cards[i].faceUp, layout);
         }
     }
 
@@ -602,72 +736,99 @@ protected:
     }
 
     // 绘制单张卡牌
-    void drawCard(graph_t* g, int x, int y, Card c, XTheme* theme, bool faceUp) {
+    void drawCard(graph_t* g, int x, int y, Card c, XTheme* theme,
+                  bool faceUp, const LayoutMetrics& layout) {
         (void)theme;
+        int radius = scaleMetric(4, (float)layout.cardH / (float)BASE_CARD_H, 2);
         if(faceUp) {
             // 卡牌背景
-            graph_fill_round(g, x, y, CARD_W, CARD_H, 4, COLOR_CARD_BG);
-            graph_round(g, x, y, CARD_W, CARD_H, 4, 1, COLOR_CARD_BORDER);
+            graph_fill_round(g, x, y, layout.cardW, layout.cardH, radius, COLOR_CARD_BG);
+            graph_round(g, x, y, layout.cardW, layout.cardH, radius, 1, COLOR_CARD_BORDER);
 
             // 卡牌颜色
             uint32_t col = isRed(c.suit) ? COLOR_RED : COLOR_BLACK;
             const char* vs = getValueChar(c.value);
 
             // 左上角：值 + 花色图形
-            graph_draw_text_font(g, x + 3, y + 2, vs, theme->getFont(),
-                theme->basic.fontSize, col);
+            int textPadX = scaleMetric(3, (float)layout.cardW / (float)BASE_CARD_W, 2);
+            int textPadY = scaleMetric(2, (float)layout.cardH / (float)BASE_CARD_H, 1);
+            int iconGapX = scaleMetric(5, (float)layout.cardW / (float)BASE_CARD_W, 3);
+            int iconGapY = scaleMetric(6, (float)layout.cardH / (float)BASE_CARD_H, 3);
+            graph_draw_text_font(g, x + textPadX, y + textPadY, vs, theme->getFont(),
+                layout.cardFontSize, col);
             // 小尺寸花色图形
-            drawSuit(g, x + 3 + 5, y + 2 + theme->basic.fontSize + 6,
-                     10, c.suit, col);
+            drawSuit(g, x + textPadX + iconGapX,
+                     y + textPadY + layout.cardFontSize + iconGapY,
+                     layout.smallSuitSize, c.suit, col);
 
             // 中心大花色图形
-            drawSuit(g, x + CARD_W / 2, y + CARD_H / 2, 32, c.suit, col);
+            drawSuit(g, x + layout.cardW / 2, y + layout.cardH / 2,
+                     layout.centerSuitSize, c.suit, col);
 
             // 右下角：值 + 花色图形（简化，仅绘制值和小图形）
             uint32_t vw, vh;
-            font_text_size(vs, theme->getFont(), theme->basic.fontSize, &vw, &vh);
-            graph_draw_text_font(g, x + CARD_W - vw - 3, y + CARD_H - vh - 2,
-                vs, theme->getFont(), theme->basic.fontSize, col);
-            drawSuit(g, x + CARD_W - 3 - 5, y + CARD_H - vh - 2 - 6,
-                     10, c.suit, col);
+            font_text_size(vs, theme->getFont(), layout.cardFontSize, &vw, &vh);
+            graph_draw_text_font(g, x + layout.cardW - vw - textPadX,
+                y + layout.cardH - vh - textPadY,
+                vs, theme->getFont(), layout.cardFontSize, col);
+            drawSuit(g, x + layout.cardW - textPadX - iconGapX,
+                     y + layout.cardH - vh - textPadY - iconGapY,
+                     layout.smallSuitSize, c.suit, col);
         }
         else {
             // 卡牌背面 - 经典蓝色背底装饰图案
             // 外框
-            graph_fill_round(g, x, y, CARD_W, CARD_H, 4, COLOR_CARD_BACK);
+            graph_fill_round(g, x, y, layout.cardW, layout.cardH, radius, COLOR_CARD_BACK);
             // 内框
-            graph_round(g, x, y, CARD_W, CARD_H, 4, 1, COLOR_CARD_BG);
+            graph_round(g, x, y, layout.cardW, layout.cardH, radius, 1, COLOR_CARD_BG);
             // 内部装饰：三个小矩形形成菱形
-            graph_fill_round(g, x + 4, y + 4, CARD_W - 8, CARD_H - 8, 2, COLOR_CARD_BG);
-            graph_round(g, x + 4, y + 4, CARD_W - 8, CARD_H - 8, 2, 1, COLOR_CARD_BG);
+            int inset = scaleMetric(4, (float)layout.cardW / (float)BASE_CARD_W, 2);
+            graph_fill_round(g, x + inset, y + inset,
+                layout.cardW - inset * 2, layout.cardH - inset * 2,
+                scaleMetric(2, (float)layout.cardH / (float)BASE_CARD_H, 1), COLOR_CARD_BG);
+            graph_round(g, x + inset, y + inset,
+                layout.cardW - inset * 2, layout.cardH - inset * 2,
+                scaleMetric(2, (float)layout.cardH / (float)BASE_CARD_H, 1), 1, COLOR_CARD_BG);
             // 红色外框
-            graph_round(g, x, y, CARD_W, CARD_H, 4, 1, COLOR_CARD_BORDER);
+            graph_round(g, x, y, layout.cardW, layout.cardH, radius, 1, COLOR_CARD_BORDER);
             // 中心装饰 - 中间一个装饰的图案
             // 小的红色中心标记
-            int cx = x + CARD_W / 2;
-            int cy = y + CARD_H / 2;
-            graph_fill_round(g, cx - 6, cy - 18, 12, 12, 2, COLOR_CARD_BACK_P);
-            graph_fill_round(g, cx - 18, cy - 6, 12, 12, 2, COLOR_CARD_BACK_P);
-            graph_fill_round(g, cx - 6, cy + 6, 12, 12, 2, COLOR_CARD_BACK_P);
-            graph_fill_round(g, cx + 6, cy - 6, 12, 12, 2, COLOR_CARD_BACK_P);
-            graph_fill_circle(g, cx, cy, 4, COLOR_CARD_BACK_P);
+            int cx = x + layout.cardW / 2;
+            int cy = y + layout.cardH / 2;
+            int mark = scaleMetric(12, (float)layout.cardW / (float)BASE_CARD_W, 4);
+            int markOffset = scaleMetric(6, (float)layout.cardW / (float)BASE_CARD_W, 2);
+            int markTop = scaleMetric(18, (float)layout.cardH / (float)BASE_CARD_H, 6);
+            int markRadius = scaleMetric(2, (float)layout.cardH / (float)BASE_CARD_H, 1);
+            graph_fill_round(g, cx - markOffset, cy - markTop, mark, mark, markRadius, COLOR_CARD_BACK_P);
+            graph_fill_round(g, cx - markTop, cy - markOffset, mark, mark, markRadius, COLOR_CARD_BACK_P);
+            graph_fill_round(g, cx - markOffset, cy + markOffset, mark, mark, markRadius, COLOR_CARD_BACK_P);
+            graph_fill_round(g, cx + markOffset, cy - markOffset, mark, mark, markRadius, COLOR_CARD_BACK_P);
+            graph_fill_circle(g, cx, cy, scaleMetric(4, (float)layout.cardW / (float)BASE_CARD_W, 2), COLOR_CARD_BACK_P);
         }
     }
 
     bool onMouse(xevent_t* ev) {
+        applyLayout();
+        LayoutMetrics layout = getLayoutMetrics();
+        grect_t newGameBtn = getNewGameButtonRect(layout);
         gpos_t pos = getInsidePos(ev->value.mouse.x, ev->value.mouse.y);
         int x = pos.x;
         int y = pos.y;
 
         if(ev->state == MOUSE_STATE_DOWN) {
+            if(inRect(x, y, newGameBtn)) {
+                newGame();
+                return true;
+            }
+
             // 检查是否点击在顶部信息栏区域（按钮）
-            if(y < TOP_PADDING) {
+            if(y < layout.topPadding) {
                 return true;
             }
 
             // 检查发牌堆点击
-            if(x >= stock.x && x < stock.x + CARD_W &&
-               y >= stock.y && y < stock.y + CARD_H) {
+            if(x >= stock.x && x < stock.x + layout.cardW &&
+               y >= stock.y && y < stock.y + layout.cardH) {
                 drawFromStock();
                 return true;
             }
@@ -675,7 +836,7 @@ protected:
             // 查找点击的卡牌
             Pile* p;
             int idx;
-            if(findCardAt(x, y, p, idx) && idx >= 0) {
+            if(findCardAt(x, y, p, idx, layout) && idx >= 0) {
                 if(canDragFrom(p, idx)) {
                     // 开始拖拽
                     dragging = true;
@@ -686,7 +847,7 @@ protected:
                         drag.cards[drag.count++] = p->cards[i];
                     }
                     int cardX, cardY;
-                    getCardPos(p, idx, cardX, cardY);
+                    getCardPos(p, idx, cardX, cardY, layout);
                     drag.offsetX = x - cardX;
                     drag.offsetY = y - cardY;
                     drag.curX = cardX;
@@ -715,8 +876,8 @@ protected:
 
                 // 检查终结堆
                 for(int i = 0; i < 4; i++) {
-                    int dx = foundation[i].x + CARD_W / 2 - (drag.curX + CARD_W / 2);
-                    int dy = foundation[i].y + CARD_H / 2 - (drag.curY + CARD_H / 2);
+                    int dx = foundation[i].x + layout.cardW / 2 - (drag.curX + layout.cardW / 2);
+                    int dy = foundation[i].y + layout.cardH / 2 - (drag.curY + layout.cardH / 2);
                     int dist = dx * dx + dy * dy;
                     if(dist < bestDist && canPlaceOn(c, &foundation[i])) {
                         bestDist = dist;
@@ -730,12 +891,12 @@ protected:
                     int ty = tableau[i].y;
                     if(tableau[i].count > 0) {
                         int cx, cy;
-                        getCardPos(&tableau[i], tableau[i].count - 1, cx, cy);
+                        getCardPos(&tableau[i], tableau[i].count - 1, cx, cy, layout);
                         tx = cx;
                         ty = cy;
                     }
-                    int dx = tx + CARD_W / 2 - (drag.curX + CARD_W / 2);
-                    int dy = ty + CARD_H / 2 - (drag.curY + CARD_H / 2);
+                    int dx = tx + layout.cardW / 2 - (drag.curX + layout.cardW / 2);
+                    int dy = ty + layout.cardH / 2 - (drag.curY + layout.cardH / 2);
                     int dist = dx * dx + dy * dy;
                     if(dist < bestDist && canPlaceOn(c, &tableau[i])) {
                         bestDist = dist;
@@ -771,7 +932,7 @@ protected:
         }
         else if(ev->state == MOUSE_STATE_DOUBLE_CLICK) {
             // 双击：尝试自动放到终结堆
-            onDoubleClick(x, y);
+            onDoubleClick(x, y, layout);
             return true;
         }
         return false;
@@ -804,6 +965,14 @@ protected:
         }
     }
 
+    void onResize() {
+        applyLayout();
+        if(dragging) {
+            dragging = false;
+            drag.count = 0;
+        }
+    }
+
 public:
     CardsWidget() : Widget() {
         srand((unsigned int)time(NULL));
@@ -833,16 +1002,19 @@ public:
 };
 
 int main(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     X x;
     Cards win;
 
     grect_t wr;
     wr.x = 100;
     wr.y = 60;
-    wr.w = LEFT_PADDING * 2 + 7 * CARD_W + 6 * PILE_SPACING_X;
-    wr.h = TOP_PADDING + TOP_ROW_HEIGHT + 19 * CARD_OFFSET_OPEN + CARD_H + 20;
+    wr.w = BASE_BOARD_W;
+    wr.h = BASE_BOARD_H;
 
-    win.open(&x, -1, wr, "Cards", XWIN_STYLE_NO_RESIZE);
+    win.open(&x, -1, wr, "Cards", XWIN_STYLE_NORMAL, true);
+    win.max();
     widgetXRun(&x, &win);
     return 0;
 }
