@@ -120,6 +120,13 @@ private:
 
     DragInfo drag;
     bool dragging;
+    Pile* pressedPile;
+    int pressedIndex;
+    int pressedMouseX;
+    int pressedMouseY;
+    Pile* lastClickPile;
+    int lastClickIndex;
+    uint64_t lastClickMs;
 
     int score;
     int moves;
@@ -139,6 +146,23 @@ private:
         return scaled;
     }
 
+    int getFoundationIndex(const Pile* pile) const {
+        for(int i = 0; i < 4; i++) {
+            if(&foundation[i] == pile) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    int getFoundationSuit(const Pile* pile) const {
+        int index = getFoundationIndex(pile);
+        if(index < 0) {
+            return -1;
+        }
+        return index;
+    }
+
     LayoutMetrics getLayoutMetrics() const {
         LayoutMetrics layout;
         int widgetW = area.w > 0 ? area.w : BASE_BOARD_W;
@@ -146,9 +170,6 @@ private:
         float scaleW = (float)widgetW / (float)BASE_BOARD_W;
         float scaleH = (float)widgetH / (float)BASE_BOARD_H;
         float scale = scaleW < scaleH ? scaleW : scaleH;
-        if(scale > 2.0f) {
-            scale = 2.0f;
-        }
         if(scale <= 0.0f) {
             scale = 1.0f;
         }
@@ -316,6 +337,13 @@ private:
         winStartTime = 0;
         winFrame = 0;
         dragging = false;
+        pressedPile = NULL;
+        pressedIndex = -1;
+        pressedMouseX = 0;
+        pressedMouseY = 0;
+        lastClickPile = NULL;
+        lastClickIndex = -1;
+        lastClickMs = 0;
         memset(&drag, 0, sizeof(drag));
         update();
     }
@@ -327,6 +355,7 @@ private:
             c.faceUp = true;
             waste.cards[waste.count++] = c;
             moves++;
+            tryAutoFinishGame();
             update();
         }
         else if(waste.count > 0) {
@@ -337,6 +366,7 @@ private:
                 stock.cards[stock.count++] = c;
             }
             moves++;
+            tryAutoFinishGame();
             update();
         }
     }
@@ -365,9 +395,11 @@ private:
     // 检查能否将卡牌放到目标牌堆
     bool canPlaceOn(Card c, Pile* dst) {
         if(dst->type == PILE_FOUNDATION) {
-            // 终结堆：必须同花色，从A开始递增
-            if(dst->count == 0)
-                return c.value == 1;
+            // 终结堆：右上角 4 个空格和花色一一对应，从对应花色的 A 开始递增
+            int suit = getFoundationSuit(dst);
+            if(dst->count == 0) {
+                return c.value == 1 && c.suit == suit;
+            }
             Card top = dst->cards[dst->count - 1];
             return top.suit == c.suit && top.value + 1 == c.value;
         }
@@ -380,6 +412,15 @@ private:
             return isRed(top.suit) != isRed(c.suit) && top.value - 1 == c.value;
         }
         return false;
+    }
+
+    bool canPlaceOnFoundationSet(Card c, Pile* foundationSet, int foundationIndex) const {
+        Pile* dst = &foundationSet[foundationIndex];
+        if(dst->count == 0) {
+            return c.value == 1 && c.suit == foundationIndex;
+        }
+        Card top = dst->cards[dst->count - 1];
+        return top.suit == c.suit && top.value + 1 == c.value;
     }
 
     // 检查能否拖动一组牌（从srcPile的srcIndex开始）
@@ -485,34 +526,171 @@ private:
         }
     }
 
-    // 自动放到终结堆
-    bool tryAutoMoveToFoundation(Pile* srcPile, int srcIndex) {
-        if(srcIndex != srcPile->count - 1) return false;
+    bool moveTopCardToFoundationSet(Pile* srcPile, int srcIndex, Pile* foundationSet,
+            bool countStats) {
+        if(srcPile == NULL || srcIndex != srcPile->count - 1) return false;
         Card c = srcPile->cards[srcIndex];
         for(int i = 0; i < 4; i++) {
-            if(canPlaceOn(c, &foundation[i])) {
+            if(canPlaceOnFoundationSet(c, foundationSet, i)) {
                 srcPile->count--;
-                foundation[i].cards[foundation[i].count++] = c;
+                foundationSet[i].cards[foundationSet[i].count++] = c;
                 if(srcPile->type == PILE_TABLEAU && srcPile->count > 0) {
                     srcPile->cards[srcPile->count - 1].faceUp = true;
                 }
-                score += 10;
-                moves++;
-                checkWin();
+                if(countStats) {
+                    score += 10;
+                    moves++;
+                }
                 return true;
             }
         }
         return false;
     }
 
-    // 双击事件：尝试自动放到终结堆
-    void onDoubleClick(int x, int y, const LayoutMetrics& layout) {
-        Pile* p;
-        int idx;
-        if(findCardAt(x, y, p, idx, layout) && idx >= 0) {
-            if(tryAutoMoveToFoundation(p, idx)) {
-                update();
+    bool allTableauFaceUp() {
+        for(int i = 0; i < 7; i++) {
+            for(int j = 0; j < tableau[i].count; j++) {
+                if(!tableau[i].cards[j].faceUp) {
+                    return false;
+                }
             }
+        }
+        return true;
+    }
+
+    bool canAutoFinishGame() {
+        if(won || stock.count > 0 || !allTableauFaceUp()) {
+            return false;
+        }
+
+        Pile testWaste = waste;
+        Pile testFoundation[4];
+        Pile testTableau[7];
+        memcpy(testFoundation, foundation, sizeof(testFoundation));
+        memcpy(testTableau, tableau, sizeof(testTableau));
+
+        bool moved = true;
+        while(moved) {
+            moved = false;
+            if(testWaste.count > 0 &&
+               moveTopCardToFoundationSet(&testWaste, testWaste.count - 1, testFoundation, false)) {
+                moved = true;
+            }
+
+            for(int i = 0; i < 7; i++) {
+                if(testTableau[i].count <= 0) {
+                    continue;
+                }
+                if(moveTopCardToFoundationSet(&testTableau[i], testTableau[i].count - 1,
+                        testFoundation, false)) {
+                    moved = true;
+                }
+            }
+        }
+
+        int total = 0;
+        for(int i = 0; i < 4; i++) {
+            total += testFoundation[i].count;
+        }
+        return total == 52;
+    }
+
+    bool tryAutoFinishGame() {
+        if(!canAutoFinishGame()) {
+            return false;
+        }
+
+        bool movedAny = false;
+        bool moved = true;
+        while(moved) {
+            moved = false;
+            if(waste.count > 0 &&
+               moveTopCardToFoundationSet(&waste, waste.count - 1, foundation, false)) {
+                moved = true;
+                movedAny = true;
+            }
+
+            for(int i = 0; i < 7; i++) {
+                if(tableau[i].count <= 0) {
+                    continue;
+                }
+                if(moveTopCardToFoundationSet(&tableau[i], tableau[i].count - 1,
+                        foundation, false)) {
+                    moved = true;
+                    movedAny = true;
+                }
+            }
+        }
+
+        checkWin();
+        return movedAny;
+    }
+
+    // 自动放到终结堆
+    bool tryAutoMoveToFoundation(Pile* srcPile, int srcIndex) {
+        if(moveTopCardToFoundationSet(srcPile, srcIndex, foundation, true)) {
+            checkWin();
+            if(!won) {
+                tryAutoFinishGame();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    bool beginDrag(Pile* p, int idx, int mouseDownX, int mouseDownY,
+            int currentMouseX, int currentMouseY, const LayoutMetrics& layout) {
+        if(p == NULL || idx < 0 || !canDragFrom(p, idx)) {
+            return false;
+        }
+
+        dragging = true;
+        drag.srcPile = p;
+        drag.srcIndex = idx;
+        drag.count = 0;
+        for(int i = idx; i < p->count; i++) {
+            drag.cards[drag.count++] = p->cards[i];
+        }
+
+        int cardX, cardY;
+        getCardPos(p, idx, cardX, cardY, layout);
+        drag.offsetX = mouseDownX - cardX;
+        drag.offsetY = mouseDownY - cardY;
+        drag.curX = currentMouseX - drag.offsetX;
+        drag.curY = currentMouseY - drag.offsetY;
+
+        // 直到真正进入拖拽阶段才从源牌堆摘下，避免双击被提前抢成拖拽。
+        p->count = idx;
+        update();
+        return true;
+    }
+
+    void clearPendingPress() {
+        pressedPile = NULL;
+        pressedIndex = -1;
+        pressedMouseX = 0;
+        pressedMouseY = 0;
+    }
+
+    void clearPendingClick() {
+        lastClickPile = NULL;
+        lastClickIndex = -1;
+        lastClickMs = 0;
+    }
+
+    // 双击事件：尝试自动放到终结堆
+    void onDoubleClick(Pile* p, int idx) {
+        if(p == NULL || idx < 0 || p->type == PILE_STOCK || p->count <= 0) {
+            return;
+        }
+
+        int topIndex = p->count - 1;
+        if(p->type == PILE_TABLEAU && !p->cards[topIndex].faceUp) {
+            return;
+        }
+
+        if(tryAutoMoveToFoundation(p, topIndex)) {
+            update();
         }
     }
 
@@ -816,7 +994,9 @@ protected:
         int y = pos.y;
 
         if(ev->state == MOUSE_STATE_DOWN) {
+            clearPendingPress();
             if(inRect(x, y, newGameBtn)) {
+                clearPendingClick();
                 newGame();
                 return true;
             }
@@ -829,6 +1009,7 @@ protected:
             // 检查发牌堆点击
             if(x >= stock.x && x < stock.x + layout.cardW &&
                y >= stock.y && y < stock.y + layout.cardH) {
+                clearPendingClick();
                 drawFromStock();
                 return true;
             }
@@ -838,23 +1019,10 @@ protected:
             int idx;
             if(findCardAt(x, y, p, idx, layout) && idx >= 0) {
                 if(canDragFrom(p, idx)) {
-                    // 开始拖拽
-                    dragging = true;
-                    drag.srcPile = p;
-                    drag.srcIndex = idx;
-                    drag.count = 0;
-                    for(int i = idx; i < p->count; i++) {
-                        drag.cards[drag.count++] = p->cards[i];
-                    }
-                    int cardX, cardY;
-                    getCardPos(p, idx, cardX, cardY, layout);
-                    drag.offsetX = x - cardX;
-                    drag.offsetY = y - cardY;
-                    drag.curX = cardX;
-                    drag.curY = cardY;
-                    // 从源牌堆移除
-                    p->count = idx;
-                    update();
+                    pressedPile = p;
+                    pressedIndex = idx;
+                    pressedMouseX = x;
+                    pressedMouseY = y;
                     return true;
                 }
             }
@@ -864,6 +1032,13 @@ protected:
                 drag.curX = x - drag.offsetX;
                 drag.curY = y - drag.offsetY;
                 update();
+                return true;
+            }
+            if(pressedPile != NULL &&
+               beginDrag(pressedPile, pressedIndex, pressedMouseX, pressedMouseY,
+                   x, y, layout)) {
+                clearPendingClick();
+                clearPendingPress();
                 return true;
             }
         }
@@ -916,6 +1091,9 @@ protected:
                     if(dstPile->type == PILE_FOUNDATION) score += 10;
                     moves++;
                     checkWin();
+                    if(!won) {
+                        tryAutoFinishGame();
+                    }
                 }
                 else {
                     // 放回原牌堆
@@ -926,14 +1104,37 @@ protected:
 
                 dragging = false;
                 drag.count = 0;
+                clearPendingPress();
+                clearPendingClick();
                 update();
                 return true;
             }
-        }
-        else if(ev->state == MOUSE_STATE_DOUBLE_CLICK) {
-            // 双击：尝试自动放到终结堆
-            onDoubleClick(x, y, layout);
-            return true;
+
+            if(pressedPile != NULL) {
+                Pile* releasedPile = NULL;
+                int releasedIndex = -1;
+                bool sameCard = findCardAt(x, y, releasedPile, releasedIndex, layout) &&
+                    releasedPile == pressedPile && releasedIndex == pressedIndex;
+                Pile* clickedPile = pressedPile;
+                int clickedIndex = pressedIndex;
+                clearPendingPress();
+
+                if(sameCard) {
+                    uint64_t now = kernel_tic_ms(0);
+                    if(lastClickPile == clickedPile &&
+                       lastClickIndex == clickedIndex &&
+                       (now - lastClickMs) <= 300) {
+                        clearPendingClick();
+                        onDoubleClick(clickedPile, clickedIndex);
+                        return true;
+                    }
+
+                    lastClickPile = clickedPile;
+                    lastClickIndex = clickedIndex;
+                    lastClickMs = now;
+                    return true;
+                }
+            }
         }
         return false;
     }
@@ -977,6 +1178,13 @@ public:
     CardsWidget() : Widget() {
         srand((unsigned int)time(NULL));
         dragging = false;
+        pressedPile = NULL;
+        pressedIndex = -1;
+        pressedMouseX = 0;
+        pressedMouseY = 0;
+        lastClickPile = NULL;
+        lastClickIndex = -1;
+        lastClickMs = 0;
         memset(&drag, 0, sizeof(drag));
         score = 0;
         moves = 0;
