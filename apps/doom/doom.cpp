@@ -1148,6 +1148,9 @@ static void on_event(xwin_t* xwin, xevent_t* ev) {
 		}
 		g_mouse_x = pos.x;
 		g_mouse_seen = true;
+		if (g_game_over && ev->state == MOUSE_STATE_DOWN) {
+			g_restart_pressed = true;
+		}
 		if (ev->value.mouse.button == MOUSE_BUTTON_LEFT) {
 			g_mouse_fire = (ev->state == MOUSE_STATE_DOWN || ev->state == MOUSE_STATE_DRAG);
 		}
