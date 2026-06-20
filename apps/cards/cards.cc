@@ -13,31 +13,31 @@
 
 using namespace Ewok;
 
-// 颜色定义 - Windows经典接龙风格
-static const uint32_t COLOR_BG          = 0xFF008080; // 经典接龙桌布绿
-static const uint32_t COLOR_CARD_BG     = 0xFFFFFFFF; // 卡牌背景白色
-static const uint32_t COLOR_CARD_BACK   = 0xFF0000CC; // 卡牌背面蓝色
-static const uint32_t COLOR_CARD_BACK_P = 0xFFFF0000; // 卡牌背面图案红色
-static const uint32_t COLOR_CARD_BORDER = 0xFF000000; // 卡牌边框黑色
-static const uint32_t COLOR_RED         = 0xFFCC0000; // 红色花色
-static const uint32_t COLOR_BLACK       = 0xFF000000; // 黑色花色
-static const uint32_t COLOR_SLOT        = 0xFF006666; // 牌槽颜色
-static const uint32_t COLOR_SLOT_BORDER = 0xFF004D4D; // 牌槽边框
-static const uint32_t COLOR_HIGHLIGHT    = 0xFFFFFF00; // 高亮黄色
-static const uint32_t COLOR_BTN_BG      = 0xFFD4D0C8; // 按钮灰色
-static const uint32_t COLOR_BTN_TEXT    = 0xFF000000; // 按钮文字黑色
-static const uint32_t COLOR_TITLE_BAR  = 0xFF000080; // 标题栏深蓝
-static const uint32_t COLOR_TITLE_TEXT  = 0xFFFFFFFF; // 标题白色
+// Color definitions inspired by classic Windows Solitaire
+static const uint32_t COLOR_BG          = 0xFF008080; // Classic solitaire table green
+static const uint32_t COLOR_CARD_BG     = 0xFFFFFFFF; // White card face
+static const uint32_t COLOR_CARD_BACK   = 0xFF0000CC; // Blue card back
+static const uint32_t COLOR_CARD_BACK_P = 0xFFFF0000; // Red pattern on card back
+static const uint32_t COLOR_CARD_BORDER = 0xFF000000; // Black card border
+static const uint32_t COLOR_RED         = 0xFFCC0000; // Red suit color
+static const uint32_t COLOR_BLACK       = 0xFF000000; // Black suit color
+static const uint32_t COLOR_SLOT        = 0xFF006666; // Empty slot color
+static const uint32_t COLOR_SLOT_BORDER = 0xFF004D4D; // Empty slot border
+static const uint32_t COLOR_HIGHLIGHT    = 0xFFFFFF00; // Yellow highlight
+static const uint32_t COLOR_BTN_BG      = 0xFFD4D0C8; // Button gray
+static const uint32_t COLOR_BTN_TEXT    = 0xFF000000; // Button text
+static const uint32_t COLOR_TITLE_BAR  = 0xFF000080; // Dark blue title bar
+static const uint32_t COLOR_TITLE_TEXT  = 0xFFFFFFFF; // White title text
 
-// 基准布局尺寸，实际绘制时会按窗口大小缩放
+// Base layout metrics scaled against the current window size
 static const int BASE_CARD_W = 56;
 static const int BASE_CARD_H = 80;
-static const int BASE_CARD_OFFSET_OPEN  = 22; // 翻开的牌叠偏移
-static const int BASE_CARD_OFFSET_CLOSE = 8;  // 未翻开的牌叠偏移
-static const int BASE_PILE_SPACING_X    = 12; // 列间距
-static const int BASE_PILE_SPACING_Y    = 16; // 行间距
-static const int BASE_HEADER_HEIGHT     = 28; // 顶部文字栏高度
-static const int BASE_TOP_PADDING       = BASE_HEADER_HEIGHT + 8; // 顶部牌堆起始Y
+static const int BASE_CARD_OFFSET_OPEN  = 22; // Offset for face-up stacked cards
+static const int BASE_CARD_OFFSET_CLOSE = 8;  // Offset for face-down stacked cards
+static const int BASE_PILE_SPACING_X    = 12; // Column spacing
+static const int BASE_PILE_SPACING_Y    = 16; // Row spacing
+static const int BASE_HEADER_HEIGHT     = 28; // Fixed top status bar height
+static const int BASE_TOP_PADDING       = BASE_HEADER_HEIGHT + 8; // Top row start Y
 static const int BASE_LEFT_PADDING      = 12;
 static const int BASE_TOP_ROW_HEIGHT    = BASE_CARD_H + BASE_PILE_SPACING_Y;
 static const int BASE_BOTTOM_PADDING    = 20;
@@ -48,7 +48,7 @@ static const int BASE_BOARD_H =
     BASE_TOP_PADDING + BASE_TOP_ROW_HEIGHT +
     MAX_TABLEAU_VISIBLE * BASE_CARD_OFFSET_OPEN + BASE_CARD_H + BASE_BOTTOM_PADDING;
 
-// 花色
+// Card suits
 enum Suit {
     SUIT_HEARTS   = 0,
     SUIT_DIAMONDS = 1,
@@ -56,40 +56,40 @@ enum Suit {
     SUIT_SPADES   = 3
 };
 
-// 牌面值 1=A, 11=J, 12=Q, 13=K
+// Card values: 1=A, 11=J, 12=Q, 13=K
 typedef struct {
     int value;     // 1-13
     int suit;      // Suit
-    bool faceUp;   // 是否翻开
+    bool faceUp;   // Whether the card is face up
 } Card;
 
-// 牌堆类型
+// Pile types
 enum PileType {
-    PILE_STOCK     = 0, // 发牌堆
-    PILE_WASTE     = 1, // 弃牌堆
-    PILE_FOUNDATION = 2, // 终结堆 (4个)
-    PILE_TABLEAU    = 3  // 桌面堆 (7个)
+    PILE_STOCK     = 0, // Stock pile
+    PILE_WASTE     = 1, // Waste pile
+    PILE_FOUNDATION = 2, // Foundation piles (4)
+    PILE_TABLEAU    = 3  // Tableau piles (7)
 };
 
-// 牌堆
+// Card pile
 typedef struct {
     PileType type;
-    int x, y;       // 牌堆位置
-    Card cards[24]; // 最多24张
+    int x, y;       // Pile position
+    Card cards[24]; // Up to 24 cards
     int count;
 } Pile;
 
-// 拖拽中的卡牌
+// Cards currently being dragged
 typedef struct {
     Pile* srcPile;
-    int srcIndex;          // 在源牌堆中的起始索引
-    Card cards[13];        // 拖拽中的卡牌
+    int srcIndex;          // Starting index in the source pile
+    Card cards[13];        // Cards in the drag stack
     int count;
-    int offsetX, offsetY; // 鼠标偏移
-    int curX, curY;        // 当前位置
+    int offsetX, offsetY; // Mouse offset from card origin
+    int curX, curY;        // Current drag position
 } DragInfo;
 
-// 卡牌游戏主组件
+// Main card game widget
 class CardsWidget : public Widget {
 private:
     struct LayoutMetrics {
@@ -105,6 +105,7 @@ private:
         int topRowHeight;
         int boardLeft;
         int boardW;
+        int boardH;
         int tableauBaseY;
         int infoFontSize;
         int cardFontSize;
@@ -113,10 +114,10 @@ private:
         int smallSuitSize;
     };
 
-    Pile stock;       // 发牌堆
-    Pile waste;       // 弃牌堆
-    Pile foundation[4]; // 终结堆
-    Pile tableau[7];    // 桌面堆
+    Pile stock;       // Stock pile
+    Pile waste;       // Waste pile
+    Pile foundation[4]; // Foundation piles
+    Pile tableau[7];    // Tableau piles
 
     DragInfo drag;
     bool dragging;
@@ -161,6 +162,74 @@ private:
         return scaled;
     }
 
+    int getTableauPileHeight(const Pile& pile, int cardH, int cardOffsetOpen,
+            int cardOffsetClose) const {
+        int height = cardH;
+        if(pile.count <= 0) {
+            return height;
+        }
+
+        for(int i = 0; i < pile.count - 1; i++) {
+            if(pile.cards[i].faceUp) {
+                height += cardOffsetOpen;
+            }
+            else {
+                height += cardOffsetClose;
+            }
+        }
+        return height;
+    }
+
+    LayoutMetrics buildLayoutMetrics(float scale, int widgetW, int widgetH) const {
+        (void)widgetH;
+
+        LayoutMetrics layout;
+        if(scale < 0.0f) {
+            scale = 0.0f;
+        }
+
+        layout.cardW = scaleMetric(BASE_CARD_W, scale, 18);
+        layout.cardH = scaleMetric(BASE_CARD_H, scale, 26);
+        layout.cardOffsetOpen = scaleMetric(BASE_CARD_OFFSET_OPEN, scale, 6);
+        layout.cardOffsetClose = scaleMetric(BASE_CARD_OFFSET_CLOSE, scale, 3);
+        layout.pileSpacingX = scaleMetric(BASE_PILE_SPACING_X, scale, 4);
+        layout.pileSpacingY = scaleMetric(BASE_PILE_SPACING_Y, scale, 6);
+        layout.headerHeight = BASE_HEADER_HEIGHT;
+        layout.leftPadding = scaleMetric(BASE_LEFT_PADDING, scale, 4);
+        layout.topPadding = layout.headerHeight + scaleMetric(8, scale, 4);
+        layout.topRowHeight = layout.cardH + layout.pileSpacingY;
+        layout.boardW = layout.leftPadding * 2 +
+            7 * layout.cardW + 6 * layout.pileSpacingX;
+        layout.boardLeft = 0;
+        if(widgetW > layout.boardW) {
+            layout.boardLeft = (widgetW - layout.boardW) / 2;
+        }
+
+        layout.tableauBaseY = layout.topPadding + layout.topRowHeight;
+
+        int maxTableauHeight = layout.cardH;
+        for(int i = 0; i < 7; i++) {
+            int pileHeight = getTableauPileHeight(tableau[i], layout.cardH,
+                layout.cardOffsetOpen, layout.cardOffsetClose);
+            if(pileHeight > maxTableauHeight) {
+                maxTableauHeight = pileHeight;
+            }
+        }
+
+        int bottomPadding = scaleMetric(BASE_BOTTOM_PADDING, scale, 8);
+        layout.boardH = layout.tableauBaseY + maxTableauHeight + bottomPadding;
+        layout.infoFontSize = 12;
+        layout.cardFontSize = clampInt(scaleMetric(12, scale, 8), 8, 24);
+        layout.foundationHintSize = scaleMetric(24, scale, 10);
+        layout.centerSuitSize = scaleMetric(32, scale, 12);
+        layout.smallSuitSize = scaleMetric(10, scale, 4);
+        return layout;
+    }
+
+    bool layoutFits(const LayoutMetrics& layout, int widgetW, int widgetH) const {
+        return layout.boardW <= widgetW && layout.boardH <= widgetH;
+    }
+
     int getFoundationIndex(const Pile* pile) const {
         for(int i = 0; i < 4; i++) {
             if(&foundation[i] == pile) {
@@ -179,39 +248,37 @@ private:
     }
 
     LayoutMetrics getLayoutMetrics() const {
-        LayoutMetrics layout;
         int widgetW = area.w > 0 ? area.w : BASE_BOARD_W;
         int widgetH = area.h > 0 ? area.h : BASE_BOARD_H;
-        float scaleW = (float)widgetW / (float)BASE_BOARD_W;
-        float scaleH = (float)widgetH / (float)BASE_BOARD_H;
-        float scale = scaleW < scaleH ? scaleW : scaleH;
-        if(scale <= 0.0f) {
-            scale = 1.0f;
+
+        float low = 0.0f;
+        float high = 1.0f;
+        LayoutMetrics bestLayout = buildLayoutMetrics(low, widgetW, widgetH);
+        if(!layoutFits(bestLayout, widgetW, widgetH)) {
+            return bestLayout;
         }
 
-        layout.cardW = scaleMetric(BASE_CARD_W, scale, 18);
-        layout.cardH = scaleMetric(BASE_CARD_H, scale, 26);
-        layout.cardOffsetOpen = scaleMetric(BASE_CARD_OFFSET_OPEN, scale, 6);
-        layout.cardOffsetClose = scaleMetric(BASE_CARD_OFFSET_CLOSE, scale, 3);
-        layout.pileSpacingX = scaleMetric(BASE_PILE_SPACING_X, scale, 4);
-        layout.pileSpacingY = scaleMetric(BASE_PILE_SPACING_Y, scale, 6);
-        layout.headerHeight = scaleMetric(BASE_HEADER_HEIGHT, scale, 20);
-        layout.leftPadding = scaleMetric(BASE_LEFT_PADDING, scale, 4);
-        layout.topPadding = layout.headerHeight + scaleMetric(8, scale, 4);
-        layout.topRowHeight = layout.cardH + layout.pileSpacingY;
-        layout.boardW = layout.leftPadding * 2 +
-            7 * layout.cardW + 6 * layout.pileSpacingX;
-        layout.boardLeft = 0;
-        if(widgetW > layout.boardW) {
-            layout.boardLeft = (widgetW - layout.boardW) / 2;
+        LayoutMetrics trialLayout = buildLayoutMetrics(high, widgetW, widgetH);
+        while(layoutFits(trialLayout, widgetW, widgetH) && high < 8.0f) {
+            low = high;
+            bestLayout = trialLayout;
+            high *= 2.0f;
+            trialLayout = buildLayoutMetrics(high, widgetW, widgetH);
         }
-        layout.tableauBaseY = layout.topPadding + layout.topRowHeight;
-        layout.infoFontSize = clampInt(scaleMetric(12, scale, 10), 10, 24);
-        layout.cardFontSize = clampInt(scaleMetric(12, scale, 8), 8, 24);
-        layout.foundationHintSize = scaleMetric(24, scale, 10);
-        layout.centerSuitSize = scaleMetric(32, scale, 12);
-        layout.smallSuitSize = scaleMetric(10, scale, 4);
-        return layout;
+
+        for(int i = 0; i < 24; i++) {
+            float mid = (low + high) * 0.5f;
+            LayoutMetrics midLayout = buildLayoutMetrics(mid, widgetW, widgetH);
+            if(layoutFits(midLayout, widgetW, widgetH)) {
+                low = mid;
+                bestLayout = midLayout;
+            }
+            else {
+                high = mid;
+            }
+        }
+
+        return bestLayout;
     }
 
     void applyLayout() {
@@ -244,7 +311,7 @@ private:
     grect_t getNewGameButtonRect(const LayoutMetrics& layout) const {
         grect_t rect;
         rect.w = scaleMetric(84, (float)layout.cardW / (float)BASE_CARD_W, 56);
-        rect.h = layout.headerHeight - scaleMetric(8, (float)layout.cardH / (float)BASE_CARD_H, 6);
+        rect.h = clampInt(layout.headerHeight - 4, 12, layout.headerHeight - 2);
         rect.x = area.w - rect.w - scaleMetric(8, (float)layout.cardW / (float)BASE_CARD_W, 6);
         rect.y = (layout.headerHeight - rect.h) / 2;
         return rect;
@@ -255,7 +322,7 @@ private:
                y >= rect.y && y < (rect.y + rect.h);
     }
 
-    // 获取花色字符
+    // Return the display character for a suit
     const char* getSuitChar(int suit) {
         switch(suit) {
             case SUIT_HEARTS:   return "H";
@@ -266,7 +333,7 @@ private:
         }
     }
 
-    // 获取牌面值字符
+    // Return the display string for a card value
     const char* getValueChar(int value) {
         switch(value) {
             case 1:  return "A";
@@ -286,12 +353,12 @@ private:
         }
     }
 
-    // 是否为红色花色
+    // Check whether a suit is red
     bool isRed(int suit) {
         return suit == SUIT_HEARTS || suit == SUIT_DIAMONDS;
     }
 
-    // 初始化牌堆位置
+    // Initialize pile positions
     void initPiles() {
         stock.count = 0;
         waste.count = 0;
@@ -304,7 +371,7 @@ private:
         applyLayout();
     }
 
-    // 创建一副牌并洗牌
+    // Create and shuffle a deck
     void createDeck() {
         Card deck[52];
         for(int s = 0; s < 4; s++) {
@@ -316,7 +383,7 @@ private:
             }
         }
 
-        // Fisher-Yates 洗牌
+        // Fisher-Yates shuffle
         for(int i = 51; i > 0; i--) {
             int j = rand() % (i + 1);
             Card tmp = deck[i];
@@ -324,7 +391,7 @@ private:
             deck[j] = tmp;
         }
 
-        // 发到桌面堆：第i堆发i+1张，最后一张翻开
+        // Deal to the tableau: pile i gets i+1 cards, last card face up
         int idx = 0;
         for(int col = 0; col < 7; col++) {
             for(int row = 0; row <= col; row++) {
@@ -334,7 +401,7 @@ private:
             }
         }
 
-        // 剩余的发到发牌堆
+        // Put the remaining cards into the stock pile
         while(idx < 52) {
             Card c = deck[idx++];
             c.faceUp = false;
@@ -342,7 +409,7 @@ private:
         }
     }
 
-    // 重新开始游戏
+    // Start a new game
     void newGame() {
         initPiles();
         createDeck();
@@ -370,7 +437,7 @@ private:
         update();
     }
 
-    // 从发牌堆翻一张到弃牌堆
+    // Draw one card from stock to waste
     void drawFromStock() {
         if(stock.count > 0) {
             Card c = stock.cards[--stock.count];
@@ -381,7 +448,7 @@ private:
             update();
         }
         else if(waste.count > 0) {
-            // 把弃牌堆的牌全部翻回发牌堆
+            // Move all waste cards back to the stock pile
             while(waste.count > 0) {
                 Card c = waste.cards[--waste.count];
                 c.faceUp = false;
@@ -393,12 +460,12 @@ private:
         }
     }
 
-    // 获取牌堆中第idx张牌的实际位置
+    // Get the actual position of the card at idx in the pile
     void getCardPos(Pile* p, int idx, int& cx, int& cy, const LayoutMetrics& layout) {
         cx = p->x;
         cy = p->y;
         if(p->type == PILE_TABLEAU) {
-            // 桌面堆：根据每张牌的状态计算偏移
+            // Tableau cards stack with offsets based on face-up state
             for(int i = 0; i < idx; i++) {
                 if(p->cards[i].faceUp)
                     cy += layout.cardOffsetOpen;
@@ -407,17 +474,17 @@ private:
             }
         }
         else if(p->type == PILE_WASTE) {
-            // 弃牌堆：最多显示3张展开
+            // Waste shows up to three spread cards
             int visible = p->count - idx;
             if(visible > 3) visible = 3;
             cx += (3 - visible) * scaleMetric(14, (float)layout.cardW / (float)BASE_CARD_W, 4);
         }
     }
 
-    // 检查能否将卡牌放到目标牌堆
+    // Check whether a card can be placed onto the target pile
     bool canPlaceOn(Card c, Pile* dst) {
         if(dst->type == PILE_FOUNDATION) {
-            // 终结堆：右上角 4 个空格和花色一一对应，从对应花色的 A 开始递增
+            // Foundation piles match suit and build upward from Ace
             int suit = getFoundationSuit(dst);
             if(dst->count == 0) {
                 return c.value == 1 && c.suit == suit;
@@ -426,9 +493,9 @@ private:
             return top.suit == c.suit && top.value + 1 == c.value;
         }
         else if(dst->type == PILE_TABLEAU) {
-            // 桌面堆：必须红黑交替，递减
+            // Tableau piles alternate color and descend in value
             if(dst->count == 0)
-                return c.value == 13; // 空堆只能放K
+                return c.value == 13; // Only a King can be placed on an empty pile
             Card top = dst->cards[dst->count - 1];
             if(!top.faceUp) return false;
             return isRed(top.suit) != isRed(c.suit) && top.value - 1 == c.value;
@@ -445,18 +512,18 @@ private:
         return top.suit == c.suit && top.value + 1 == c.value;
     }
 
-    // 检查能否拖动一组牌（从srcPile的srcIndex开始）
+    // Check whether a run of cards can be dragged from srcIndex
     bool canDragFrom(Pile* srcPile, int srcIndex) {
         if(srcPile->type == PILE_STOCK) return false;
         if(srcPile->type == PILE_WASTE) {
-            // 弃牌堆只能拖最上面一张
+            // Only the top waste card can be dragged
             return srcIndex == srcPile->count - 1;
         }
         if(srcPile->type == PILE_FOUNDATION) {
-            // 终结堆只能拖最上面一张
+            // Only the top foundation card can be dragged
             return srcIndex == srcPile->count - 1;
         }
-        // 桌面堆：从srcIndex开始的所有牌必须翻开且形成有效序列
+        // Tableau drag requires a face-up, valid descending sequence
         if(srcPile->type == PILE_TABLEAU) {
             if(!srcPile->cards[srcIndex].faceUp) return false;
             for(int i = srcIndex; i < srcPile->count - 1; i++) {
@@ -471,10 +538,10 @@ private:
         return false;
     }
 
-    // 查找鼠标点击的卡牌
+    // Find the card under the mouse position
     bool findCardAt(int x, int y, Pile*& outPile, int& outIndex, const LayoutMetrics& layout) {
-        // 从后往前查找（后绘制的在上层）
-        // 先查桌面堆
+        // Search back to front because later draws appear on top
+        // Check tableau piles first
         for(int i = 6; i >= 0; i--) {
             Pile* p = &tableau[i];
             for(int j = p->count - 1; j >= 0; j--) {
@@ -486,7 +553,7 @@ private:
                     return true;
                 }
             }
-            // 检查空牌堆位置
+            // Check empty tableau slot hit area
             if(p->count == 0) {
                 if(x >= p->x && x < p->x + layout.cardW &&
                    y >= p->y && y < p->y + layout.cardH) {
@@ -496,7 +563,7 @@ private:
                 }
             }
         }
-        // 弃牌堆
+        // Waste pile
         if(waste.count > 0) {
             int cx, cy;
             getCardPos(&waste, waste.count - 1, cx, cy, layout);
@@ -506,7 +573,7 @@ private:
                 return true;
             }
         }
-        // 终结堆
+        // Foundation piles
         for(int i = 3; i >= 0; i--) {
             Pile* p = &foundation[i];
             if(p->count > 0) {
@@ -527,7 +594,7 @@ private:
                 }
             }
         }
-        // 发牌堆
+        // Stock pile
         if(x >= stock.x && x < stock.x + layout.cardW &&
            y >= stock.y && y < stock.y + layout.cardH) {
             outPile = &stock;
@@ -537,7 +604,7 @@ private:
         return false;
     }
 
-    // 检查是否获胜
+    // Check whether the game has been won
     void checkWin() {
         int total = 0;
         for(int i = 0; i < 4; i++) total += foundation[i].count;
@@ -718,7 +785,7 @@ private:
         update();
     }
 
-    // 自动放到终结堆
+    // Try to auto-move a card to a foundation pile
     bool tryAutoMoveToFoundation(Pile* srcPile, int srcIndex) {
         if(moveTopCardToFoundationSet(srcPile, srcIndex, foundation, true)) {
             checkWin();
@@ -751,7 +818,7 @@ private:
         drag.curX = currentMouseX - drag.offsetX;
         drag.curY = currentMouseY - drag.offsetY;
 
-        // 直到真正进入拖拽阶段才从源牌堆摘下，避免双击被提前抢成拖拽。
+        // Only detach cards once dragging really starts, so double-click is not stolen by drag start.
         p->count = idx;
         update();
         return true;
@@ -770,7 +837,7 @@ private:
         lastClickMs = 0;
     }
 
-    // 双击事件：尝试自动放到终结堆
+    // Double-click handler: try moving the card to foundation
     void onDoubleClick(Pile* p, int idx) {
         if(p == NULL || idx < 0 || p->type == PILE_STOCK || p->count <= 0) {
             return;
@@ -792,16 +859,16 @@ protected:
         LayoutMetrics layout = getLayoutMetrics();
         grect_t newGameBtn = getNewGameButtonRect(layout);
 
-        // 背景
+        // Background
         graph_fill_rect(g, r.x, r.y, r.w, r.h, COLOR_BG);
 
-        // 绘制顶部信息栏（深蓝色背景，不被牌堆覆盖）
+        // Draw the top status bar so piles never overlap it
         graph_fill_rect(g, r.x, r.y, r.w, layout.headerHeight, COLOR_TITLE_BAR);
-        // 信息栏下边界线
+        // Bottom border of the status bar
         graph_line(g, r.x, r.y + layout.headerHeight - 1,
             r.x + r.w, r.y + layout.headerHeight - 1, 0xFF000000);
 
-        // 绘制顶部分数文字
+        // Draw the score and move count
         char info[64];
         snprintf(info, sizeof(info), "Score: %d   Moves: %d", score, moves);
         uint32_t tw, th;
@@ -809,7 +876,7 @@ protected:
         graph_draw_text_font(g, r.x + 8, r.y + (layout.headerHeight - th) / 2, info,
             theme->getFont(), layout.infoFontSize, COLOR_TITLE_TEXT);
 
-        // 绘制顶部“重新开始”按钮，方便鼠标操作
+        // Draw the top restart button for mouse-friendly reset
         int btnRadius = scaleMetric(5, (float)layout.cardH / (float)BASE_CARD_H, 3);
         graph_fill_round(g, newGameBtn.x, newGameBtn.y, newGameBtn.w, newGameBtn.h,
             btnRadius, COLOR_BTN_BG);
@@ -823,7 +890,7 @@ protected:
             newGameBtn.y + (newGameBtn.h - (int)rh) / 2,
             restartText, theme->getFont(), layout.infoFontSize, COLOR_BTN_TEXT);
 
-        // 绘制按钮提示
+        // Draw shortcut hints beside the button
         const char* hint = "S:Stock  Dbl:Auto";
         uint32_t hw, hh;
         font_text_size(hint, theme->getFont(), layout.infoFontSize, &hw, &hh);
@@ -831,18 +898,18 @@ protected:
         graph_draw_text_font(g, hintRight - hw, r.y + (layout.headerHeight - hh) / 2, hint,
             theme->getFont(), layout.infoFontSize, COLOR_TITLE_TEXT);
 
-        // 绘制发牌堆
+        // Draw stock pile
         drawPileSlot(g, stock.x, stock.y, stock.count == 0, layout);
         drawPile(g, &stock, theme, layout);
 
-        // 绘制弃牌堆
+        // Draw waste pile
         drawPileSlot(g, waste.x, waste.y, waste.count == 0, layout);
         drawPile(g, &waste, theme, layout);
 
-        // 绘制终结堆
+        // Draw foundation piles
         for(int i = 0; i < 4; i++) {
             drawPileSlot(g, foundation[i].x, foundation[i].y, foundation[i].count == 0, layout);
-            // 显示花色提示图形
+            // Show suit hint in empty foundation slots
             if(foundation[i].count == 0) {
                 uint32_t col = isRed(i) ? 0xFF884444 : 0xFF444444;
                 drawSuit(g, foundation[i].x + layout.cardW / 2,
@@ -852,13 +919,13 @@ protected:
             drawPile(g, &foundation[i], theme, layout);
         }
 
-        // 绘制桌面堆
+        // Draw tableau piles
         for(int i = 0; i < 7; i++) {
             drawPileSlot(g, tableau[i].x, tableau[i].y, tableau[i].count == 0, layout);
             drawPile(g, &tableau[i], theme, layout);
         }
 
-        // 绘制拖拽中的卡牌（最上层）
+        // Draw dragged cards on top of everything else
         if(dragging && drag.count > 0) {
             for(int i = 0; i < drag.count; i++) {
                 int cx = drag.curX;
@@ -874,27 +941,27 @@ protected:
             drawCard(g, cx, cy, autoMoveAnim.card, theme, true, layout);
         }
 
-        // 胜利动画
+        // Victory animation
         if(won) {
             int phase = (int)winFrame;
 
-            // 让终结堆的卡牌产生浮动效果
+            // Make the top foundation cards float slightly
             for(int i = 0; i < 4; i++) {
                 if(foundation[i].count > 0) {
                     int baseX, baseY;
                     getCardPos(&foundation[i], foundation[i].count - 1, baseX, baseY, layout);
-                    // 给每张牌一个基于时间的不同浮动偏移
+                    // Give each card a different time-based float offset
                     int offsetY = ((phase + i * 3) % 7 - 3) * 2;
                     int offsetX = ((phase + i * 2) % 5 - 2) * 2;
-                    // 重绘最上面的牌，让它们漂浮
+                    // Redraw the top card with the floating offset
                     Card c = foundation[i].cards[foundation[i].count - 1];
                     drawCard(g, baseX + offsetX, baseY + offsetY, c, theme, true, layout);
                 }
             }
 
-            // 烟花效果：在随机位置画彩色花色图形
+            // Fireworks effect with colorful suit shapes at random positions
             for(int i = 0; i < 25; i++) {
-                // 使用伪随机，基于 phase 和 i
+                // Pseudo-random placement based on phase and index
                 int seed = (int)(phase * 137 + i * 53) % 1000;
                 int x = r.x + (seed % r.w);
                 seed = (seed * 7 + i * 31) % 1000;
@@ -905,7 +972,7 @@ protected:
                 drawSuit(g, x, y, sz, suit, colors[i % 4]);
             }
 
-            // 闪烁的星星
+            // Blinking stars
             uint32_t starColor = (phase % 2 == 0) ? 0xFFFFFF00 : 0xFFFFFFFF;
             for(int i = 0; i < 15; i++) {
                 int seed = (int)(phase * 31 + i * 17) % 1000;
@@ -915,28 +982,44 @@ protected:
                 graph_fill_circle(g, x, y, 2, starColor);
             }
 
-            // 胜利文字框
+            // Victory message box
             int winBoxW = scaleMetric(220, (float)layout.cardW / (float)BASE_CARD_W, 120);
             int winBoxH = scaleMetric(70, (float)layout.cardH / (float)BASE_CARD_H, 42);
             int winBoxR = scaleMetric(14, (float)layout.cardH / (float)BASE_CARD_H, 8);
-            graph_fill_round(g, r.x + r.w/2 - winBoxW/2, r.y + r.h/2 - winBoxH/2,
-                winBoxW, winBoxH, winBoxR, 0xFF000080);
-            graph_round(g, r.x + r.w/2 - winBoxW/2, r.y + r.h/2 - winBoxH/2,
-                winBoxW, winBoxH, winBoxR, 3, 0xFFFFFFFF);
             const char* win = "You Win!  Score: 1000";
             uint32_t ww, wh;
             int winFontSize = clampInt(layout.infoFontSize + 2, 12, 28);
             font_text_size(win, theme->getFont(), winFontSize, &ww, &wh);
-            graph_draw_text_font(g, r.x + r.w/2 - ww/2, r.y + r.h/2 - wh,
-                win, theme->getFont(), winFontSize, 0xFFFFFFFF);
             const char* hint = "Press N for new game";
             font_text_size(hint, theme->getFont(), layout.infoFontSize, &hw, &hh);
+
+            int winTextW = (int)ww;
+            if((int)hw > winTextW) {
+                winTextW = (int)hw;
+            }
+            int winBoxPadX = scaleMetric(20, (float)layout.cardW / (float)BASE_CARD_W, 12);
+            int winBoxMarginX = scaleMetric(20, (float)layout.cardW / (float)BASE_CARD_W, 8);
+            int desiredWinBoxW = winTextW + winBoxPadX * 2;
+            if(desiredWinBoxW > winBoxW) {
+                winBoxW = desiredWinBoxW;
+            }
+            int maxWinBoxW = r.w - winBoxMarginX * 2;
+            if(maxWinBoxW > 0 && winBoxW > maxWinBoxW) {
+                winBoxW = maxWinBoxW;
+            }
+
+            graph_fill_round(g, r.x + r.w/2 - winBoxW/2, r.y + r.h/2 - winBoxH/2,
+                winBoxW, winBoxH, winBoxR, 0xFF000080);
+            graph_round(g, r.x + r.w/2 - winBoxW/2, r.y + r.h/2 - winBoxH/2,
+                winBoxW, winBoxH, winBoxR, 3, 0xFFFFFFFF);
+            graph_draw_text_font(g, r.x + r.w/2 - ww/2, r.y + r.h/2 - wh,
+                win, theme->getFont(), winFontSize, 0xFFFFFFFF);
             graph_draw_text_font(g, r.x + r.w/2 - hw/2, r.y + r.h/2 + 4,
                 hint, theme->getFont(), layout.infoFontSize, 0xFFFFFF00);
         }
     }
 
-    // 绘制牌堆空槽
+    // Draw an empty pile slot
     void drawPileSlot(graph_t* g, int x, int y, bool empty, const LayoutMetrics& layout) {
         if(empty) {
             int radius = scaleMetric(6, (float)layout.cardH / (float)BASE_CARD_H, 2);
@@ -945,29 +1028,29 @@ protected:
         }
     }
 
-    // 绘制牌堆
+    // Draw all cards in a pile
     void drawPile(graph_t* g, Pile* p, XTheme* theme, const LayoutMetrics& layout) {
         for(int i = 0; i < p->count; i++) {
             int cx, cy;
             getCardPos(p, i, cx, cy, layout);
-            // 桌面堆只绘制最后一张需要全部显示，前面的部分被覆盖
-            // 但为了简化，全部绘制（性能足够）
+            // In tableau piles only the last card needs to be fully visible,
+            // but drawing the full pile keeps the logic simple and is fast enough.
             drawCard(g, cx, cy, p->cards[i], theme, p->cards[i].faceUp, layout);
         }
     }
 
-    // 绘制花色图形：(cx, cy)为中心，size为总尺寸
+    // Draw a suit icon centered at (cx, cy) with the given total size
     void drawSuit(graph_t* g, int cx, int cy, int size, int suit, uint32_t color) {
-        int r = size / 4;       // 圆半径
-        int halfH = size / 2;   // 半高
-        int halfW = size / 2;   // 半宽
+        int r = size / 4;       // Circle radius
+        int halfH = size / 2;   // Half height
+        int halfW = size / 2;   // Half width
         
         switch(suit) {
-            case SUIT_HEARTS: {  // 红心
-                // 顶部两个圆
+            case SUIT_HEARTS: {  // Heart
+                // Two circles at the top
                 graph_fill_circle(g, cx - r, cy - r, r + 1, color);
                 graph_fill_circle(g, cx + r, cy - r, r + 1, color);
-                // 底部倒三角：从最宽(2*size/3)到0
+                // Bottom inverted triangle from wide to narrow
                 int triH = halfH + r;
                 for(int i = 0; i < triH; i++) {
                     int lineW = (triH - i) * halfW / triH;
@@ -977,7 +1060,7 @@ protected:
                 }
                 break;
             }
-            case SUIT_DIAMONDS: { // 方块 - 菱形
+            case SUIT_DIAMONDS: { // Diamond
                 for(int i = -halfH + 1; i < halfH; i++) {
                     int lineW = halfW - abs(i) * halfW / halfH;
                     if(lineW <= 0) continue;
@@ -985,19 +1068,19 @@ protected:
                 }
                 break;
             }
-            case SUIT_CLUBS: {   // 梅花 - 三个圆+底部
+            case SUIT_CLUBS: {   // Club
                 graph_fill_circle(g, cx, cy - r, r, color);
                 graph_fill_circle(g, cx - r - 1, cy, r, color);
                 graph_fill_circle(g, cx + r + 1, cy, r, color);
-                // 底部矩形
+                // Bottom stem
                 graph_fill_rect(g, cx - r/2, cy + r - 1, r, r + 2, color);
                 break;
             }
-            case SUIT_SPADES: {  // 黑桃 - 类似反红心
-                // 底部两个圆
+            case SUIT_SPADES: {  // Spade
+                // Two circles at the bottom
                 graph_fill_circle(g, cx - r, cy + r, r + 1, color);
                 graph_fill_circle(g, cx + r, cy + r, r + 1, color);
-                // 顶部正三角：从最宽到0
+                // Top upright triangle from wide to narrow
                 int triH = halfH + r;
                 for(int i = 0; i < triH; i++) {
                     int lineW = (triH - i) * halfW / triH;
@@ -1005,44 +1088,44 @@ protected:
                     graph_line(g, cx - lineW, cy - i + r,
                                cx + lineW, cy - i + r, color);
                 }
-                // 底部小柄
+                // Small bottom stem
                 graph_fill_rect(g, cx - r/3, cy + r + r - 1, r * 2 / 3, r + 2, color);
                 break;
             }
         }
     }
 
-    // 绘制单张卡牌
+    // Draw a single card
     void drawCard(graph_t* g, int x, int y, Card c, XTheme* theme,
                   bool faceUp, const LayoutMetrics& layout) {
         (void)theme;
         int radius = scaleMetric(4, (float)layout.cardH / (float)BASE_CARD_H, 2);
         if(faceUp) {
-            // 卡牌背景
+            // Card face background
             graph_fill_round(g, x, y, layout.cardW, layout.cardH, radius, COLOR_CARD_BG);
             graph_round(g, x, y, layout.cardW, layout.cardH, radius, 1, COLOR_CARD_BORDER);
 
-            // 卡牌颜色
+            // Card color based on suit
             uint32_t col = isRed(c.suit) ? COLOR_RED : COLOR_BLACK;
             const char* vs = getValueChar(c.value);
 
-            // 左上角：值 + 花色图形
+            // Top-left corner: value + suit icon
             int textPadX = scaleMetric(3, (float)layout.cardW / (float)BASE_CARD_W, 2);
             int textPadY = scaleMetric(2, (float)layout.cardH / (float)BASE_CARD_H, 1);
             int iconGapX = scaleMetric(5, (float)layout.cardW / (float)BASE_CARD_W, 3);
             int iconGapY = scaleMetric(6, (float)layout.cardH / (float)BASE_CARD_H, 3);
             graph_draw_text_font(g, x + textPadX, y + textPadY, vs, theme->getFont(),
                 layout.cardFontSize, col);
-            // 小尺寸花色图形
+            // Small suit icon
             drawSuit(g, x + textPadX + iconGapX,
                      y + textPadY + layout.cardFontSize + iconGapY,
                      layout.smallSuitSize, c.suit, col);
 
-            // 中心大花色图形
+            // Large center suit icon
             drawSuit(g, x + layout.cardW / 2, y + layout.cardH / 2,
                      layout.centerSuitSize, c.suit, col);
 
-            // 右下角：值 + 花色图形（简化，仅绘制值和小图形）
+            // Bottom-right corner: value + suit icon
             uint32_t vw, vh;
             font_text_size(vs, theme->getFont(), layout.cardFontSize, &vw, &vh);
             graph_draw_text_font(g, x + layout.cardW - vw - textPadX,
@@ -1053,12 +1136,12 @@ protected:
                      layout.smallSuitSize, c.suit, col);
         }
         else {
-            // 卡牌背面 - 经典蓝色背底装饰图案
-            // 外框
+            // Card back with a classic blue decorative pattern
+            // Outer frame
             graph_fill_round(g, x, y, layout.cardW, layout.cardH, radius, COLOR_CARD_BACK);
-            // 内框
+            // Inner frame
             graph_round(g, x, y, layout.cardW, layout.cardH, radius, 1, COLOR_CARD_BG);
-            // 内部装饰：三个小矩形形成菱形
+            // Inner decoration made from small rectangles
             int inset = scaleMetric(4, (float)layout.cardW / (float)BASE_CARD_W, 2);
             graph_fill_round(g, x + inset, y + inset,
                 layout.cardW - inset * 2, layout.cardH - inset * 2,
@@ -1066,10 +1149,10 @@ protected:
             graph_round(g, x + inset, y + inset,
                 layout.cardW - inset * 2, layout.cardH - inset * 2,
                 scaleMetric(2, (float)layout.cardH / (float)BASE_CARD_H, 1), 1, COLOR_CARD_BG);
-            // 红色外框
+            // Red accent outline
             graph_round(g, x, y, layout.cardW, layout.cardH, radius, 1, COLOR_CARD_BORDER);
-            // 中心装饰 - 中间一个装饰的图案
-            // 小的红色中心标记
+            // Center decoration
+            // Small red center marker
             int cx = x + layout.cardW / 2;
             int cy = y + layout.cardH / 2;
             int mark = scaleMetric(12, (float)layout.cardW / (float)BASE_CARD_W, 4);
@@ -1108,12 +1191,12 @@ protected:
                 return true;
             }
 
-            // 检查是否点击在顶部信息栏区域（按钮）
+            // Ignore clicks in the top status area except for buttons
             if(y < layout.topPadding) {
                 return true;
             }
 
-            // 检查发牌堆点击
+            // Handle stock pile click
             if(x >= stock.x && x < stock.x + layout.cardW &&
                y >= stock.y && y < stock.y + layout.cardH) {
                 clearPendingClick();
@@ -1121,7 +1204,7 @@ protected:
                 return true;
             }
 
-            // 查找点击的卡牌
+            // Find the clicked card
             Pile* p;
             int idx;
             if(findCardAt(x, y, p, idx, layout) && idx >= 0) {
@@ -1151,12 +1234,12 @@ protected:
         }
         else if(ev->state == MOUSE_STATE_UP) {
             if(dragging) {
-                // 查找放置位置
+                // Find the nearest valid drop target
                 Pile* dstPile = NULL;
                 int bestDist = 0x7FFFFFFF;
                 Card c = drag.cards[0];
 
-                // 检查终结堆
+                // Check foundation piles
                 for(int i = 0; i < 4; i++) {
                     int dx = foundation[i].x + layout.cardW / 2 - (drag.curX + layout.cardW / 2);
                     int dy = foundation[i].y + layout.cardH / 2 - (drag.curY + layout.cardH / 2);
@@ -1167,7 +1250,7 @@ protected:
                     }
                 }
 
-                // 检查桌面堆
+                // Check tableau piles
                 for(int i = 0; i < 7; i++) {
                     int tx = tableau[i].x;
                     int ty = tableau[i].y;
@@ -1187,11 +1270,11 @@ protected:
                 }
 
                 if(dstPile != NULL) {
-                    // 放置卡牌
+                    // Place the dragged cards
                     for(int i = 0; i < drag.count; i++) {
                         dstPile->cards[dstPile->count++] = drag.cards[i];
                     }
-                    // 翻开源牌堆的下一张
+                    // Reveal the next card in the source tableau pile
                     if(drag.srcPile->type == PILE_TABLEAU && drag.srcPile->count > 0) {
                         drag.srcPile->cards[drag.srcPile->count - 1].faceUp = true;
                     }
@@ -1203,7 +1286,7 @@ protected:
                     }
                 }
                 else {
-                    // 放回原牌堆
+                    // Return cards to their original pile
                     for(int i = 0; i < drag.count; i++) {
                         drag.srcPile->cards[drag.srcPile->count++] = drag.cards[i];
                     }
@@ -1249,7 +1332,7 @@ protected:
     bool onIM(xevent_t* ev) {
         if(ev->state == XIM_STATE_PRESS) {
             int key = ev->value.im.key_code;
-            // N 键：新游戏
+            // N key: start a new game
             if(key == 'n' || key == 'N') {
                 newGame();
                 return true;
@@ -1257,7 +1340,7 @@ protected:
             if(autoFinishing || autoMoveAnim.active) {
                 return true;
             }
-            // S 键：发牌
+            // S key: draw from stock
             if(key == 's' || key == 'S') {
                 drawFromStock();
                 return true;
@@ -1266,7 +1349,7 @@ protected:
         return false;
     }
 
-    // 定时器回调 - 用于自动收牌和胜利动画
+    // Timer callback for auto-finish moves and victory animation
     void onTimer(uint32_t timerFPS, uint32_t timerSteps) {
         (void)timerFPS;
         (void)timerSteps;
@@ -1343,7 +1426,7 @@ public:
         CardsWidget* game = new CardsWidget();
         root->add(game);
 
-        // 启动定时器（用于胜利动画）- 10 FPS
+        // Start the timer for victory animation at 10 FPS
         setTimer(10);
     }
 };
