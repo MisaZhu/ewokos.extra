@@ -21,5 +21,5 @@ BUILD_DIR = $(SDK_DIR)
 include $(SYS_ROOT_DIR)/platform/$(ARCH)/make.rule
 
 LDFLAGS = -L$(SDK_DIR)/lib
-CFLAGS += -I include -I $(SDK_DIR)/include
-CXXFLAGS += -I include -I $(SDK_DIR)/include
+CFLAGS += -I include -isystem $(SDK_DIR)/include
+CXXFLAGS += -I include -isystem $(SDK_DIR)/include

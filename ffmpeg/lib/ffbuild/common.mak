@@ -51,6 +51,12 @@ LDFLAGS    := $(ALLFFLIBS:%=$(LD_PATH)lib%) $(LDFLAGS)
 define COMPILE
        $(call $(1)DEP,$(1))
        $($(1)) $($(1)FLAGS) $($(2)) $($(1)_DEPFLAGS) $($(1)_C) $($(1)_O) $(patsubst $(SRC_PATH)/%,$(SRC_LINK)/%,$<)
+       @depfile=$(@:.o=.d); \
+       if test -f $$depfile; then \
+               tr '\n' ' ' < $$depfile | \
+               sed -E 's@\\@@g; s@[[:space:]]+[^[:space:]]*system/build/[^[:space:]]*/include/[^[:space:]]*@@g; s@[[:space:]]+@ @g' > $$depfile.tmp && \
+               mv $$depfile.tmp $$depfile; \
+       fi
 endef
 
 COMPILE_C = $(call COMPILE,CC)

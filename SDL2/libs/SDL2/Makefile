@@ -31,12 +31,12 @@ libSDL2.a: $(OBJS) Makefile
 
 %.o: %.c
 	@mkdir -p $(DEPDIR)/$(@D)
-	$(CC) $(CFLAGS) -std=c99 -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+	$(CC) $(CFLAGS) -std=c99 -MMD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
 	@mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 
 %.o: %.cpp
 	@mkdir -p $(DEPDIR)/$(@D)
-	$(CXX) $(CXXFLAGS) -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
 	@mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 
 %.o: %.s

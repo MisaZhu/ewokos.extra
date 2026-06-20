@@ -6,7 +6,6 @@ include $(SW_ROOT_DIR)/make.inc
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 ROOTFS_BIN = $(BUILD_DIR)/rootfs/bin/x
 
-# Common flags
 CFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -D__ewokos__
 CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -I../glcommon/include -I../glcommon/include/glcommon -D__ewokos__ -fno-threadsafe-statics
 
@@ -16,6 +15,19 @@ LDFLAGS += -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lp
 # glcommon library
 GLCOMMON_LIB = $(BUILD_DIR)/lib/libglcommon.a \
 	$(BUILD_DIR)/lib/libportablegl.a
+LD_LIB_DEPS = \
+	$(GLCOMMON_LIB) \
+	$(BUILD_DIR)/lib/libSDL2.a \
+	$(BUILD_DIR)/lib/libSDL2_image.a \
+	$(BUILD_DIR)/lib/libSDL2_mixer.a \
+	$(BUILD_DIR)/lib/libSDL2_gfx.a \
+	$(BUILD_DIR)/lib/libSDL2_ttf.a \
+	$(BUILD_DIR)/lib/libfreetype.a \
+	$(BUILD_DIR)/lib/libpng.a \
+	$(BUILD_DIR)/lib/libvorbis.a \
+	$(BUILD_DIR)/lib/libogg.a \
+	$(BUILD_DIR)/lib/libgif.a \
+	$(BUILD_DIR)/lib/libz.a
 
 # C++ files - all refactored to use portablegl's built-in types with PGL_PREFIX_TYPES
 # Now all demos compile with C-style code using pgl_compat.h
@@ -49,7 +61,7 @@ dirs:
 	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I$(BUILD_DIR)/include -c $< -o $@
 
 # Link C programs
-$(ROOTFS_BIN)/%: %.o $(GLCOMMON_LIB) $(BUILD_DIR)/lib/libSDL2.a
+$(ROOTFS_BIN)/%: %.o $(LD_LIB_DEPS)
 	$(LD) -Ttext=100 $< $(GLCOMMON_LIB) -o $@ $(LDFLAGS)
 
 clean:
