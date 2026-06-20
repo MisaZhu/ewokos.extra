@@ -1,6 +1,7 @@
 
 all:
 	cd 3ddemo;make
+	cd doom; make
 	cd Fireworks; make
 	cd VideoPlayer; make
 	cd calculator; make
@@ -14,6 +15,7 @@ all:
 
 clean:
 	cd 3ddemo;make clean
+	cd doom; make clean
 	cd Fireworks; make clean
 	cd VideoPlayer; make clean
 	cd calculator; make clean
