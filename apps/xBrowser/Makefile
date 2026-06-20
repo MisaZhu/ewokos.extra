@@ -13,26 +13,41 @@ LDFLAGS = -L$(TARGET_DIR)/lib -L$(BUILD_DIR)/lib
 CXXFLAGS += -I$(BUILD_DIR)/include -I libs/litehtml/include
 
 BROWSER_OBJS = src/main.o
+LD_LIB_DEPS = \
+	$(BUILD_DIR)/lib/liblitehtml.a \
+	$(BUILD_DIR)/lib/libtinyhttpsc.a \
+	$(BUILD_DIR)/lib/libsocket.a \
+	$(BUILD_DIR)/lib/libWidgetWebview.a \
+	$(BUILD_DIR)/lib/libwidget++.a \
+	$(BUILD_DIR)/lib/libx++.a \
+	$(BUILD_DIR)/lib/libx.a \
+	$(BUILD_DIR)/lib/libtinyjson.a \
+	$(BUILD_DIR)/lib/libewokstl.a \
+	$(BUILD_DIR)/lib/libfont.a \
+	$(BUILD_DIR)/lib/libfreetype.a \
+	$(BUILD_DIR)/lib/libiconbuf.a \
+	$(BUILD_DIR)/lib/libgraph.a \
+	$(BUILD_DIR)/lib/libpng.a \
+	$(BUILD_DIR)/lib/libjpeg.a \
+	$(BUILD_DIR)/lib/libgif.a \
+	$(BUILD_DIR)/lib/libtga.a \
+	$(BUILD_DIR)/lib/libsvg.a \
+	$(BUILD_DIR)/lib/libz.a \
+	$(BUILD_DIR)/lib/libdisplay.a \
+	$(BUILD_DIR)/lib/libfb.a \
+	$(BUILD_DIR)/lib/libkeyb.a \
+	$(BUILD_DIR)/lib/libmouse.a \
+	$(BUILD_DIR)/lib/libewoksys.a \
+	$(BUILD_DIR)/lib/libc.a \
+	$(BUILD_DIR)/lib/libgloss.a \
+	$(BUILD_DIR)/lib/libcxx.a
 
 BROWSER_DIR = $(TARGET_DIR)/apps/xBrowser
 BROWSER = $(BROWSER_DIR)/xBrowser
 
 all: $(BROWSER)
 
-$(BROWSER): $(BROWSER_OBJS) \
-		$(BUILD_DIR)/lib/liblitehtml.a \
-		$(BUILD_DIR)/lib/libtinyhttpsc.a \
-		$(BUILD_DIR)/lib/libsocket.a \
-		$(BUILD_DIR)/lib/libWidgetWebview.a \
-		$(BUILD_DIR)/lib/libwidget++.a \
-		$(BUILD_DIR)/lib/libx++.a \
-		$(BUILD_DIR)/lib/libx.a \
-		$(BUILD_DIR)/lib/libfont.a \
-		$(BUILD_DIR)/lib/libgraph.a \
-		$(BUILD_DIR)/lib/libjpeg.a \
-		$(BUILD_DIR)/lib/libsvg.a \
-		$(BUILD_DIR)/lib/libtga.a \
-		$(BUILD_DIR)/lib/libcxx.a
+$(BROWSER): $(BROWSER_OBJS) $(LD_LIB_DEPS)
 	mkdir -p $(BROWSER_DIR)
 	$(LD) -Ttext=100 $(BROWSER_OBJS) -o $(BROWSER) $(LDFLAGS) \
 		$(EWOK_LIB_X) -lWidgetWebview -llitehtml -ltinyhttpsc -lsocket \
@@ -44,10 +59,6 @@ $(BROWSER): $(BROWSER_OBJS) \
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-src/main.o: src/main.cpp \
-	$(BUILD_DIR)/include/WidgetWebview/WidgetWebview.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
