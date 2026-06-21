@@ -56,6 +56,13 @@ enum Suit {
     SUIT_SPADES   = 3
 };
 
+static const int FOUNDATION_SLOT_SUITS[4] = {
+    SUIT_HEARTS,
+    SUIT_DIAMONDS,
+    SUIT_CLUBS,
+    SUIT_SPADES
+};
+
 // Card values: 1=A, 11=J, 12=Q, 13=K
 typedef struct {
     int value;     // 1-13
@@ -230,23 +237,6 @@ private:
         return layout.boardW <= widgetW && layout.boardH <= widgetH;
     }
 
-    int getFoundationIndex(const Pile* pile) const {
-        for(int i = 0; i < 4; i++) {
-            if(&foundation[i] == pile) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    int getFoundationSuit(const Pile* pile) const {
-        int index = getFoundationIndex(pile);
-        if(index < 0) {
-            return -1;
-        }
-        return index;
-    }
-
     LayoutMetrics getLayoutMetrics() const {
         int widgetW = area.w > 0 ? area.w : BASE_BOARD_W;
         int widgetH = area.h > 0 ? area.h : BASE_BOARD_H;
@@ -356,6 +346,15 @@ private:
     // Check whether a suit is red
     bool isRed(int suit) {
         return suit == SUIT_HEARTS || suit == SUIT_DIAMONDS;
+    }
+
+    int getFoundationSuit(const Pile* pile) const {
+        for(int i = 0; i < 4; i++) {
+            if(&foundation[i] == pile) {
+                return FOUNDATION_SLOT_SUITS[i];
+            }
+        }
+        return -1;
     }
 
     // Initialize pile positions
@@ -484,7 +483,7 @@ private:
     // Check whether a card can be placed onto the target pile
     bool canPlaceOn(Card c, Pile* dst) {
         if(dst->type == PILE_FOUNDATION) {
-            // Foundation piles match suit and build upward from Ace
+            // Foundation piles match the slot suit and build upward from Ace.
             int suit = getFoundationSuit(dst);
             if(dst->count == 0) {
                 return c.value == 1 && c.suit == suit;
@@ -505,8 +504,9 @@ private:
 
     bool canPlaceOnFoundationSet(Card c, Pile* foundationSet, int foundationIndex) const {
         Pile* dst = &foundationSet[foundationIndex];
+        int suit = FOUNDATION_SLOT_SUITS[foundationIndex];
         if(dst->count == 0) {
-            return c.value == 1 && c.suit == foundationIndex;
+            return c.value == 1 && c.suit == suit;
         }
         Card top = dst->cards[dst->count - 1];
         return top.suit == c.suit && top.value + 1 == c.value;
@@ -899,22 +899,31 @@ protected:
             theme->getFont(), layout.infoFontSize, COLOR_TITLE_TEXT);
 
         // Draw stock pile
+        int pileLabelFont = clampInt(layout.cardFontSize - 1, 8, 14);
+        drawPileLabel(g, stock.x, stock.y, layout.cardW, "Stock",
+            theme, pileLabelFont, COLOR_TITLE_TEXT);
         drawPileSlot(g, stock.x, stock.y, stock.count == 0, layout);
         drawPile(g, &stock, theme, layout);
 
         // Draw waste pile
+        drawPileLabel(g, waste.x, waste.y, layout.cardW, "Waste",
+            theme, pileLabelFont, COLOR_TITLE_TEXT);
         drawPileSlot(g, waste.x, waste.y, waste.count == 0, layout);
         drawPile(g, &waste, theme, layout);
 
         // Draw foundation piles
         for(int i = 0; i < 4; i++) {
+            int suit = FOUNDATION_SLOT_SUITS[i];
+            uint32_t labelColor = isRed(suit) ? COLOR_RED : COLOR_TITLE_TEXT;
+            drawPileLabel(g, foundation[i].x, foundation[i].y, layout.cardW,
+                getSuitChar(suit), theme, pileLabelFont, labelColor);
             drawPileSlot(g, foundation[i].x, foundation[i].y, foundation[i].count == 0, layout);
-            // Show suit hint in empty foundation slots
+            // Show suit hint in empty foundation slots.
             if(foundation[i].count == 0) {
-                uint32_t col = isRed(i) ? 0xFF884444 : 0xFF444444;
+                uint32_t col = isRed(suit) ? 0xFF884444 : 0xFF444444;
                 drawSuit(g, foundation[i].x + layout.cardW / 2,
                     foundation[i].y + layout.cardH / 2,
-                    layout.foundationHintSize, i, col);
+                    layout.foundationHintSize, suit, col);
             }
             drawPile(g, &foundation[i], theme, layout);
         }
@@ -1026,6 +1035,19 @@ protected:
             graph_fill_round(g, x, y, layout.cardW, layout.cardH, radius, COLOR_SLOT);
             graph_round(g, x, y, layout.cardW, layout.cardH, radius, 2, COLOR_SLOT_BORDER);
         }
+    }
+
+    void drawPileLabel(graph_t* g, int x, int y, int width, const char* label,
+            XTheme* theme, int fontSize, uint32_t color) {
+        uint32_t tw, th;
+        font_text_size(label, theme->getFont(), fontSize, &tw, &th);
+        int labelX = x + (width - (int)tw) / 2;
+        int labelY = y - (int)th - 1;
+        if(labelY < 0) {
+            labelY = 0;
+        }
+        graph_draw_text_font(g, labelX, labelY, label,
+            theme->getFont(), fontSize, color);
     }
 
     // Draw all cards in a pile
