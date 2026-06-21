@@ -42,6 +42,11 @@ static const int BASE_LEFT_PADDING      = 12;
 static const int BASE_TOP_ROW_HEIGHT    = BASE_CARD_H + BASE_PILE_SPACING_Y;
 static const int BASE_BOTTOM_PADDING    = 20;
 static const int MAX_TABLEAU_VISIBLE    = 19;
+static const int AUTO_FINISH_TIMER_FPS  = 60;
+static const int AUTO_FINISH_STEP_FPS   = 30;
+static const int AUTO_FINISH_MOVE_MS    = 200;
+static const int AUTO_FINISH_MIN_STEPS  = 6;
+static const int AUTO_FINISH_MAX_STEPS  = 8;
 static const int BASE_BOARD_W =
     BASE_LEFT_PADDING * 2 + 7 * BASE_CARD_W + 6 * BASE_PILE_SPACING_X;
 static const int BASE_BOARD_H =
@@ -149,6 +154,8 @@ private:
         Pile* srcPile;
         Pile* dstPile;
         bool revealSrcTop;
+        bool countStats;
+        bool triggerAutoFinishAfterMove;
         int startX;
         int startY;
         int endX;
@@ -167,6 +174,12 @@ private:
         int scaled = (int)(baseValue * scale + 0.5f);
         if(scaled < minValue) return minValue;
         return scaled;
+    }
+
+    float clampFloat(float value, float minValue, float maxValue) const {
+        if(value < minValue) return minValue;
+        if(value > maxValue) return maxValue;
+        return value;
     }
 
     int getTableauPileHeight(const Pile& pile, int cardH, int cardOffsetOpen,
@@ -422,6 +435,8 @@ private:
         autoMoveAnim.srcPile = NULL;
         autoMoveAnim.dstPile = NULL;
         autoMoveAnim.revealSrcTop = false;
+        autoMoveAnim.countStats = false;
+        autoMoveAnim.triggerAutoFinishAfterMove = false;
         autoMoveAnim.step = 0;
         autoMoveAnim.steps = 0;
         dragging = false;
@@ -610,7 +625,6 @@ private:
         for(int i = 0; i < 4; i++) total += foundation[i].count;
         if(total == 52 && !won) {
             won = true;
-            score = 1000;
             winFrame = 0;
         }
     }
@@ -692,6 +706,58 @@ private:
         return true;
     }
 
+    bool findFoundationDestination(Card c, Pile*& dstPile) {
+        dstPile = NULL;
+        for(int i = 0; i < 4; i++) {
+            if(canPlaceOn(c, &foundation[i])) {
+                dstPile = &foundation[i];
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool beginAnimatedFoundationMove(Pile* srcPile, int srcIndex, Pile* dstPile,
+            bool countStats, bool triggerAutoFinishAfterMove, const LayoutMetrics& layout) {
+        if(srcPile == NULL || dstPile == NULL || srcIndex < 0 ||
+           srcIndex != srcPile->count - 1 || autoMoveAnim.active) {
+            return false;
+        }
+
+        Card c = srcPile->cards[srcIndex];
+        if(!canPlaceOn(c, dstPile)) {
+            return false;
+        }
+
+        int startX, startY;
+        getCardPos(srcPile, srcIndex, startX, startY, layout);
+        autoMoveAnim.active = true;
+        autoMoveAnim.card = c;
+        autoMoveAnim.srcPile = srcPile;
+        autoMoveAnim.dstPile = dstPile;
+        autoMoveAnim.revealSrcTop = (srcPile->type == PILE_TABLEAU && srcIndex > 0);
+        autoMoveAnim.countStats = countStats;
+        autoMoveAnim.triggerAutoFinishAfterMove = triggerAutoFinishAfterMove;
+        autoMoveAnim.startX = startX;
+        autoMoveAnim.startY = startY;
+        autoMoveAnim.endX = dstPile->x;
+        autoMoveAnim.endY = dstPile->y;
+        autoMoveAnim.step = 0;
+        int dx = autoMoveAnim.endX - autoMoveAnim.startX;
+        int dy = autoMoveAnim.endY - autoMoveAnim.startY;
+        int distance = abs(dx) + abs(dy);
+        int distanceSteps = distance / scaleMetric(36, (float)layout.cardW / (float)BASE_CARD_W, 12);
+        // Keep the same step count as before, but drive the timer faster so
+        // the animation completes in roughly half the time.
+        int timeSteps = (AUTO_FINISH_MOVE_MS * AUTO_FINISH_STEP_FPS + 999) / 1000;
+        autoMoveAnim.steps = clampInt(timeSteps + distanceSteps / 3,
+            AUTO_FINISH_MIN_STEPS, AUTO_FINISH_MAX_STEPS);
+
+        srcPile->count--;
+        update();
+        return true;
+    }
+
     bool findNextAutoFinishMove(Pile*& srcPile, int& srcIndex, Pile*& dstPile) {
         srcPile = NULL;
         dstPile = NULL;
@@ -699,13 +765,10 @@ private:
 
         if(waste.count > 0) {
             Card c = waste.cards[waste.count - 1];
-            for(int i = 0; i < 4; i++) {
-                if(canPlaceOn(c, &foundation[i])) {
-                    srcPile = &waste;
-                    srcIndex = waste.count - 1;
-                    dstPile = &foundation[i];
-                    return true;
-                }
+            if(findFoundationDestination(c, dstPile)) {
+                srcPile = &waste;
+                srcIndex = waste.count - 1;
+                return true;
             }
         }
 
@@ -715,13 +778,10 @@ private:
             }
             int idx = tableau[i].count - 1;
             Card c = tableau[i].cards[idx];
-            for(int j = 0; j < 4; j++) {
-                if(canPlaceOn(c, &foundation[j])) {
-                    srcPile = &tableau[i];
-                    srcIndex = idx;
-                    dstPile = &foundation[j];
-                    return true;
-                }
+            if(findFoundationDestination(c, dstPile)) {
+                srcPile = &tableau[i];
+                srcIndex = idx;
+                return true;
             }
         }
         return false;
@@ -739,23 +799,7 @@ private:
             return false;
         }
 
-        int startX, startY;
-        getCardPos(srcPile, srcIndex, startX, startY, layout);
-        autoMoveAnim.active = true;
-        autoMoveAnim.card = srcPile->cards[srcIndex];
-        autoMoveAnim.srcPile = srcPile;
-        autoMoveAnim.dstPile = dstPile;
-        autoMoveAnim.revealSrcTop = (srcPile->type == PILE_TABLEAU && srcIndex > 0);
-        autoMoveAnim.startX = startX;
-        autoMoveAnim.startY = startY;
-        autoMoveAnim.endX = dstPile->x;
-        autoMoveAnim.endY = dstPile->y;
-        autoMoveAnim.step = 0;
-        autoMoveAnim.steps = 2;
-
-        srcPile->count--;
-        update();
-        return true;
+        return beginAnimatedFoundationMove(srcPile, srcIndex, dstPile, false, false, layout);
     }
 
     void finishAutoFinishMove() {
@@ -770,11 +814,18 @@ private:
         if(autoMoveAnim.dstPile != NULL) {
             autoMoveAnim.dstPile->cards[autoMoveAnim.dstPile->count++] = autoMoveAnim.card;
         }
+        if(autoMoveAnim.countStats) {
+            score += 10;
+            moves++;
+        }
 
         autoMoveAnim.active = false;
         autoMoveAnim.srcPile = NULL;
         autoMoveAnim.dstPile = NULL;
         autoMoveAnim.revealSrcTop = false;
+        autoMoveAnim.countStats = false;
+        bool triggerAutoFinishAfterMove = autoMoveAnim.triggerAutoFinishAfterMove;
+        autoMoveAnim.triggerAutoFinishAfterMove = false;
         autoMoveAnim.step = 0;
         autoMoveAnim.steps = 0;
 
@@ -782,19 +833,23 @@ private:
         if(won) {
             autoFinishing = false;
         }
+        else if(triggerAutoFinishAfterMove) {
+            requestAutoFinishGame();
+        }
         update();
     }
 
     // Try to auto-move a card to a foundation pile
     bool tryAutoMoveToFoundation(Pile* srcPile, int srcIndex) {
-        if(moveTopCardToFoundationSet(srcPile, srcIndex, foundation, true)) {
-            checkWin();
-            if(!won) {
-                requestAutoFinishGame();
-            }
-            return true;
+        if(srcPile == NULL || srcIndex < 0 || srcIndex != srcPile->count - 1) {
+            return false;
         }
-        return false;
+        Pile* dstPile = NULL;
+        if(!findFoundationDestination(srcPile->cards[srcIndex], dstPile)) {
+            return false;
+        }
+        LayoutMetrics layout = getLayoutMetrics();
+        return beginAnimatedFoundationMove(srcPile, srcIndex, dstPile, true, true, layout);
     }
 
     bool beginDrag(Pile* p, int idx, int mouseDownX, int mouseDownY,
@@ -943,10 +998,15 @@ protected:
             }
         }
         else if(autoMoveAnim.active && autoMoveAnim.steps > 0) {
+            float t = (float)autoMoveAnim.step / (float)autoMoveAnim.steps;
+            t = clampFloat(t, 0.0f, 1.0f);
+            // Smoothstep keeps the same total duration while making motion
+            // accelerate and decelerate more naturally.
+            float eased = t * t * (3.0f - 2.0f * t);
             int cx = autoMoveAnim.startX +
-                (autoMoveAnim.endX - autoMoveAnim.startX) * autoMoveAnim.step / autoMoveAnim.steps;
+                (int)((autoMoveAnim.endX - autoMoveAnim.startX) * eased);
             int cy = autoMoveAnim.startY +
-                (autoMoveAnim.endY - autoMoveAnim.startY) * autoMoveAnim.step / autoMoveAnim.steps;
+                (int)((autoMoveAnim.endY - autoMoveAnim.startY) * eased);
             drawCard(g, cx, cy, autoMoveAnim.card, theme, true, layout);
         }
 
@@ -995,7 +1055,8 @@ protected:
             int winBoxW = scaleMetric(220, (float)layout.cardW / (float)BASE_CARD_W, 120);
             int winBoxH = scaleMetric(70, (float)layout.cardH / (float)BASE_CARD_H, 42);
             int winBoxR = scaleMetric(14, (float)layout.cardH / (float)BASE_CARD_H, 8);
-            const char* win = "You Win!  Score: 1000";
+            char win[64];
+            snprintf(win, sizeof(win), "You Win!  Score: %d", score);
             uint32_t ww, wh;
             int winFontSize = clampInt(layout.infoFontSize + 2, 12, 28);
             font_text_size(win, theme->getFont(), winFontSize, &ww, &wh);
@@ -1266,7 +1327,7 @@ protected:
                     int dx = foundation[i].x + layout.cardW / 2 - (drag.curX + layout.cardW / 2);
                     int dy = foundation[i].y + layout.cardH / 2 - (drag.curY + layout.cardH / 2);
                     int dist = dx * dx + dy * dy;
-                    if(dist < bestDist && canPlaceOn(c, &foundation[i])) {
+                    if(drag.count == 1 && dist < bestDist && canPlaceOn(c, &foundation[i])) {
                         bestDist = dist;
                         dstPile = &foundation[i];
                     }
@@ -1292,8 +1353,13 @@ protected:
                 }
 
                 if(dstPile != NULL) {
-                    // Place the dragged cards
-                    for(int i = 0; i < drag.count; i++) {
+                    // Foundation piles accept exactly one card; tableau piles
+                    // may accept a full dragged run.
+                    int moveCount = drag.count;
+                    if(dstPile->type == PILE_FOUNDATION) {
+                        moveCount = 1;
+                    }
+                    for(int i = 0; i < moveCount; i++) {
                         dstPile->cards[dstPile->count++] = drag.cards[i];
                     }
                     // Reveal the next card in the source tableau pile
@@ -1432,6 +1498,8 @@ public:
         autoMoveAnim.srcPile = NULL;
         autoMoveAnim.dstPile = NULL;
         autoMoveAnim.revealSrcTop = false;
+        autoMoveAnim.countStats = false;
+        autoMoveAnim.triggerAutoFinishAfterMove = false;
         autoMoveAnim.step = 0;
         autoMoveAnim.steps = 0;
         newGame();
@@ -1448,8 +1516,9 @@ public:
         CardsWidget* game = new CardsWidget();
         root->add(game);
 
-        // Start the timer for victory animation at 10 FPS
-        setTimer(10);
+        // Higher timer FPS keeps the same auto-finish duration but allows
+        // smoother motion with more intermediate frames.
+        setTimer(AUTO_FINISH_TIMER_FPS);
     }
 };
 
