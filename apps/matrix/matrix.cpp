@@ -592,12 +592,12 @@ int main(int argc, char** argv) {
     int frame_count = 0;
     unsigned int fps_time = 0;
     float accumulator = 0.0f;
-    const float FIXED_DT = 1.0f / 60.0f;  // 固定时间步长 60 FPS
+    const float FIXED_DT = 1.0f / 60.0f;  // Fixed 60 FPS timestep
 
     while (1) {
         unsigned int current_time = SDL_GetTicks();
         float dt = (current_time - last_time) / 1000.0f;
-        if (dt > 0.1f) dt = 0.1f;  // 限制最大时间步长，防止卡顿后跳跃
+        if (dt > 0.1f) dt = 0.1f;  // Clamp large frame gaps to avoid visible jumps after stalls
         last_time = current_time;
         accumulator += dt;
 
@@ -616,7 +616,7 @@ int main(int argc, char** argv) {
             bbufpix[i] = 0xFF000000;
         }
 
-        // 使用固定时间步长更新，确保动画速度一致
+        // Update with a fixed timestep to keep the animation speed consistent.
         while (accumulator >= FIXED_DT) {
             for (size_t ci = 0; ci < columns.size(); ci++) {
                 columns[ci].update(FIXED_DT);
