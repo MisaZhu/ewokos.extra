@@ -22,6 +22,195 @@ static ssh_session_t *g_session = NULL;
 
 static int write_terminal_output(const char *buf, int len);
 
+static int set_nonblock_mode(int fd, int *saved_flags) {
+    int flags;
+
+    if (!saved_flags) {
+        return -1;
+    }
+
+    flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        return -1;
+    }
+
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        return -1;
+    }
+
+    *saved_flags = flags;
+    return 0;
+}
+
+static void restore_fd_flags(int fd, int saved_flags) {
+    if (saved_flags >= 0) {
+        (void)fcntl(fd, F_SETFL, saved_flags);
+    }
+}
+
+#define TELNET_IAC  255
+#define TELNET_DONT 254
+#define TELNET_DO   253
+#define TELNET_WONT 252
+#define TELNET_WILL 251
+#define TELNET_SB   250
+#define TELNET_SE   240
+
+static int is_telnet_console(void) {
+    const char *cid = getenv("CONSOLE_ID");
+    return cid != NULL && strcmp(cid, "telnet") == 0;
+}
+
+static void telnet_reply_option(uint8_t verb, uint8_t opt) {
+    uint8_t reply[3] = { TELNET_IAC, 0, opt };
+    int supported = 0;
+
+    switch (verb) {
+    case TELNET_DO:
+        reply[1] = supported ? TELNET_WILL : TELNET_WONT;
+        break;
+    case TELNET_WILL:
+        reply[1] = supported ? TELNET_DO : TELNET_DONT;
+        break;
+    default:
+        return;
+    }
+
+    (void)write(STDOUT_FILENO, reply, sizeof(reply));
+}
+
+static int ssh_read_input_char_mode(char *out, int wait_for_input) {
+    enum {
+        TELNET_STATE_DATA = 0,
+        TELNET_STATE_IAC,
+        TELNET_STATE_CMD,
+        TELNET_STATE_SB,
+        TELNET_STATE_SB_DATA,
+        TELNET_STATE_SB_IAC,
+    };
+    static int telnet_state = TELNET_STATE_DATA;
+    static int pending_cr_tail = 0;
+    static uint8_t telnet_verb = 0;
+    static uint8_t raw_buf[64];
+    static int raw_off = 0;
+    static int raw_len = 0;
+    int telnet = is_telnet_console();
+
+    if (!out) {
+        return -1;
+    }
+
+    for (;;) {
+        char c;
+        int ret;
+
+        if (raw_off < raw_len) {
+            c = (char)raw_buf[raw_off++];
+            ret = 1;
+        } else {
+            ret = read(STDIN_FILENO, raw_buf, sizeof(raw_buf));
+            if (ret > 0) {
+                raw_off = 1;
+                raw_len = ret;
+                c = (char)raw_buf[0];
+                ret = 1;
+            }
+        }
+
+        if (ret == 0) {
+            if (!wait_for_input) {
+                return 0;
+            }
+            usleep(1000);
+            continue;
+        }
+        if (ret < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == 0) {
+                if (!wait_for_input) {
+                    return 0;
+                }
+                usleep(1000);
+                continue;
+            }
+            return -1;
+        }
+
+        if (!telnet) {
+            *out = c;
+            return 1;
+        }
+
+        {
+            uint8_t uc = (uint8_t)c;
+
+            if (telnet_state == TELNET_STATE_DATA && pending_cr_tail) {
+                pending_cr_tail = 0;
+                if (uc == 0 || uc == '\n') {
+                    continue;
+                }
+            }
+
+            switch (telnet_state) {
+            case TELNET_STATE_DATA:
+                if (uc == TELNET_IAC) {
+                    telnet_state = TELNET_STATE_IAC;
+                    continue;
+                }
+                if (uc == '\r') {
+                    pending_cr_tail = 1;
+                    *out = '\n';
+                    return 1;
+                }
+                *out = (char)uc;
+                return 1;
+            case TELNET_STATE_IAC:
+                if (uc == TELNET_IAC) {
+                    telnet_state = TELNET_STATE_DATA;
+                    *out = (char)uc;
+                    return 1;
+                }
+                if (uc == TELNET_SB) {
+                    telnet_state = TELNET_STATE_SB;
+                    continue;
+                }
+                if (uc == TELNET_SE) {
+                    telnet_state = TELNET_STATE_DATA;
+                    continue;
+                }
+                telnet_verb = uc;
+                telnet_state = TELNET_STATE_CMD;
+                continue;
+            case TELNET_STATE_CMD:
+                telnet_reply_option(telnet_verb, uc);
+                telnet_state = TELNET_STATE_DATA;
+                continue;
+            case TELNET_STATE_SB:
+                telnet_state = TELNET_STATE_SB_DATA;
+                continue;
+            case TELNET_STATE_SB_DATA:
+                if (uc == TELNET_IAC) {
+                    telnet_state = TELNET_STATE_SB_IAC;
+                }
+                continue;
+            case TELNET_STATE_SB_IAC:
+                telnet_state = (uc == TELNET_SE) ? TELNET_STATE_DATA : TELNET_STATE_SB_DATA;
+                continue;
+            default:
+                telnet_state = TELNET_STATE_DATA;
+                continue;
+            }
+        }
+    }
+}
+
+static int ssh_read_input_char(char *out) {
+    return ssh_read_input_char_mode(out, 1);
+}
+
+static int ssh_try_read_input_char(char *out) {
+    return ssh_read_input_char_mode(out, 0);
+}
+
 static void do_cleanup(void) {
     if (g_session) {
         ssh_disconnect(g_session);
@@ -67,16 +256,63 @@ static int parse_host(const char *hostspec, char **user, char **host) {
 
 static int do_interactive_session(ssh_session_t *session) {
     int running = 1;
+    int telnet_console = is_telnet_console();
+    int stdin_flags = -1;
     char buf[4096];
     struct pollfd fds[2];
 
-    fds[0].fd = STDIN_FILENO;
-    fds[0].events = POLLIN;
-    fds[1].fd = session->socket;
-    fds[1].events = POLLIN;
+    if (telnet_console && set_nonblock_mode(STDIN_FILENO, &stdin_flags) < 0) {
+        telnet_console = 0;
+    }
+
+    if (telnet_console) {
+        fds[0].fd = session->socket;
+        fds[0].events = POLLIN;
+        fds[1].fd = -1;
+        fds[1].events = 0;
+    } else {
+        fds[0].fd = STDIN_FILENO;
+        fds[0].events = POLLIN;
+        fds[1].fd = session->socket;
+        fds[1].events = POLLIN;
+    }
 
     while (running && ssh_is_connected(session)) {
-        int ret = poll(fds, 2, -1);
+        int ret;
+
+        if (telnet_console) {
+            int n = 0;
+            char c;
+
+            while (n < (int)sizeof(buf)) {
+                int rc = ssh_try_read_input_char(&c);
+                if (rc < 0) {
+                    n = -1;
+                    break;
+                }
+                if (rc == 0) {
+                    break;
+                }
+                buf[n++] = c;
+            }
+
+            if (n > 0) {
+                if (n >= 3 && buf[0] == '~' && buf[1] == '~' && buf[2] == '.') {
+                    printf("\r\nDisconnecting...\r\n");
+                    break;
+                }
+                if (ssh_channel_send_data(session, buf, n) < 0) {
+                    break;
+                }
+            } else if (n < 0 && errno != EAGAIN && errno != EINTR && errno != 0) {
+                break;
+            }
+
+            ret = poll(fds, 1, 20);
+        } else {
+            ret = poll(fds, 2, -1);
+        }
+
         if (ret < 0) {
             if (errno == EINTR) {
                 continue;
@@ -84,8 +320,29 @@ static int do_interactive_session(ssh_session_t *session) {
             break;
         }
 
-        if (fds[0].revents & POLLIN) {
-            int n = read(STDIN_FILENO, buf, sizeof(buf));
+        if (!telnet_console && (fds[0].revents & POLLIN)) {
+            int n = 0;
+            char c;
+
+            while (n < (int)sizeof(buf)) {
+                int rc = ssh_read_input_char(&c);
+                if (rc < 0) {
+                    n = -1;
+                    break;
+                }
+                if (rc == 0) {
+                    break;
+                }
+                buf[n++] = c;
+                if (!is_telnet_console()) {
+                    break;
+                }
+                fds[0].revents = 0;
+                if (poll(&fds[0], 1, 5) <= 0 || !(fds[0].revents & POLLIN)) {
+                    break;
+                }
+            }
+
             if (n > 0) {
                 if (n >= 3 && buf[0] == '~' && buf[1] == '~' && buf[2] == '.') {
                     printf("\r\nDisconnecting...\r\n");
@@ -105,12 +362,12 @@ static int do_interactive_session(ssh_session_t *session) {
             }
         }
 
-        if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        if (!telnet_console && (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL))) {
             ssh_channel_close(session);
             running = 0;
         }
 
-        if (running && (fds[1].revents & POLLIN)) {
+        if (running && ((telnet_console ? fds[0].revents : fds[1].revents) & POLLIN)) {
             int n = ssh_channel_receive_data(session, buf, sizeof(buf));
             if (n > 0) {
                 if (write_terminal_output(buf, n) < 0) {
@@ -123,10 +380,12 @@ static int do_interactive_session(ssh_session_t *session) {
             }
         }
 
-        if (fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        if ((telnet_console ? fds[0].revents : fds[1].revents) & (POLLERR | POLLHUP | POLLNVAL)) {
             running = 0;
         }
     }
+
+    restore_fd_flags(STDIN_FILENO, stdin_flags);
 
     return 0;
 }
@@ -197,81 +456,32 @@ static int do_exec_command(ssh_session_t *session, int argc, char **argv) {
     return (n == 0) ? 0 : -1;
 }
 
-static int set_nonblock_mode(int fd, int *old_flags) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0) {
-        return -1;
-    }
-    if (old_flags) {
-        *old_flags = flags;
-    }
-    if (flags & O_NONBLOCK) {
-        return 0;
-    }
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
-static void restore_fd_flags(int fd, int old_flags) {
-    if (old_flags >= 0) {
-        (void)fcntl(fd, F_SETFL, old_flags);
-    }
-}
-
 static int ssh_read_password(char *password, size_t size) {
-    struct pollfd pfd;
-    int old_flags = -1;
     size_t len = 0;
 
     if (!password || size == 0) {
         return -1;
     }
 
-    if (set_nonblock_mode(STDIN_FILENO, &old_flags) < 0) {
-        return -1;
-    }
-
-    pfd.fd = STDIN_FILENO;
-    pfd.events = POLLIN;
-    pfd.revents = 0;
-
     for (;;) {
         char buf[64];
-        ssize_t n;
+        ssize_t n = 0;
 
-        pfd.revents = 0;
-        if (poll(&pfd, 1, -1) < 0) {
-            if (errno == EINTR) {
-                continue;
+        while (n < (ssize_t)sizeof(buf)) {
+            int rc = ssh_read_input_char(&buf[n]);
+            if (rc < 0) {
+                return -1;
             }
-            restore_fd_flags(STDIN_FILENO, old_flags);
-            return -1;
-        }
-
-        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            restore_fd_flags(STDIN_FILENO, old_flags);
-            return -1;
-        }
-
-        if (!(pfd.revents & POLLIN)) {
-            continue;
-        }
-
-        n = read(STDIN_FILENO, buf, sizeof(buf));
-        if (n == 0) {
-            /*
-             * Ewok console stdin can transiently surface readable events
-             * before input bytes are actually available.
-             */
-            usleep(1000);
-            continue;
-        }
-        if (n < 0) {
-            if (errno == EINTR || errno == EAGAIN || errno == 0) {
-                usleep(1000);
-                continue;
+            if (rc == 0) {
+                break;
             }
-            restore_fd_flags(STDIN_FILENO, old_flags);
-            return -1;
+            n++;
+            if (!is_telnet_console()) {
+                break;
+            }
+            if (poll(NULL, 0, 1) < 0 && errno != EINTR) {
+                break;
+            }
         }
 
         for (ssize_t i = 0; i < n; i++) {
@@ -280,7 +490,6 @@ static int ssh_read_password(char *password, size_t size) {
             if (c == '\r' || c == '\n' || c == KEY_ENTER) {
                 password[len] = '\0';
                 write(STDOUT_FILENO, "\n", 1);
-                restore_fd_flags(STDIN_FILENO, old_flags);
                 return 0;
             }
 
