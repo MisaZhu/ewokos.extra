@@ -7,7 +7,6 @@ all:
 	cd VideoPlayer; make
 	cd calculator; make
 	cd calendar; make
-	cd cards; make
 	cd gears; make
 	cd imgui_demo; make
 	cd matrix; make
@@ -22,7 +21,6 @@ clean:
 	cd VideoPlayer; make clean
 	cd calculator; make clean
 	cd calendar; make clean
-	cd cards; make clean
 	cd gears; make clean
 	cd imgui_demo; make clean
 	cd matrix; make clean
