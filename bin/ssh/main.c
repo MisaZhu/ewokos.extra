@@ -4,6 +4,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+
+#include <ewoksys/keydef.h>
 
 #ifdef HAVE_SELECT
 #include <sys/select.h>
@@ -15,6 +19,8 @@
 #include <openssl/rand.h>
 
 static ssh_session_t *g_session = NULL;
+
+static int write_terminal_output(const char *buf, int len);
 
 static void do_cleanup(void) {
     if (g_session) {
@@ -62,69 +68,95 @@ static int parse_host(const char *hostspec, char **user, char **host) {
 static int do_interactive_session(ssh_session_t *session) {
     int running = 1;
     char buf[4096];
-    int n;
+    struct pollfd fds[2];
+
+    fds[0].fd = STDIN_FILENO;
+    fds[0].events = POLLIN;
+    fds[1].fd = session->socket;
+    fds[1].events = POLLIN;
 
     while (running && ssh_is_connected(session)) {
-#ifdef HAVE_SELECT
-        fd_set readfds;
-        int maxfd = (STDIN_FILENO > session->socket) ? STDIN_FILENO : session->socket;
-
-        FD_ZERO(&readfds);
-        FD_SET(STDIN_FILENO, &readfds);
-        FD_SET(session->socket, &readfds);
-
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 100000;
-
-        int ret = select(maxfd + 1, &readfds, NULL, NULL, &tv);
+        int ret = poll(fds, 2, -1);
         if (ret < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             break;
         }
 
-        if (FD_ISSET(STDIN_FILENO, &readfds)) {
-            n = read(STDIN_FILENO, buf, sizeof(buf));
+        if (fds[0].revents & POLLIN) {
+            int n = read(STDIN_FILENO, buf, sizeof(buf));
             if (n > 0) {
                 if (n >= 3 && buf[0] == '~' && buf[1] == '~' && buf[2] == '.') {
                     printf("\r\nDisconnecting...\r\n");
                     break;
                 }
-                if (ssh_channel_send_data(session, buf, n) < 0) break;
+                if (ssh_channel_send_data(session, buf, n) < 0) {
+                    break;
+                }
             } else if (n == 0) {
-                ssh_channel_close(session);
-                running = 0;
+                /*
+                 * Ewok console stdin can transiently report readable before
+                 * bytes are actually available. Do not treat that as EOF.
+                 */
+                usleep(1000);
+            } else if (errno != EAGAIN && errno != EINTR && errno != 0) {
+                break;
             }
         }
 
-        if (FD_ISSET(session->socket, &readfds)) {
-#else
-        usleep(10000);
-        /* Try to read from stdin without blocking */
-        n = read(STDIN_FILENO, buf, sizeof(buf));
-        if (n > 0) {
-            if (n >= 3 && buf[0] == '~' && buf[1] == '~' && buf[2] == '.') {
-                printf("\r\nDisconnecting...\r\n");
-                break;
-            }
-            if (ssh_channel_send_data(session, buf, n) < 0) break;
-        } else if (n == 0) {
+        if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
             ssh_channel_close(session);
             running = 0;
         }
-#endif
-        n = ssh_channel_receive_data(session, buf, sizeof(buf));
-        if (n > 0) {
-            write(STDOUT_FILENO, buf, n);
-        } else if (n == 0) {
+
+        if (running && (fds[1].revents & POLLIN)) {
+            int n = ssh_channel_receive_data(session, buf, sizeof(buf));
+            if (n > 0) {
+                if (write_terminal_output(buf, n) < 0) {
+                    break;
+                }
+            } else if (n == 0) {
+                running = 0;
+            } else {
+                break;
+            }
+        }
+
+        if (fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) {
             running = 0;
-        } else if (n < 0) {
-            break;
         }
-#ifdef HAVE_SELECT
-        }
-#endif
     }
 
+    return 0;
+}
+
+static int write_terminal_output(const char *buf, int len) {
+    char out[4096];
+    int out_len = 0;
+
+    if (!buf || len <= 0) {
+        return 0;
+    }
+
+    for (int i = 0; i < len; i++) {
+        if (buf[i] == '\r') {
+            continue;
+        }
+        out[out_len++] = buf[i];
+        if (out_len == (int)sizeof(out)) {
+            if (write(STDOUT_FILENO, out, out_len) < 0) {
+                return -1;
+            }
+            out_len = 0;
+        }
+    }
+
+    if (out_len > 0) {
+        if (write(STDOUT_FILENO, out, out_len) < 0) {
+            return -1;
+        }
+    }
     return 0;
 }
 
@@ -157,10 +189,119 @@ static int do_exec_command(ssh_session_t *session, int argc, char **argv) {
     
     /* Read output */
     while ((n = ssh_channel_receive_data(session, buf, sizeof(buf))) > 0) {
-        write(STDOUT_FILENO, buf, n);
+        if (write_terminal_output(buf, n) < 0) {
+            return -1;
+        }
     }
     
     return (n == 0) ? 0 : -1;
+}
+
+static int set_nonblock_mode(int fd, int *old_flags) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        return -1;
+    }
+    if (old_flags) {
+        *old_flags = flags;
+    }
+    if (flags & O_NONBLOCK) {
+        return 0;
+    }
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+static void restore_fd_flags(int fd, int old_flags) {
+    if (old_flags >= 0) {
+        (void)fcntl(fd, F_SETFL, old_flags);
+    }
+}
+
+static int ssh_read_password(char *password, size_t size) {
+    struct pollfd pfd;
+    int old_flags = -1;
+    size_t len = 0;
+
+    if (!password || size == 0) {
+        return -1;
+    }
+
+    if (set_nonblock_mode(STDIN_FILENO, &old_flags) < 0) {
+        return -1;
+    }
+
+    pfd.fd = STDIN_FILENO;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+
+    for (;;) {
+        char buf[64];
+        ssize_t n;
+
+        pfd.revents = 0;
+        if (poll(&pfd, 1, -1) < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            restore_fd_flags(STDIN_FILENO, old_flags);
+            return -1;
+        }
+
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            restore_fd_flags(STDIN_FILENO, old_flags);
+            return -1;
+        }
+
+        if (!(pfd.revents & POLLIN)) {
+            continue;
+        }
+
+        n = read(STDIN_FILENO, buf, sizeof(buf));
+        if (n == 0) {
+            /*
+             * Ewok console stdin can transiently surface readable events
+             * before input bytes are actually available.
+             */
+            usleep(1000);
+            continue;
+        }
+        if (n < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == 0) {
+                usleep(1000);
+                continue;
+            }
+            restore_fd_flags(STDIN_FILENO, old_flags);
+            return -1;
+        }
+
+        for (ssize_t i = 0; i < n; i++) {
+            unsigned char c = (unsigned char)buf[i];
+
+            if (c == '\r' || c == '\n' || c == KEY_ENTER) {
+                password[len] = '\0';
+                write(STDOUT_FILENO, "\n", 1);
+                restore_fd_flags(STDIN_FILENO, old_flags);
+                return 0;
+            }
+
+            if (c == KEY_BACKSPACE || c == CONSOLE_LEFT) {
+                if (len > 0) {
+                    len--;
+                    write(STDOUT_FILENO, "\b \b", 3);
+                }
+                continue;
+            }
+
+            if (c < KEY_SPACE) {
+                continue;
+            }
+
+            if (len + 1 < size) {
+                password[len++] = (char)c;
+                write(STDOUT_FILENO, "*", 1);
+            }
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -334,8 +475,15 @@ int main(int argc, char *argv[]) {
         }
         
         if (ssh_packet_receive(g_session, &packet) < 0) {
-            fprintf(stderr, "Failed to receive service response\n");
+            fprintf(stderr, "Failed to receive service response: %s\n", ssh_get_error(g_session));
             goto cleanup;
+        }
+
+        if (packet.type == SSH_MSG_EXT_INFO) {
+            if (ssh_packet_receive(g_session, &packet) < 0) {
+                fprintf(stderr, "Failed to receive service response after EXT_INFO: %s\n", ssh_get_error(g_session));
+                goto cleanup;
+            }
         }
         
         if (packet.type != SSH_MSG_SERVICE_ACCEPT) {
@@ -359,17 +507,9 @@ int main(int argc, char *argv[]) {
         printf("Password: ");
         fflush(stdout);
 
-        if (fgets(password, sizeof(password), stdin) == NULL) {
+        if (ssh_read_password(password, sizeof(password)) < 0) {
             fprintf(stderr, "Failed to read password\n");
             goto cleanup;
-        }
-
-        printf("\n");
-
-        /* Remove newline */
-        size_t pass_len = strlen(password);
-        if (pass_len > 0 && password[pass_len - 1] == '\n') {
-            password[pass_len - 1] = '\0';
         }
 
         if (ssh_userauth_password(g_session, user, password) < 0) {

@@ -16,6 +16,7 @@
 #define SSH_MSG_DEBUG                           4
 #define SSH_MSG_SERVICE_REQUEST                 5
 #define SSH_MSG_SERVICE_ACCEPT                  6
+#define SSH_MSG_EXT_INFO                        7
 #define SSH_MSG_KEXINIT                         20
 #define SSH_MSG_NEWKEYS                         21
 #define SSH_MSG_KEXDH_INIT                      30
@@ -100,8 +101,8 @@ typedef struct ssh_session {
     char server_version[256];
     
     /* KEX data */
-    uint8_t client_kexinit[1024];
-    uint8_t server_kexinit[1024];
+    uint8_t client_kexinit[SSH_MAX_PACKET_SIZE];
+    uint8_t server_kexinit[SSH_MAX_PACKET_SIZE];
     size_t client_kexinit_len;
     size_t server_kexinit_len;
     
@@ -110,6 +111,8 @@ typedef struct ssh_session {
     size_t session_id_len;
     
     /* Keys */
+    uint8_t iv_client[16];
+    uint8_t iv_server[16];
     uint8_t enc_key_client[32];
     uint8_t enc_key_server[32];
     uint8_t int_key_client[32];
@@ -137,6 +140,7 @@ typedef struct ssh_session {
     char selected_mac_s2c[64];
     char selected_comp_c2s[64];
     char selected_comp_s2c[64];
+    int kex_strict;
     
     /* Curve25519 state */
     uint8_t curve25519_private[32];
