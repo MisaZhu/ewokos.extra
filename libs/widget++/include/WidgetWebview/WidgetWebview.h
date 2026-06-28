@@ -81,7 +81,7 @@ protected:
     virtual void onBuildStatus(const std::string& status, int progress) {}
     void pushResult(const HttpResult& result);
     bool getResult(HttpResult& result);
-    void processResults();
+    bool processResults();
     void cleanupBuildResources();
     void setBuildStatus(const std::string& status, int progress);
     void advanceBuildStep();

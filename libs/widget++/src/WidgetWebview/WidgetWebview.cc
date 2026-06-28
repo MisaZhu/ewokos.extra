@@ -626,82 +626,86 @@ bool WidgetWebview::getResult(HttpResult& result)
     return true;
 }
 
-void WidgetWebview::processResults()
+bool WidgetWebview::processResults()
 {
     HttpResult result;
     bool drive_build = false;
-    while(getResult(result)) {
-        if(result.type == HttpTask::TASK_IMAGE && m_buildPhase != BUILD_IDLE) {
-            klog("[xBrowser] process image deferred by build: size=%d phase=%d\n",
-                (int)result.content.size(), (int)m_buildPhase);
-            pthread_mutex_lock(&m_resultMutex);
-            m_resultQueue.insert(m_resultQueue.begin(), result);
-            pthread_mutex_unlock(&m_resultMutex);
-            break;
-        }
-        if(result.type == HttpTask::TASK_CSS &&
-                m_buildPhase != BUILD_IDLE &&
-                !(m_buildPhase == BUILD_PRELOAD_CSS && result.url == m_defaultCSSUrl)) {
-            pthread_mutex_lock(&m_resultMutex);
-            m_resultQueue.insert(m_resultQueue.begin(), result);
-            pthread_mutex_unlock(&m_resultMutex);
-            break;
-        }
-        uint64_t process_start = kernel_tic_ms(0);
-        klog("[xBrowser] process result: type=%d ok=%d size=%d\n",
-            result.type, result.ok ? 1 : 0, (int)result.content.size());
-        if(!result.ok) {
-            if(result.type == HttpTask::TASK_IMAGE) {
-                klog("[xBrowser] image load failed\n");
-            }
-            if(result.type == HttpTask::TASK_CSS) {
-                forgetCSS(result.url);
-                if(result.url == m_defaultCSSUrl) {
-                    pthread_mutex_lock(&m_renderMutex);
-                    m_defaultCssLoading = false;
-                    m_defaultCssPrepared = true;
-                    if(m_buildPhase == BUILD_PRELOAD_CSS) {
-                        m_buildPhase = BUILD_CREATE_DOC;
-                    }
-                    pthread_mutex_unlock(&m_renderMutex);
-                    drive_build = true;
-                }
-            }
-            continue;
-        }
-
-        if(result.type == HttpTask::TASK_HTML) {
-            klog("[xBrowser] html handoff: process begin url=%s\n", result.url.c_str());
-            m_currentHtmlUrl = result.url;
-            loadHtmlContent(result.content);
-            klog("[xBrowser] html handoff: process done url=%s\n", result.url.c_str());
-            drive_build = true;
-        }
-        else if(result.type == HttpTask::TASK_CSS) {
-            loadCSSContent(result.url, result.content);
-        }
-        else if(result.type == HttpTask::TASK_IMAGE) {
-            if(!loadImageContent(result.url, (uint8_t*)result.content.data(), result.content.size())) {
-                pthread_mutex_lock(&m_renderMutex);
-                bool retry_later = (m_doc == nullptr && m_buildDoc == nullptr);
-                pthread_mutex_unlock(&m_renderMutex);
-                if(retry_later) {
-                    pthread_mutex_lock(&m_resultMutex);
-                    m_resultQueue.insert(m_resultQueue.begin(), result);
-                    pthread_mutex_unlock(&m_resultMutex);
-                    klog("[xBrowser] image result requeued: url=%s hash=%08x size=%d\n",
-                        result.url.c_str(), debug_hash_text(result.url), (int)result.content.size());
-                    break;
-                }
-            }
-        }
-        klog("[xBrowser] process result total: type=%d cost=%u ms\n",
-            result.type, (uint32_t)(kernel_tic_ms(0) - process_start));
+    if(!getResult(result)) {
+        return false;
     }
+
+    if(result.type == HttpTask::TASK_IMAGE && m_buildPhase != BUILD_IDLE) {
+        klog("[xBrowser] process image deferred by build: size=%d phase=%d\n",
+            (int)result.content.size(), (int)m_buildPhase);
+        pthread_mutex_lock(&m_resultMutex);
+        m_resultQueue.insert(m_resultQueue.begin(), result);
+        pthread_mutex_unlock(&m_resultMutex);
+        return false;
+    }
+    if(result.type == HttpTask::TASK_CSS &&
+            m_buildPhase != BUILD_IDLE &&
+            !(m_buildPhase == BUILD_PRELOAD_CSS && result.url == m_defaultCSSUrl)) {
+        pthread_mutex_lock(&m_resultMutex);
+        m_resultQueue.insert(m_resultQueue.begin(), result);
+        pthread_mutex_unlock(&m_resultMutex);
+        return false;
+    }
+
+    uint64_t process_start = kernel_tic_ms(0);
+    klog("[xBrowser] process result: type=%d ok=%d size=%d\n",
+        result.type, result.ok ? 1 : 0, (int)result.content.size());
+    if(!result.ok) {
+        if(result.type == HttpTask::TASK_IMAGE) {
+            klog("[xBrowser] image load failed\n");
+        }
+        if(result.type == HttpTask::TASK_CSS) {
+            forgetCSS(result.url);
+            if(result.url == m_defaultCSSUrl) {
+                pthread_mutex_lock(&m_renderMutex);
+                m_defaultCssLoading = false;
+                m_defaultCssPrepared = true;
+                if(m_buildPhase == BUILD_PRELOAD_CSS) {
+                    m_buildPhase = BUILD_CREATE_DOC;
+                }
+                pthread_mutex_unlock(&m_renderMutex);
+                drive_build = true;
+            }
+        }
+    } else if(result.type == HttpTask::TASK_HTML) {
+        klog("[xBrowser] html handoff: process begin url=%s\n", result.url.c_str());
+        m_currentHtmlUrl = result.url;
+        loadHtmlContent(result.content);
+        klog("[xBrowser] html handoff: process done url=%s\n", result.url.c_str());
+        drive_build = true;
+    }
+    else if(result.type == HttpTask::TASK_CSS) {
+        loadCSSContent(result.url, result.content);
+    }
+    else if(result.type == HttpTask::TASK_IMAGE) {
+        if(!loadImageContent(result.url, (uint8_t*)result.content.data(), result.content.size())) {
+            pthread_mutex_lock(&m_renderMutex);
+            bool retry_later = (m_doc == nullptr && m_buildDoc == nullptr);
+            pthread_mutex_unlock(&m_renderMutex);
+            if(retry_later) {
+                pthread_mutex_lock(&m_resultMutex);
+                m_resultQueue.insert(m_resultQueue.begin(), result);
+                pthread_mutex_unlock(&m_resultMutex);
+                klog("[xBrowser] image result requeued: url=%s hash=%08x size=%d\n",
+                    result.url.c_str(), debug_hash_text(result.url), (int)result.content.size());
+            }
+        }
+    }
+    klog("[xBrowser] process result total: type=%d cost=%u ms\n",
+        result.type, (uint32_t)(kernel_tic_ms(0) - process_start));
 
     if(drive_build) {
         m_deferBuildStep = true;
     }
+
+    pthread_mutex_lock(&m_resultMutex);
+    bool has_more_results = !m_resultQueue.empty();
+    pthread_mutex_unlock(&m_resultMutex);
+    return has_more_results;
 }
 
 void WidgetWebview::onTimer(uint32_t timerFPS, uint32_t timerSteps)
@@ -719,16 +723,22 @@ void WidgetWebview::onTimer(uint32_t timerFPS, uint32_t timerSteps)
         m_pendingDeleteContainer = nullptr;
     }
 
-    processResults();
+    bool has_more_results = processResults();
     if (applyPendingLayoutUpdates()) {
         update();
     }
     if (m_buildPhase != BUILD_IDLE) {
         if (m_deferBuildStep) {
             m_deferBuildStep = false;
+            if(has_more_results) {
+                update();
+            }
             return;
         }
         advanceBuildStep();
+    }
+    if(has_more_results) {
+        update();
     }
 }
 
