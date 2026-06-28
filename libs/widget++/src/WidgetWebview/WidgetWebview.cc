@@ -1045,8 +1045,8 @@ void WidgetWebview::onRepaint(graph_t* g, XTheme* theme, const grect_t& r)
         int box_w = has_doc ? (r.w / 3) : 260;
         if (box_w < 220) box_w = 220;
         int box_h = 48;
-        int box_x = has_doc ? (r.x + 8) : (r.x + (r.w - box_w) / 2);
-        int box_y = has_doc ? (r.y + 8) : (r.y + (r.h - box_h) / 2);
+        int box_x = r.x + (r.w - box_w) / 2;
+        int box_y = r.y + (r.h - box_h) / 2;
         graph_fill_rect(g, box_x, box_y, box_w, box_h, bg);
         graph_rect(g, box_x, box_y, box_w, box_h, 0xFF808080);
         int bar_x = box_x + 8;
