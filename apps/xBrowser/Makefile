@@ -10,7 +10,7 @@ TARGET_DIR = $(BUILD_DIR)/rootfs
 
 LDFLAGS = -L$(TARGET_DIR)/lib -L$(BUILD_DIR)/lib
 
-CXXFLAGS += -I$(BUILD_DIR)/include -I libs/litehtml/include
+CXXFLAGS += -I$(BUILD_DIR)/include -I$(SW_ROOT_DIR)/libs/widget++/include -I libs/litehtml/include
 
 BROWSER_OBJS = src/main.o
 LD_LIB_DEPS = \

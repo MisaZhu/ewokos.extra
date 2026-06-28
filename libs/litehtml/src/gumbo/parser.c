@@ -16,6 +16,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,49 @@
 #include "util.h"
 #include "vector.h"
 
+/* Custom setjmp/longjmp to avoid GCC __builtin_setjmp interception */
+extern int gumbo_setjmp(jmp_buf env);
+extern void gumbo_longjmp(jmp_buf env, int val);
+
+/* Global OOM abort buffer - safe because HTML parsing is single-threaded */
+jmp_buf gumbo_oom_jmpbuf;
+
 #define AVOID_UNUSED_VARIABLE_WARNING(i) (void)(i)
+
+static void debug_buffer_fingerprint(const char* str, size_t len,
+    uint32_t* hash_out, uint32_t* lt_count_out, uint32_t* ctrl_count_out,
+    uint32_t* head4_out, uint32_t* tail4_out) {
+  uint32_t hash = 2166136261u;
+  uint32_t lt_count = 0;
+  uint32_t ctrl_count = 0;
+  uint32_t head4 = 0;
+  uint32_t tail4 = 0;
+  if (str) {
+    size_t sample = len < 4 ? len : 4;
+    for (size_t i = 0; i < len; ++i) {
+      unsigned char ch = (unsigned char) str[i];
+      hash ^= ch;
+      hash *= 16777619u;
+      if (ch == '<') {
+        ++lt_count;
+      }
+      if ((ch < 0x20 && ch != '\n' && ch != '\r' && ch != '\t') || ch == 0x7f) {
+        ++ctrl_count;
+      }
+      if (i < sample) {
+        head4 = (head4 << 8) | ch;
+      }
+    }
+    for (size_t i = len > 4 ? len - 4 : 0; i < len; ++i) {
+      tail4 = (tail4 << 8) | (unsigned char) str[i];
+    }
+  }
+  *hash_out = hash;
+  *lt_count_out = lt_count;
+  *ctrl_count_out = ctrl_count;
+  *head4_out = head4;
+  *tail4_out = tail4;
+}
 
 #define GUMBO_STRING(literal) \
   { literal, sizeof(literal) - 1 }
@@ -55,7 +98,10 @@ static GumboInsertionMode get_current_template_insertion_mode(
 static bool handle_in_template(GumboParser*, GumboToken*);
 static void destroy_node(GumboParser*, GumboNode*);
 
-static void* malloc_wrapper(void* unused, size_t size) { return malloc(size); }
+static void* malloc_wrapper(void* unused, size_t size) {
+  void* ptr = malloc(size);
+  return ptr;  // May return NULL on OOM
+}
 
 static void free_wrapper(void* unused, void* ptr) { free(ptr); }
 
@@ -1743,18 +1789,20 @@ static bool maybe_add_doctype_error(
     GumboParser* parser, const GumboToken* token) {
   const GumboTokenDocType* doctype = &token->v.doc_type;
   bool html_doctype = !strcmp(doctype->name, kDoctypeHtml.data);
-  if ((!html_doctype || doctype->has_public_identifier ||
-          (doctype->has_system_identifier &&
-              !strcmp(
-                  doctype->system_identifier, kSystemIdLegacyCompat.data))) &&
-      !(html_doctype && (doctype_matches(doctype, &kPublicIdHtml4_0,
-                             &kSystemIdRecHtml4_0, true) ||
-                            doctype_matches(doctype, &kPublicIdHtml4_01,
-                                &kSystemIdHtml4, true) ||
-                            doctype_matches(doctype, &kPublicIdXhtml1_0,
-                                &kSystemIdXhtmlStrict1_1, false) ||
-                            doctype_matches(doctype, &kPublicIdXhtml1_1,
-                                &kSystemIdXhtml1_1, false)))) {
+  int legacy_compat = 0;
+  if (doctype->has_system_identifier) {
+    legacy_compat = !strcmp(doctype->system_identifier, kSystemIdLegacyCompat.data);
+  }
+  bool allow_known_doctype =
+      html_doctype &&
+      (doctype_matches(doctype, &kPublicIdHtml4_0, &kSystemIdRecHtml4_0, true) ||
+       doctype_matches(doctype, &kPublicIdHtml4_01, &kSystemIdHtml4, true) ||
+       doctype_matches(doctype, &kPublicIdXhtml1_0,
+           &kSystemIdXhtmlStrict1_1, false) ||
+       doctype_matches(doctype, &kPublicIdXhtml1_1, &kSystemIdXhtml1_1, false));
+  bool ok = !((!html_doctype || doctype->has_public_identifier ||
+          legacy_compat) && !allow_known_doctype);
+  if (!ok) {
     parser_add_parse_error(parser, token);
     return false;
   }
@@ -2079,7 +2127,8 @@ static bool handle_initial(GumboParser* parser, GumboToken* token) {
     document->system_identifier = token->v.doc_type.system_identifier;
     document->doc_type_quirks_mode = compute_quirks_mode(&token->v.doc_type);
     set_insertion_mode(parser, GUMBO_INSERTION_MODE_BEFORE_HTML);
-    return maybe_add_doctype_error(parser, token);
+    bool ok = maybe_add_doctype_error(parser, token);
+    return ok;
   }
   parser_add_parse_error(parser, token);
   document->doc_type_quirks_mode = GUMBO_DOCTYPE_QUIRKS;
@@ -4072,6 +4121,21 @@ GumboOutput* gumbo_parse_with_options(
     const GumboOptions* options, const char* buffer, size_t length) {
   GumboParser parser;
   parser._options = options;
+
+  // Set up OOM abort point.  If any allocation fails during parsing,
+  // gumbo_parser_allocate() will longjmp back here and we return NULL.
+  if (gumbo_setjmp(gumbo_oom_jmpbuf) != 0) {
+    // OOM occurred during parsing - return NULL.
+    // Partial allocations are leaked; acceptable on memory-constrained systems.
+    return NULL;
+  }
+  uint32_t hash = 0;
+  uint32_t lt_count = 0;
+  uint32_t ctrl_count = 0;
+  uint32_t head4 = 0;
+  uint32_t tail4 = 0;
+  debug_buffer_fingerprint(buffer, length, &hash, &lt_count, &ctrl_count,
+      &head4, &tail4);
   output_init(&parser);
   gumbo_tokenizer_state_init(&parser, buffer, length);
   parser_state_init(&parser);

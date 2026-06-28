@@ -14,10 +14,64 @@
 #include <ewoksys/klog.h>
 #include <ewoksys/proc.h>
 #include <deque>
+#include <cctype>
+#include <pthread.h>
 
 using namespace Ewok;
 
 static const uint32_t kLayoutDebounceMs = 30;
+
+static std::string strip_script_blocks(const std::string& html, int* removed_count)
+{
+    if(removed_count) {
+        *removed_count = 0;
+    }
+    if(html.empty()) {
+        return html;
+    }
+
+    std::string lower = html;
+    for(char& ch : lower) {
+        ch = (char)std::tolower((unsigned char)ch);
+    }
+
+    std::string out;
+    out.reserve(html.size());
+    size_t pos = 0;
+    int removed = 0;
+    while(pos < html.size()) {
+        size_t script_open = lower.find("<script", pos);
+        if(script_open == std::string::npos) {
+            out.append(html, pos, html.size() - pos);
+            break;
+        }
+
+        out.append(html, pos, script_open - pos);
+        size_t script_close = lower.find("</script>", script_open);
+        if(script_close == std::string::npos) {
+            removed++;
+            break;
+        }
+
+        pos = script_close + 9;
+        removed++;
+    }
+
+    if(removed_count) {
+        *removed_count = removed;
+    }
+    return removed > 0 ? out : html;
+}
+
+static uint32_t debug_hash_text(const std::string& text)
+{
+    uint32_t hash = 2166136261u;
+    for(size_t i = 0; i < text.size(); ++i) {
+        hash ^= (uint8_t)text[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
 
 // Explicit template instantiation for deque<HttpTask>
 template class std::deque<HttpTask>;
@@ -33,6 +87,8 @@ WidgetWebview::WidgetWebview()
     , m_buildContainer(nullptr)
     , m_buildDoc(nullptr)
     , m_buildTargetContext(nullptr)
+    , m_pendingDeleteContainer(nullptr)
+    , m_pendingDeleteDoc(nullptr)
     , m_scrollX(0)
     , m_scrollY(0)
     , m_needsStyleUpdate(false)
@@ -70,6 +126,8 @@ WidgetWebview::~WidgetWebview()
         delete m_doc;
     if(m_container)
         delete m_container;
+    if(m_pendingDeleteDoc) { delete m_pendingDeleteDoc; m_pendingDeleteDoc = nullptr; }
+    if(m_pendingDeleteContainer) { delete m_pendingDeleteContainer; m_pendingDeleteContainer = nullptr; }
     pthread_mutex_unlock(&m_renderMutex);
 
     pthread_mutex_destroy(&m_taskMutex);
@@ -196,13 +254,24 @@ void* _task_thread(void* p)
             }
         }
         else {
-            // No task, sleep a bit
+            // No task left: notify once, then tear down the worker.
+            // addTask() already recreates the thread on demand, so keeping
+            // an idle worker parked in proc_usleep() only exposes a fragile
+            // sleep/restore path for detached child threads.
             if(havetask) {
                 havetask = false;
                 klog("[xBrowser] task thread idle: queue drained\n");
                 widget->onTasksEnd();
             }
-            proc_usleep(10000);
+            pthread_mutex_lock(&widget->m_taskMutex);
+            bool queue_empty = widget->m_taskQueue.empty();
+            if(queue_empty) {
+                widget->m_task_running = false;
+            }
+            pthread_mutex_unlock(&widget->m_taskMutex);
+            if(queue_empty) {
+                return nullptr;
+            }
         }
     }
     
@@ -216,12 +285,20 @@ bool WidgetWebview::addTask(const HttpTask& task)
 
     for (auto& t : m_taskQueue) {
         if (t.url == task.url) {
+            if(task.type == HttpTask::TASK_IMAGE) {
+                klog("[xBrowser] queue image skipped: duplicate loading=%d queue=%d running=%d\n",
+                    t.loading ? 1 : 0, (int)m_taskQueue.size(), m_task_running ? 1 : 0);
+            }
             pthread_mutex_unlock(&m_taskMutex);
             return false;
         }
     }
 
     m_taskQueue.push_back(task);
+    if(task.type == HttpTask::TASK_IMAGE) {
+        klog("[xBrowser] queue image added: pending=%d running=%d\n",
+            (int)m_taskQueue.size(), m_task_running ? 1 : 0);
+    }
     pthread_mutex_unlock(&m_taskMutex);
 
     if (!m_task_running) {
@@ -263,6 +340,10 @@ bool WidgetWebview::getTask(HttpTask& task)
         if (!m_taskQueue[i].loading) {
             task = m_taskQueue[i];
             m_taskQueue[i].loading = true;
+            if(task.type == HttpTask::TASK_IMAGE) {
+                klog("[xBrowser] take image task: queue=%d\n",
+                    (int)m_taskQueue.size());
+            }
             pthread_mutex_unlock(&m_taskMutex);
             return true;
         }
@@ -360,10 +441,12 @@ bool WidgetWebview::loadImageTask(const std::string& url)
         free(content);
         result.ok = true;
     }
+    klog("[xBrowser] image result ready: url=%s hash=%08x ok=%d size=%d\n",
+        url.c_str(), debug_hash_text(url), result.ok ? 1 : 0, sz);
     pushResult(result);
     removeTask(url);
-    klog("[xBrowser] fetched image: url=%s ok=%d size=%d cost=%u ms\n",
-        url.c_str(), result.ok ? 1 : 0, sz, (uint32_t)(kernel_tic_ms(0) - fetch_start));
+    klog("[xBrowser] fetched image: ok=%d size=%d cost=%u ms\n",
+        result.ok ? 1 : 0, sz, (uint32_t)(kernel_tic_ms(0) - fetch_start));
     return result.ok;
 }
 
@@ -417,19 +500,28 @@ bool WidgetWebview::loadImageContent(const std::string& url, uint8_t* content, i
 {
     bool res = false;
     pthread_mutex_lock(&m_renderMutex);
+    if (m_doc == nullptr && m_buildDoc == nullptr) {
+        klog("[xBrowser] image content deferred: no-doc url=%s hash=%08x size=%d\n",
+            url.c_str(), debug_hash_text(url), sz);
+        pthread_mutex_unlock(&m_renderMutex);
+        return false;
+    }
     XContainer* target_container = m_container;
     litehtml::document::ptr target_doc = m_doc;
     bool target_build = false;
-    if ((m_buildPhase != BUILD_IDLE || m_buildDoc != nullptr) && m_buildContainer != NULL) {
+    if (m_buildDoc != nullptr && m_buildContainer != NULL) {
         target_container = m_buildContainer;
         target_doc = m_buildDoc;
         target_build = true;
     }
-    if (content != NULL && sz > 0 && target_container != NULL) {
+    klog("[xBrowser] image content target: url=%s hash=%08x build=%d doc=%p container=%p size=%d\n",
+        url.c_str(), debug_hash_text(url), target_build ? 1 : 0, target_doc, target_container, sz);
+    if (content != NULL && sz > 0 && target_container != NULL && target_doc != nullptr) {
         uint64_t decode_start = kernel_tic_ms(0);
         res = target_container->loadImageData(url, content, sz);
         uint32_t decode_ms = (uint32_t)(kernel_tic_ms(0) - decode_start);
-        klog("[xBrowser] decode image: url=%s size=%d cost=%u ms\n", url.c_str(), sz, decode_ms);
+        klog("[xBrowser] decode image: ok=%d size=%d cost=%u ms build=%d\n",
+            res ? 1 : 0, sz, decode_ms, target_build ? 1 : 0);
         if (res && target_doc) {
             if (target_build) {
                 m_buildNeedsLayout = true;
@@ -443,6 +535,9 @@ bool WidgetWebview::loadImageContent(const std::string& url, uint8_t* content, i
     pthread_mutex_unlock(&m_renderMutex);
     if(res)
         update();
+    else
+        klog("[xBrowser] image content failed: url=%s hash=%08x size=%d\n",
+            url.c_str(), debug_hash_text(url), sz);
     return res;
 }
 
@@ -453,7 +548,12 @@ bool WidgetWebview::loadHtmlContent(const std::string& content)
     cleanupBuildResources();
     m_buildTargetContext = (m_activeContext == &m_browser_context) ? &m_buildContext : &m_browser_context;
     m_buildTargetContext->master_css().clear();
-    m_buildHtmlContent = content;
+    int stripped_scripts = 0;
+    m_buildHtmlContent = strip_script_blocks(content, &stripped_scripts);
+    if(stripped_scripts > 0) {
+        klog("[xBrowser] sanitized html: removed_scripts=%d old_size=%d new_size=%d\n",
+            stripped_scripts, (int)content.size(), (int)m_buildHtmlContent.size());
+    }
     m_buildHtmlUrl = m_currentHtmlUrl;
     if(!m_defaultCSSUrl.empty()) {
         m_buildPhase = BUILD_PRELOAD_CSS;
@@ -500,6 +600,11 @@ void WidgetWebview::pushResult(const HttpResult& result)
 {
     pthread_mutex_lock(&m_resultMutex);
     m_resultQueue.push_back(result);
+    if(result.type == HttpTask::TASK_IMAGE) {
+        klog("[xBrowser] push image result: queue=%d url=%s hash=%08x ok=%d size=%d\n",
+            (int)m_resultQueue.size(), result.url.c_str(), debug_hash_text(result.url),
+            result.ok ? 1 : 0, (int)result.content.size());
+    }
     pthread_mutex_unlock(&m_resultMutex);
 }
 
@@ -512,6 +617,11 @@ bool WidgetWebview::getResult(HttpResult& result)
     }
     result = m_resultQueue.front();
     m_resultQueue.erase(m_resultQueue.begin());
+    if(result.type == HttpTask::TASK_IMAGE) {
+        klog("[xBrowser] pop image result: remain=%d url=%s hash=%08x ok=%d size=%d\n",
+            (int)m_resultQueue.size(), result.url.c_str(), debug_hash_text(result.url),
+            result.ok ? 1 : 0, (int)result.content.size());
+    }
     pthread_mutex_unlock(&m_resultMutex);
     return true;
 }
@@ -522,6 +632,8 @@ void WidgetWebview::processResults()
     bool drive_build = false;
     while(getResult(result)) {
         if(result.type == HttpTask::TASK_IMAGE && m_buildPhase != BUILD_IDLE) {
+            klog("[xBrowser] process image deferred by build: size=%d phase=%d\n",
+                (int)result.content.size(), (int)m_buildPhase);
             pthread_mutex_lock(&m_resultMutex);
             m_resultQueue.insert(m_resultQueue.begin(), result);
             pthread_mutex_unlock(&m_resultMutex);
@@ -536,9 +648,12 @@ void WidgetWebview::processResults()
             break;
         }
         uint64_t process_start = kernel_tic_ms(0);
-        klog("[xBrowser] process result: type=%d ok=%d url=%s size=%d\n",
-            result.type, result.ok ? 1 : 0, result.url.c_str(), (int)result.content.size());
+        klog("[xBrowser] process result: type=%d ok=%d size=%d\n",
+            result.type, result.ok ? 1 : 0, (int)result.content.size());
         if(!result.ok) {
+            if(result.type == HttpTask::TASK_IMAGE) {
+                klog("[xBrowser] image load failed\n");
+            }
             if(result.type == HttpTask::TASK_CSS) {
                 forgetCSS(result.url);
                 if(result.url == m_defaultCSSUrl) {
@@ -566,7 +681,19 @@ void WidgetWebview::processResults()
             loadCSSContent(result.url, result.content);
         }
         else if(result.type == HttpTask::TASK_IMAGE) {
-            loadImageContent(result.url, (uint8_t*)result.content.data(), result.content.size());
+            if(!loadImageContent(result.url, (uint8_t*)result.content.data(), result.content.size())) {
+                pthread_mutex_lock(&m_renderMutex);
+                bool retry_later = (m_doc == nullptr && m_buildDoc == nullptr);
+                pthread_mutex_unlock(&m_renderMutex);
+                if(retry_later) {
+                    pthread_mutex_lock(&m_resultMutex);
+                    m_resultQueue.insert(m_resultQueue.begin(), result);
+                    pthread_mutex_unlock(&m_resultMutex);
+                    klog("[xBrowser] image result requeued: url=%s hash=%08x size=%d\n",
+                        result.url.c_str(), debug_hash_text(result.url), (int)result.content.size());
+                    break;
+                }
+            }
         }
         klog("[xBrowser] process result total: type=%d cost=%u ms\n",
             result.type, (uint32_t)(kernel_tic_ms(0) - process_start));
@@ -581,6 +708,17 @@ void WidgetWebview::onTimer(uint32_t timerFPS, uint32_t timerSteps)
 {
     (void)timerFPS;
     (void)timerSteps;
+
+    // Flush deferred deletions from previous tick (safe - no operations in flight)
+    if(m_pendingDeleteDoc) {
+        delete m_pendingDeleteDoc;
+        m_pendingDeleteDoc = nullptr;
+    }
+    if(m_pendingDeleteContainer) {
+        delete m_pendingDeleteContainer;
+        m_pendingDeleteContainer = nullptr;
+    }
+
     processResults();
     if (applyPendingLayoutUpdates()) {
         update();
@@ -723,6 +861,14 @@ void WidgetWebview::advanceBuildStep()
         m_buildContainer->set_client_size(m_clientWidth, m_clientHeight);
         m_buildContainer->setDeferImageLoad(true);
         m_buildContainer->resetPerfStats();
+        if(m_buildHtmlContent.empty()) {
+            klog("[xBrowser] BUILD_CREATE_DOC: empty content, aborting build\n");
+            pthread_mutex_unlock(&m_renderMutex);
+            m_buildPhase = BUILD_FAILED;
+            setBuildStatus("no content to render", 100);
+            update();
+            return;
+        }
         uint64_t create_start = kernel_tic_ms(0);
         m_buildDoc = litehtml::document::createFromString(m_buildHtmlContent.c_str(), m_buildContainer, build_ctx);
         uint32_t create_ms = (uint32_t)(kernel_tic_ms(0) - create_start);
@@ -771,16 +917,16 @@ void WidgetWebview::advanceBuildStep()
     if (m_buildPhase == BUILD_SWAP_DOC) {
         setBuildStatus("displaying page", 100);
         pthread_mutex_lock(&m_renderMutex);
-        if(m_doc) {
-            delete m_doc;
-            m_doc = nullptr;
-        }
-        if(m_container) {
-            delete m_container;
-            m_container = nullptr;
-        }
+        // Save old pointers
+        XContainer* old_container = m_container;
+        litehtml::document::ptr old_doc = m_doc;
+
+        // Install new pointers atomically (while lock is held)
         m_doc = m_buildDoc;
         m_container = m_buildContainer;
+        m_buildDoc = nullptr;
+        m_buildContainer = nullptr;
+
         if (m_buildTargetContext) {
             m_activeContext = m_buildTargetContext;
             m_activeContext->set_fast_mode(false);
@@ -788,8 +934,6 @@ void WidgetWebview::advanceBuildStep()
         if(m_container) {
             m_container->setDeferImageLoad(false);
         }
-        m_buildDoc = nullptr;
-        m_buildContainer = nullptr;
         m_buildHtmlContent.clear();
         m_buildHtmlUrl.clear();
         m_buildPhase = BUILD_IDLE;
@@ -800,6 +944,13 @@ void WidgetWebview::advanceBuildStep()
         m_scrollX = 0;
         m_scrollY = 0;
         pthread_mutex_unlock(&m_renderMutex);
+
+        // Defer deletion to next timer tick to prevent re-entrant corruption
+        if(m_pendingDeleteDoc) delete m_pendingDeleteDoc;
+        if(m_pendingDeleteContainer) delete m_pendingDeleteContainer;
+        m_pendingDeleteDoc = old_doc;
+        m_pendingDeleteContainer = old_container;
+
         updateScroller();
         onBuildStatus("", 0);
         update();
@@ -913,7 +1064,11 @@ void WidgetWebview::onRepaint(graph_t* g, XTheme* theme, const grect_t& r)
     }
 
     if (flush_deferred_images && deferred_image_container) {
-        deferred_image_container->flushPendingImages();
+        pthread_mutex_lock(&m_renderMutex);
+        if(m_container == deferred_image_container) {  // Still valid?
+            deferred_image_container->flushPendingImages();
+        }
+        pthread_mutex_unlock(&m_renderMutex);
     }
 }
 

@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <ewoksys/klog.h>
 
 #include "util.h"
 
@@ -34,6 +35,9 @@ void gumbo_vector_init(struct GumboInternalParser* parser,
   if (initial_capacity > 0) {
     vector->data =
         gumbo_parser_allocate(parser, sizeof(void*) * initial_capacity);
+    if (!vector->data) {
+      vector->capacity = 0;
+    }
   } else {
     vector->data = NULL;
   }
@@ -54,6 +58,11 @@ static void enlarge_vector_if_full(
       vector->capacity *= 2;
       size_t num_bytes = sizeof(void*) * vector->capacity;
       void** temp = gumbo_parser_allocate(parser, num_bytes);
+      if (!temp) {
+        // Allocation failed - revert capacity and leave vector unchanged
+        vector->capacity /= 2;
+        return;
+      }
       memcpy(temp, vector->data, old_num_bytes);
       gumbo_parser_deallocate(parser, vector->data);
       vector->data = temp;
@@ -62,6 +71,10 @@ static void enlarge_vector_if_full(
       vector->capacity = 2;
       vector->data =
           gumbo_parser_allocate(parser, sizeof(void*) * vector->capacity);
+      if (!vector->data) {
+        vector->capacity = 0;
+        return;
+      }
     }
   }
 }
@@ -69,8 +82,10 @@ static void enlarge_vector_if_full(
 void gumbo_vector_add(
     struct GumboInternalParser* parser, void* element, GumboVector* vector) {
   enlarge_vector_if_full(parser, vector);
-  assert(vector->data);
-  assert(vector->length < vector->capacity);
+  if (!vector->data || vector->length >= vector->capacity) {
+    // Allocation failed - silently drop the element rather than crash
+    return;
+  }
   vector->data[vector->length++] = element;
 }
 
@@ -96,6 +111,10 @@ void gumbo_vector_insert_at(struct GumboInternalParser* parser, void* element,
   assert(index >= 0);
   assert(index <= vector->length);
   enlarge_vector_if_full(parser, vector);
+  if (!vector->data || vector->length >= vector->capacity) {
+    // Allocation failed - silently drop the element
+    return;
+  }
   ++vector->length;
   memmove(&vector->data[index + 1], &vector->data[index],
       sizeof(void*) * (vector->length - index - 1));

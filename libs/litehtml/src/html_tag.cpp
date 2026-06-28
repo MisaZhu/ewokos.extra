@@ -42,26 +42,36 @@ static inline void css_length_set_predef0(litehtml::css_length& value)
 	value.predef(0);
 }
 
+static inline litehtml::tchar_t ascii_tolower_char(litehtml::tchar_t ch)
+{
+	return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
+}
+
 struct own_style_refs
 {
-	const litehtml::tchar_t* font_size = nullptr;
-	const litehtml::tchar_t* font_family = nullptr;
-	const litehtml::tchar_t* font_weight = nullptr;
-	const litehtml::tchar_t* font_style = nullptr;
-	const litehtml::tchar_t* text_decoration = nullptr;
-	const litehtml::tchar_t* position = nullptr;
-	const litehtml::tchar_t* overflow = nullptr;
-	const litehtml::tchar_t* display = nullptr;
-	const litehtml::tchar_t* box_sizing = nullptr;
-	const litehtml::tchar_t* text_align = nullptr;
-	const litehtml::tchar_t* text_transform = nullptr;
-	const litehtml::tchar_t* white_space = nullptr;
-	const litehtml::tchar_t* visibility = nullptr;
-	const litehtml::tchar_t* z_index = nullptr;
-	const litehtml::tchar_t* vertical_align = nullptr;
-	const litehtml::tchar_t* float_value = nullptr;
-	const litehtml::tchar_t* clear_value = nullptr;
+	litehtml::tstring font_size;
+	litehtml::tstring font_family;
+	litehtml::tstring font_weight;
+	litehtml::tstring font_style;
+	litehtml::tstring text_decoration;
+	litehtml::tstring position;
+	litehtml::tstring overflow;
+	litehtml::tstring display;
+	litehtml::tstring box_sizing;
+	litehtml::tstring text_align;
+	litehtml::tstring text_transform;
+	litehtml::tstring white_space;
+	litehtml::tstring visibility;
+	litehtml::tstring z_index;
+	litehtml::tstring vertical_align;
+	litehtml::tstring float_value;
+	litehtml::tstring clear_value;
 };
+
+static inline const litehtml::tchar_t* own_style_ref_ptr(const litehtml::tstring& value)
+{
+	return value.empty() ? nullptr : value.c_str();
+}
 
 static own_style_refs collect_own_style_refs(const litehtml::style& style)
 {
@@ -75,7 +85,7 @@ static own_style_refs collect_own_style_refs(const litehtml::style& style)
 	for(litehtml::props_map::const_iterator it = props.begin(); it != props.end(); ++it)
 	{
 		const litehtml::tchar_t* name = it->first.c_str();
-		const litehtml::tchar_t* value = it->second.m_value.c_str();
+		const litehtml::tstring& value = it->second.m_value;
 		switch(name[0])
 		{
 		case 'b':
@@ -314,10 +324,9 @@ void litehtml::html_tag::set_attr( const tchar_t* name, const tchar_t* val )
 	{
 		clear_style_property_cache();
 		tstring s_val = name;
-		std::locale lc = std::locale::global(std::locale::classic());
 		for(size_t i = 0; i < s_val.length(); i++)
 		{
-			s_val[i] = std::tolower(s_val[i], lc);
+			s_val[i] = ascii_tolower_char(s_val[i]);
 		}
 		m_attrs[s_val] = val;
 
@@ -748,7 +757,9 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 	}
 
 	own_style_refs own_refs = collect_own_style_refs(m_style);
-	init_font(own_refs.font_size, own_refs.font_family, own_refs.font_weight, own_refs.font_style, own_refs.text_decoration);
+	init_font(own_style_ref_ptr(own_refs.font_size), own_style_ref_ptr(own_refs.font_family),
+		own_style_ref_ptr(own_refs.font_weight), own_style_ref_ptr(own_refs.font_style),
+		own_style_ref_ptr(own_refs.text_decoration));
 	if(profile_enabled)
 	{
 		parse_style_profile_add(g_parse_style_profile.init_font_ms, part_start);
@@ -756,12 +767,12 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 	}
 	document* doc = get_document();
 	element::ptr el_parent = parent();
-	const tchar_t* own_position = own_refs.position;
-	const tchar_t* own_overflow = own_refs.overflow;
-	const tchar_t* own_display = own_refs.display;
-	const tchar_t* own_box_sizing = own_refs.box_sizing;
-	const tchar_t* own_text_align = own_refs.text_align;
-	const tchar_t* own_text_transform = own_refs.text_transform;
+	const tchar_t* own_position = own_style_ref_ptr(own_refs.position);
+	const tchar_t* own_overflow = own_style_ref_ptr(own_refs.overflow);
+	const tchar_t* own_display = own_style_ref_ptr(own_refs.display);
+	const tchar_t* own_box_sizing = own_style_ref_ptr(own_refs.box_sizing);
+	const tchar_t* own_text_align = own_style_ref_ptr(own_refs.text_align);
+	const tchar_t* own_text_transform = own_style_ref_ptr(own_refs.text_transform);
 
 	m_el_position	= (element_position)	value_index((own_position && t_strcasecmp(own_position, _t("inherit"))) ? own_position : _t("static"),			element_position_strings,	element_position_fixed);
 	m_overflow		= (overflow)			value_index((own_overflow && t_strcasecmp(own_overflow, _t("inherit"))) ? own_overflow : _t("visible"),		overflow_strings,			overflow_visible);
@@ -794,7 +805,7 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 		m_text_transform = text_transform_none;
 	}
 
-	const tchar_t* own_white_space = own_refs.white_space;
+	const tchar_t* own_white_space = own_style_ref_ptr(own_refs.white_space);
 	if(own_white_space && t_strcasecmp(own_white_space, _t("inherit")))
 	{
 		m_white_space = (white_space) value_index(own_white_space, white_space_strings, white_space_normal);
@@ -808,7 +819,7 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 		m_white_space = white_space_normal;
 	}
 
-	const tchar_t* own_visibility = own_refs.visibility;
+	const tchar_t* own_visibility = own_style_ref_ptr(own_refs.visibility);
 	if(own_visibility && t_strcasecmp(own_visibility, _t("inherit")))
 	{
 		m_visibility = (visibility) value_index(own_visibility, visibility_strings, visibility_visible);
@@ -829,14 +840,14 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 
 	if(m_el_position != element_position_static)
 	{
-		const tchar_t* val = own_refs.z_index;
+		const tchar_t* val = own_style_ref_ptr(own_refs.z_index);
 		if(val)
 		{
 			m_z_index = t_atoi(val);
 		}
 	}
 
-	const tchar_t* own_vertical_align = own_refs.vertical_align;
+	const tchar_t* own_vertical_align = own_style_ref_ptr(own_refs.vertical_align);
 	if(own_vertical_align && t_strcasecmp(own_vertical_align, _t("inherit")))
 	{
 		m_vertical_align = (vertical_align) value_index(own_vertical_align, vertical_align_strings, va_baseline);
@@ -850,8 +861,8 @@ void litehtml::html_tag::parse_styles(bool is_reparse)
 		m_vertical_align = va_baseline;
 	}
 
-	const tchar_t* own_float = own_refs.float_value;
-	const tchar_t* own_clear = own_refs.clear_value;
+	const tchar_t* own_float = own_style_ref_ptr(own_refs.float_value);
+	const tchar_t* own_clear = own_style_ref_ptr(own_refs.clear_value);
 	const tchar_t* fl = (own_float && t_strcasecmp(own_float, _t("inherit"))) ? own_float : _t("none");
 	m_float = (element_float) value_index(fl, element_float_strings, float_none);
 
@@ -2998,10 +3009,9 @@ bool litehtml::html_tag::is_break() const
 void litehtml::html_tag::set_tagName( const tchar_t* tag )
 {
 	tstring s_val = tag;
-	std::locale lc = std::locale::global(std::locale::classic());
 	for(size_t i = 0; i < s_val.length(); i++)
 	{
-		s_val[i] = std::tolower(s_val[i], lc);
+		s_val[i] = ascii_tolower_char(s_val[i]);
 	}
 	m_tag = s_val;
 }

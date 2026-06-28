@@ -313,15 +313,20 @@ litehtml::document::ptr litehtml::document::createFromString( const tchar_t* str
 
 litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, litehtml::document_container* objPainter, litehtml::context* ctx, litehtml::css* user_styles)
 {
+	uint32_t len = str ? (uint32_t)strlen(str) : 0;
 	uint64_t total_start = kernel_tic_ms(0);
 	reset_dom_internal_profile();
-	// parse document into GumboOutput
 	uint64_t gumbo_start = kernel_tic_ms(0);
-	GumboOutput* output = gumbo_parse((const char*) str);
+	GumboOutput* output = gumbo_parse_with_options(&kGumboDefaultOptions, (const char*) str, len);
 	uint32_t gumbo_ms = (uint32_t)(kernel_tic_ms(0) - gumbo_start);
 
-	// Create litehtml::document
 	litehtml::document::ptr doc = litehtml_alloc<litehtml::document>("document", objPainter, ctx);
+	if(!output)
+	{
+		// OOM during gumbo parsing - return NULL so caller detects failure
+		if(doc) delete doc;
+		return nullptr;
+	}
 	if(!doc)
 	{
 		gumbo_destroy_output(&kGumboDefaultOptions, output);
@@ -334,13 +339,11 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 	reset_create_node_profile();
 	doc->create_node(output->root, root_elements);
 	uint32_t create_node_ms = (uint32_t)(kernel_tic_ms(0) - create_node_start);
-	dump_create_node_profile();
 	if (!root_elements.empty())
 	{
 		doc->m_root = root_elements.back();
 		root_elements.pop_back();
 	}
-	// Clean up any remaining elements in root_elements (shouldn't happen for valid HTML)
 	for(auto& el : root_elements)
 	{
 		if(el)
@@ -349,25 +352,20 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 		}
 	}
 	root_elements.clear();
-	// Destroy GumboOutput
 	gumbo_destroy_output(&kGumboDefaultOptions, output);
 
-	// Let's process created elements tree
 	if (doc->m_root)
 	{
 		doc->container()->get_media_features(doc->m_media);
 
-		// apply master CSS
 		uint64_t master_css_start = kernel_tic_ms(0);
 		doc->m_root->apply_stylesheet(ctx->master_css());
 		uint32_t master_css_ms = (uint32_t)(kernel_tic_ms(0) - master_css_start);
 
-		// parse elements attributes
 		uint64_t attrs_start = kernel_tic_ms(0);
 		doc->m_root->parse_attributes();
 		uint32_t attrs_ms = (uint32_t)(kernel_tic_ms(0) - attrs_start);
 
-		// parse style sheets linked in document
 		media_query_list::ptr media;
 		uint64_t inline_css_start = kernel_tic_ms(0);
 		for (css_text::vector::iterator css = doc->m_css.begin(); css != doc->m_css.end(); css++)
@@ -386,7 +384,6 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 		doc->m_styles.sort_selectors();
 		uint32_t inline_css_ms = (uint32_t)(kernel_tic_ms(0) - inline_css_start);
 
-		// get current media features
 		uint64_t media_start = kernel_tic_ms(0);
 		if (!doc->m_media_lists.empty())
 		{
@@ -394,12 +391,10 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 		}
 		uint32_t media_ms = (uint32_t)(kernel_tic_ms(0) - media_start);
 
-		// Apply parsed styles.
 		uint64_t doc_css_start = kernel_tic_ms(0);
 		doc->m_root->apply_stylesheet(doc->m_styles);
 		uint32_t doc_css_ms = (uint32_t)(kernel_tic_ms(0) - doc_css_start);
 
-		// Apply user styles if any
 		uint64_t user_css_start = kernel_tic_ms(0);
 		if (user_styles)
 		{
@@ -407,7 +402,6 @@ litehtml::document::ptr litehtml::document::createFromUTF8(const char* str, lite
 		}
 		uint32_t user_css_ms = (uint32_t)(kernel_tic_ms(0) - user_css_start);
 
-		// Parse applied styles in the elements
 		uint64_t parse_styles_start = kernel_tic_ms(0);
 		reset_parse_style_profile();
 		doc->m_root->parse_styles();
@@ -858,7 +852,9 @@ bool litehtml::document::on_lbutton_up( int x, int y, int client_x, int client_y
 litehtml::element::ptr litehtml::document::create_element(const tchar_t* tag_name, const string_map& attributes)
 {
 	element::ptr newTag = nullptr;
-	if(m_container)
+	// XContainer only customizes <input>; avoid unnecessary virtual dispatch
+	// for every other tag during DOM construction.
+	if(m_container && tag_name && !t_strcmp(tag_name, _t("input")))
 	{
 		newTag = m_container->create_element(tag_name, attributes, this);
 	}
@@ -1019,10 +1015,13 @@ void litehtml::document::add_media_list( media_query_list::ptr list )
 	}
 }
 
-void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
+void litehtml::document::create_node(GumboNode* node, elements_vector& elements, int depth)
 {
+	if(!node) return;
+	if(depth > 64) return;  // prevent stack overflow on deeply nested HTML
 	g_create_node_profile.calls++;
-	switch (node->type)
+	GumboNodeType node_type = node->type;
+	switch (node_type)
 	{
 	case GUMBO_NODE_ELEMENT:
 		{
@@ -1033,6 +1032,12 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 			for (unsigned int i = 0; i < node->v.element.attributes.length; i++)
 			{
 				attr = (GumboAttribute*)node->v.element.attributes.data[i];
+				if(!attr || !attr->name || !attr->value)
+				{
+					klog("[xBrowser] create_node: skip invalid attr depth=%d idx=%u attr=%p name=%p value=%p\n",
+						depth, i, attr, attr ? attr->name : nullptr, attr ? attr->value : nullptr);
+					continue;
+				}
 				attrs[tstring(litehtml_from_utf8(attr->name))] = litehtml_from_utf8(attr->value);
 			}
 			add_create_node_time(g_create_node_profile.attrs_ms, attrs_start);
@@ -1041,7 +1046,7 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 			element::ptr ret = nullptr;
 			const char* tag = gumbo_normalized_tagname(node->v.element.tag);
 			uint64_t create_start = kernel_tic_ms(0);
-			if (tag[0])
+			if (tag && tag[0])
 			{
 				ret = create_element(litehtml_from_utf8(tag), attrs);
 			}
@@ -1063,7 +1068,13 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 				for (unsigned int i = 0; i < node->v.element.children.length; i++)
 				{
 					child.clear();
-					create_node(static_cast<GumboNode*> (node->v.element.children.data[i]), child);
+					GumboNode* child_node = static_cast<GumboNode*> (node->v.element.children.data[i]);
+					if(!child_node)
+					{
+						klog("[xBrowser] create_node: skip null child depth=%d idx=%u node=%p\n", depth, i, node);
+						continue;
+					}
+					create_node(child_node, child, depth + 1);
 					for(auto& el : child)
 					{
 						ret->appendChild(el);
@@ -1080,8 +1091,22 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 			uint64_t text_start = kernel_tic_ms(0);
 			std::string str;
 			std::string spaces;
-			const char* str_in = node->v.text.text ? node->v.text.text : "";
+			const char* str_in = node->v.text.text;
+			if(!str_in) return;
+			if(!str_in[0]) return;
 			size_t str_in_len = strlen(str_in);
+			if(node->parent &&
+				node->parent->type == GUMBO_NODE_ELEMENT &&
+				(node->parent->v.element.tag == GUMBO_TAG_STYLE ||
+				 node->parent->v.element.tag == GUMBO_TAG_SCRIPT))
+			{
+				element::ptr text = litehtml_alloc<el_text>("el_text(rawtext)", str_in, this);
+				if(text)
+				{
+					elements.push_back(text);
+				}
+				return;
+			}
 			str.reserve(str_in_len);
 			spaces.reserve(str_in_len);
 			unsigned char c;
@@ -1127,18 +1152,25 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 				// CJK character range - simplified for UTF-8
 				else if (c >= 0xE4 && c <= 0xE9)
 				{
-					flush_text();
-					flush_spaces();
-					// For UTF-8 CJK characters, we need to capture 3 bytes
-					str += c;
-					if (i + 1 < str_in_len) str += str_in[++i];
-					if (i + 1 < str_in_len) str += str_in[++i];
-					element::ptr text = litehtml_alloc<el_text>("el_text", str.c_str(), this);
-					if(text)
-					{
-						elements.push_back(text);
+					// Flush any previously accumulated non-CJK (ASCII) text
+					// CJK and ASCII must be in separate el_text nodes
+					if (!str.empty() && (unsigned char)str[0] < 0xE4) {
+						flush_text();
 					}
-					str.clear();
+					flush_spaces();
+					// Accumulate CJK character (3 bytes UTF-8)
+					if (i + 2 < str_in_len) {
+						str += c;
+						str += str_in[++i];
+						str += str_in[++i];
+					} else {
+						// Incomplete UTF-8 at end of input - add available bytes
+						str += c;
+						if (i + 1 < str_in_len) str += str_in[++i];
+						if (i + 1 < str_in_len) str += str_in[++i];
+					}
+					// Don't flush yet - consecutive CJK chars batch together
+					// They will be flushed when whitespace/ASCII/EOF follows
 				}
 				else
 				{
@@ -1156,7 +1188,8 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 			element::ptr ret = litehtml_alloc<el_cdata>("el_cdata", this);
 			if(ret)
 			{
-				ret->set_data(litehtml_from_utf8(node->v.text.text));
+				if(node->v.text.text)
+					ret->set_data(litehtml_from_utf8(node->v.text.text));
 				elements.push_back(ret);
 			}
 		}
@@ -1166,7 +1199,8 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 			element::ptr ret = litehtml_alloc<el_comment>("el_comment", this);
 			if(ret)
 			{
-				ret->set_data(litehtml_from_utf8(node->v.text.text));
+				if(node->v.text.text)
+					ret->set_data(litehtml_from_utf8(node->v.text.text));
 				elements.push_back(ret);
 			}
 		}
@@ -1174,7 +1208,8 @@ void litehtml::document::create_node(GumboNode* node, elements_vector& elements)
 	case GUMBO_NODE_WHITESPACE:
 		{
 			std::string spaces;
-			const char* str_in = node->v.text.text ? node->v.text.text : "";
+			const char* str_in = node->v.text.text;
+			if(!str_in || !str_in[0]) return;
 			size_t str_in_len = strlen(str_in);
 			spaces.reserve(str_in_len);
 			auto flush_spaces = [&]()

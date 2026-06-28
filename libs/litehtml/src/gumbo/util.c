@@ -17,6 +17,7 @@
 #include "util.h"
 
 #include <assert.h>
+#include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -26,17 +27,29 @@
 #include "gumbo.h"
 #include "parser.h"
 
+/* Custom longjmp to avoid GCC __builtin_longjmp interception */
+extern void gumbo_longjmp(jmp_buf env, int val);
+
+/* Defined in parser.c */
+extern jmp_buf gumbo_oom_jmpbuf;
+
 // TODO(jdtang): This should be elsewhere, but there's no .c file for
 // SourcePositions and yet the constant needs some linkage, so this is as good
 // as any.
 const GumboSourcePosition kGumboEmptySourcePosition = {0, 0, 0};
 
 void* gumbo_parser_allocate(GumboParser* parser, size_t num_bytes) {
-  return parser->_options->allocator(parser->_options->userdata, num_bytes);
+  void* ptr = malloc(num_bytes);
+  if (ptr == NULL) {
+    // OOM - abort the entire parse via longjmp
+    gumbo_longjmp(gumbo_oom_jmpbuf, 1);
+  }
+  return ptr;
 }
 
 void gumbo_parser_deallocate(GumboParser* parser, void* ptr) {
-  parser->_options->deallocator(parser->_options->userdata, ptr);
+  (void) parser;
+  free(ptr);
 }
 
 char* gumbo_copy_stringz(GumboParser* parser, const char* str) {
@@ -48,11 +61,5 @@ char* gumbo_copy_stringz(GumboParser* parser, const char* str) {
 // Debug function to trace operation of the parser.  Pass --copts=-DGUMBO_DEBUG
 // to use.
 void gumbo_debug(const char* format, ...) {
-#ifdef GUMBO_DEBUG
-  va_list args;
-  va_start(args, format);
-  vprintf(format, args);
-  va_end(args);
-  fflush(stdout);
-#endif
+  (void) format;
 }

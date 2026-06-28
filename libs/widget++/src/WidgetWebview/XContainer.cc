@@ -132,7 +132,7 @@ static std::string trim_request_url(const std::string& url)
 
 static inline int char_width_cache_slot(uint64_t key)
 {
-    return (int)(key & 2047ULL);
+    return (int)(key & 8191ULL);
 }
 
 XContainer::XContainer(litehtml::context* html_context, WidgetWebview* webview)
@@ -218,13 +218,12 @@ litehtml::uint_ptr XContainer::create_font(const litehtml::tchar_t* faceName, in
         if (font_get_face(fontInfo.font, size, &face) == 0) {
             // FreeType metrics are in 26.6 fixed-point format, divide by 64 to get pixels
             const int FACE_PIXEL_DENT = 64;
+            uint32_t x_height = 0;
             fm->ascent = face.ascender / FACE_PIXEL_DENT;
             fm->descent = face.descender / FACE_PIXEL_DENT;
             fm->height = face.height / FACE_PIXEL_DENT;
-
-            uint32_t w, h;
-            font_char_size('x', fontInfo.font, size, &w, &h);
-            fm->x_height = h / FACE_PIXEL_DENT;
+            font_char_size('x', fontInfo.font, size, &x_height, NULL);
+            fm->x_height = (int)x_height;
             fm->draw_spaces = italic == fontStyleItalic || decoration;
         }
     }
@@ -389,31 +388,33 @@ void XContainer::draw_list_marker(litehtml::uint_ptr hdc, const litehtml::list_m
 }
 
 const std::string XContainer::getFullURL(const std::string& src, const std::string& baseurl) {
-    std::string path = src;
-    if(src.starts_with("file://") || 
-            src.starts_with("http://") ||
-            src.starts_with("https://")) {
-        return src;
+    std::string clean_src = trim_request_url(src);
+    std::string clean_baseurl = trim_request_url(baseurl);
+    std::string path = clean_src;
+    if(clean_src.starts_with("file://") || 
+            clean_src.starts_with("http://") ||
+            clean_src.starts_with("https://")) {
+        return clean_src;
     }
-    else if(src.starts_with("res://")) {
+    else if(clean_src.starts_with("res://")) {
         path = "file:/";
-        path += X::getResFullName(src.substr(6).c_str());
+        path += X::getResFullName(clean_src.substr(6).c_str());
         return path;
     }
-    else if(src.starts_with("//")) {
+    else if(clean_src.starts_with("//")) {
         // Protocol-relative URL: //example.com/path
         // Use https by default, or http if baseurl uses http
-        if(baseurl.starts_with("http://")) {
-            path = "http:" + src;
+        if(clean_baseurl.starts_with("http://")) {
+            path = "http:" + clean_src;
         } else {
-            path = "https:" + src;
+            path = "https:" + clean_src;
         }
         return path;
     }
 
-    if (!baseurl.empty()) {
-        size_t slash = baseurl.find_last_of('/');
-        std::string base_dir = slash == std::string::npos ? baseurl : baseurl.substr(0, slash + 1);
+    if (!clean_baseurl.empty()) {
+        size_t slash = clean_baseurl.find_last_of('/');
+        std::string base_dir = slash == std::string::npos ? clean_baseurl : clean_baseurl.substr(0, slash + 1);
         if(!base_dir.empty())
             path = base_dir + path;
     }
@@ -475,6 +476,9 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
         const char* error_msg = HttpsResponseGetErrorMsg(response);
         const char* content_type = HttpsResponseGetHeaderValueByKey(response, "content-type");
         const char* location = HttpsResponseGetHeaderValueByKey(response, "location");
+        std::string error_msg_str = error_msg ? error_msg : "-";
+        std::string content_type_str = content_type ? content_type : "-";
+        std::string location_str = location ? location : "-";
         bool has_error = HttpsResponseError(response);
 
         if(has_error) {
@@ -483,9 +487,9 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
                 status_code,
                 error_code,
                 header_body_size,
-                content_type ? content_type : "-",
-                location ? location : "-",
-                error_msg ? error_msg : "-",
+                content_type_str.c_str(),
+                location_str.c_str(),
+                error_msg_str.c_str(),
                 (uint32_t)(kernel_tic_ms(0) - start_ms));
             HttpsResponseFree(response);
             HttpsRequestFree(request);
@@ -498,8 +502,8 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
                 status_code,
                 error_code,
                 header_body_size,
-                content_type ? content_type : "-",
-                location ? location : "-",
+                content_type_str.c_str(),
+                location_str.c_str(),
                 (uint32_t)(kernel_tic_ms(0) - start_ms));
             HttpsResponseFree(response);
             HttpsRequestFree(request);
@@ -516,7 +520,7 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
                 error_code,
                 header_body_size,
                 body_size,
-                content_type ? content_type : "-",
+                content_type_str.c_str(),
                 (uint32_t)(kernel_tic_ms(0) - start_ms));
             HttpsResponseFree(response);
             HttpsRequestFree(request);
@@ -543,7 +547,7 @@ uint8_t* XContainer::loadURL(const std::string& url, int* sz)
             request_url.c_str(),
             status_code,
             body_size,
-            content_type ? content_type : "-",
+            content_type_str.c_str(),
             (uint32_t)(kernel_tic_ms(0) - start_ms));
         return ret;
     }
@@ -559,7 +563,7 @@ void XContainer::load_image(const litehtml::tchar_t* src, const litehtml::tchar_
         return;
 
     std::string img_path = std::string(src);
-    std::string base_url = std::string(baseurl);
+    std::string base_url = baseurl ? std::string(baseurl) : std::string();
     std::string full_url = getFullURL(img_path, base_url);
     if(full_url.empty())
         return; 
@@ -597,11 +601,19 @@ void XContainer::flushPendingImages()
     }
 
     std::vector<std::string> pending_urls = m_pending_image_urls;
-    m_pending_image_urls.clear();
     klog("[xBrowser] flush pending images: %d\n", (int)pending_urls.size());
+    std::vector<std::string> retry_urls;
+    int queued_count = 0;
     for(const auto& url : pending_urls) {
-        m_webview->addTask({ url, HttpTask::TASK_IMAGE, false });
+        if(m_webview->addTask({ url, HttpTask::TASK_IMAGE, false })) {
+            queued_count++;
+        } else {
+            retry_urls.push_back(url);
+        }
     }
+    m_pending_image_urls = retry_urls;
+    klog("[xBrowser] flush pending images result: queued=%d retry=%d left=%d\n",
+        queued_count, (int)retry_urls.size(), (int)m_pending_image_urls.size());
 }
 
 bool XContainer::loadImageData(const std::string& url, uint8_t* data, int sz)
@@ -611,6 +623,7 @@ bool XContainer::loadImageData(const std::string& url, uint8_t* data, int sz)
 
     graph_t* img = graph_image_new_from_data(GRAPH_IMAGE_TYPE_AUTO, data, sz);
     if (img == NULL) {
+        klog("[xBrowser] image decode failed: url=%s size=%d\n", url.c_str(), sz);
         return false;
     }
 
@@ -618,6 +631,8 @@ bool XContainer::loadImageData(const std::string& url, uint8_t* data, int sz)
     info.image = img;
     info.ref_count = 1;
     m_images[url] = info;
+    klog("[xBrowser] image cached: url=%s size=%d dim=%dx%d ref=%d\n",
+        url.c_str(), sz, img->w, img->h, info.ref_count);
     return true;
 }
 
@@ -630,8 +645,8 @@ void XContainer::get_image_size(const litehtml::tchar_t* src, const litehtml::tc
         return;
 
     std::string img_path = std::string(src);
-    std::string base_url = std::string(baseurl);
-     std::string full_url = getFullURL(img_path, base_url);
+    std::string base_url = baseurl ? std::string(baseurl) : std::string();
+    std::string full_url = getFullURL(img_path, base_url);
     if(full_url.empty())
         return;
     
@@ -722,9 +737,7 @@ void XContainer::clear_images()
 
 void XContainer::clear_inputs()
 {
-    for (auto* input : m_vecInput) {
-        delete input;
-    }
+    // Inputs are DOM-owned elements. XContainer only keeps non-owning references.
     m_vecInput.clear();
 }
 

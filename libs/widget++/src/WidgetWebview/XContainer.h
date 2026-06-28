@@ -78,7 +78,7 @@ public:
     bool                               loadImageData(const std::string& url, uint8_t* data, int sz);
 
 private:
-    enum { CHAR_WIDTH_CACHE_SIZE = 2048 };
+    enum { CHAR_WIDTH_CACHE_SIZE = 8192 };
 
     graph_t* m_g;
     Ewok::WidgetWebview* m_webview;

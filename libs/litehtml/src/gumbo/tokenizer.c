@@ -1979,34 +1979,41 @@ static StateResult handle_bogus_comment_state(GumboParser* parser,
 // http://www.whatwg.org/specs/web-apps/current-work/complete.html#markup-declaration-open-state
 static StateResult handle_markup_declaration_state(GumboParser* parser,
     GumboTokenizerState* tokenizer, int c, GumboToken* output) {
-  if (utf8iterator_maybe_consume_match(
-          &tokenizer->_input, "--", sizeof("--") - 1, true)) {
+  bool is_comment = utf8iterator_maybe_consume_match(
+      &tokenizer->_input, "--", sizeof("--") - 1, true);
+  if (is_comment) {
     gumbo_tokenizer_set_state(parser, GUMBO_LEX_COMMENT_START);
     tokenizer->_reconsume_current_input = true;
-  } else if (utf8iterator_maybe_consume_match(
-                 &tokenizer->_input, "DOCTYPE", sizeof("DOCTYPE") - 1, false)) {
-    gumbo_tokenizer_set_state(parser, GUMBO_LEX_DOCTYPE);
-    tokenizer->_reconsume_current_input = true;
-    // If we get here, we know we'll eventually emit a doctype token, so now is
-    // the time to initialize the doctype strings.  (Not in doctype_state_init,
-    // since then they'll leak if ownership never gets transferred to the
-    // doctype token.
-    tokenizer->_doc_type_state.name = gumbo_copy_stringz(parser, "");
-    tokenizer->_doc_type_state.public_identifier =
-        gumbo_copy_stringz(parser, "");
-    tokenizer->_doc_type_state.system_identifier =
-        gumbo_copy_stringz(parser, "");
-  } else if (tokenizer->_is_current_node_foreign &&
-             utf8iterator_maybe_consume_match(
-                 &tokenizer->_input, "[CDATA[", sizeof("[CDATA[") - 1, true)) {
+  } else {
+    bool is_doctype = utf8iterator_maybe_consume_match(
+        &tokenizer->_input, "DOCTYPE", sizeof("DOCTYPE") - 1, false);
+    if (is_doctype) {
+      gumbo_tokenizer_set_state(parser, GUMBO_LEX_DOCTYPE);
+      tokenizer->_reconsume_current_input = true;
+      const char* empty_name = "";
+      const char* empty_public = "";
+      const char* empty_system = "";
+      // If we get here, we know we'll eventually emit a doctype token, so now is
+      // the time to initialize the doctype strings.  (Not in doctype_state_init,
+      // since then they'll leak if ownership never gets transferred to the
+      // doctype token.
+      tokenizer->_doc_type_state.name = gumbo_copy_stringz(parser, empty_name);
+      tokenizer->_doc_type_state.public_identifier =
+          gumbo_copy_stringz(parser, empty_public);
+      tokenizer->_doc_type_state.system_identifier =
+          gumbo_copy_stringz(parser, empty_system);
+    } else if (tokenizer->_is_current_node_foreign &&
+               utf8iterator_maybe_consume_match(
+                   &tokenizer->_input, "[CDATA[", sizeof("[CDATA[") - 1, true)) {
     gumbo_tokenizer_set_state(parser, GUMBO_LEX_CDATA);
     tokenizer->_is_in_cdata = true;
     tokenizer->_reconsume_current_input = true;
-  } else {
+    } else {
     tokenizer_add_parse_error(parser, GUMBO_ERR_DASHES_OR_DOCTYPE);
     gumbo_tokenizer_set_state(parser, GUMBO_LEX_BOGUS_COMMENT);
     tokenizer->_reconsume_current_input = true;
     clear_temporary_buffer(parser);
+    }
   }
   return NEXT_CHAR;
 }

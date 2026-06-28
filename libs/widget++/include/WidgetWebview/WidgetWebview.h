@@ -95,6 +95,8 @@ private:
     std::string m_currentHtmlUrl;
     XContainer*                   m_container;
     litehtml::document::ptr       m_doc;
+    XContainer*                   m_pendingDeleteContainer;
+    litehtml::document::ptr       m_pendingDeleteDoc;
     litehtml::context            m_browser_context;
     litehtml::context*           m_activeContext;
     BuildPhase                   m_buildPhase;
