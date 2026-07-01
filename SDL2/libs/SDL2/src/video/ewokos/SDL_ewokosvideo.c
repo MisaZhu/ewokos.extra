@@ -211,8 +211,8 @@ static void EWOKOS_ShutdownVideoBackend(const char* from)
 
     _video_closing = 1;
     _video_shutdown_done = 1;
-    EWOKOS_CloseMainWindow();
     EWOKOS_StopVideoThread();
+    EWOKOS_CloseMainWindow();
     EWOKOS_DestroyClosedWindow();
 }
 
