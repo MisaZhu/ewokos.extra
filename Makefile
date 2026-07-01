@@ -7,7 +7,6 @@ all:
 	cd apps; make
 	cd x; make
 	cd bin; make
-	cd sbin; make
 
 clean:	
 	cd libs; make clean
@@ -17,5 +16,4 @@ clean:
 	cd apps; make clean
 	cd x; make clean
 	cd bin; make clean
-	cd sbin; make clean
 	rm -fr build
