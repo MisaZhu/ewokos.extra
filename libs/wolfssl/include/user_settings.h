@@ -44,11 +44,15 @@
 #define HAVE_COMP_KEY
 
 /* RSA settings */
+#define WOLFSSL_KEY_GEN
+#define WOLFSSL_KEY_TO_DER
 #define WC_RSA_BLINDING
 #define WC_RSA_PSS
 
 /* Random number generator */
 #define HAVE_HASHDRBG
+int ewokos_generate_seed(unsigned char* output, unsigned int sz);
+#define CUSTOM_RAND_GENERATE_SEED ewokos_generate_seed
 
 /* Certificate handling */
 #define WOLFSSL_CERT_GEN
