@@ -79,6 +79,48 @@ static void telnet_reply_option(uint8_t verb, uint8_t opt) {
     (void)write(STDOUT_FILENO, reply, sizeof(reply));
 }
 
+/* State machine for filtering IAC from stdin (telnet console input).
+   Processes buffer in-place, returns number of clean data bytes remaining. */
+static int _stdin_iac_state = 0;  /* 0=data, 1=IAC, 2=option, 3=SB, 4=SB_IAC */
+
+static int filter_stdin_iac(uint8_t *buf, int len) {
+    int out = 0;
+    for (int i = 0; i < len; i++) {
+        uint8_t c = buf[i];
+        switch (_stdin_iac_state) {
+        case 0: /* DATA */
+            if (c == 255) { _stdin_iac_state = 1; }
+            else if (c == '\r') {
+                /* CR handling: skip \r before \n, convert CR+NUL to nothing */
+                if (i + 1 < len) {
+                    if (buf[i+1] == '\n') continue; /* skip \r, \n passes next iter */
+                    else if (buf[i+1] == '\0') { i++; continue; } /* skip CR+NUL */
+                    else { buf[out++] = '\n'; } /* bare CR -> LF */
+                } else { continue; } /* CR at end of buffer, skip */
+            }
+            else { buf[out++] = c; }
+            break;
+        case 1: /* IAC */
+            if (c == 255) { buf[out++] = 0xFF; _stdin_iac_state = 0; }
+            else if (c == 250) { _stdin_iac_state = 3; } /* SB */
+            else if (c >= 251 && c <= 254) { _stdin_iac_state = 2; } /* WILL/WONT/DO/DONT */
+            else { _stdin_iac_state = 0; } /* other command */
+            break;
+        case 2: /* OPTION - consume option byte */
+            _stdin_iac_state = 0;
+            break;
+        case 3: /* SB */
+            if (c == 255) _stdin_iac_state = 4;
+            break;
+        case 4: /* SB_IAC */
+            if (c == 240) _stdin_iac_state = 0; /* SE */
+            else _stdin_iac_state = 3;
+            break;
+        }
+    }
+    return out;
+}
+
 static int ssh_read_input_char_mode(char *out, int wait_for_input) {
     enum {
         TELNET_STATE_DATA = 0,
@@ -268,8 +310,8 @@ static int do_interactive_session(ssh_session_t *session) {
     if (telnet_console) {
         fds[0].fd = session->socket;
         fds[0].events = POLLIN;
-        fds[1].fd = -1;
-        fds[1].events = 0;
+        fds[1].fd = STDIN_FILENO;
+        fds[1].events = POLLIN;
     } else {
         fds[0].fd = STDIN_FILENO;
         fds[0].events = POLLIN;
@@ -281,34 +323,37 @@ static int do_interactive_session(ssh_session_t *session) {
         int ret;
 
         if (telnet_console) {
-            int n = 0;
-            char c;
+            ret = poll(fds, 2, 20);
 
-            while (n < (int)sizeof(buf)) {
-                int rc = ssh_try_read_input_char(&c);
-                if (rc < 0) {
-                    n = -1;
-                    break;
-                }
-                if (rc == 0) {
-                    break;
-                }
-                buf[n++] = c;
-            }
-
-            if (n > 0) {
-                if (n >= 3 && buf[0] == '~' && buf[1] == '~' && buf[2] == '.') {
-                    printf("\r\nDisconnecting...\r\n");
-                    break;
-                }
-                if (ssh_channel_send_data(session, buf, n) < 0) {
-                    break;
-                }
-            } else if (n < 0 && errno != EAGAIN && errno != EINTR && errno != 0) {
+            if (ret < 0) {
+                if (errno == EINTR) continue;
                 break;
             }
 
-            ret = poll(fds, 1, 20);
+            /* stdin ready - raw read + IAC filter */
+            if (fds[1].revents & POLLIN) {
+                int n = read(STDIN_FILENO, buf, sizeof(buf));
+                if (n > 0) {
+                    n = filter_stdin_iac((uint8_t *)buf, n);
+                    if (n > 0) {
+                        if (n >= 3 && buf[0] == '~' && buf[1] == '~' && buf[2] == '.') {
+                            printf("\r\nDisconnecting...\r\n");
+                            running = 0;
+                            break;
+                        }
+                        if (ssh_channel_send_data(session, buf, n) < 0) {
+                            break;
+                        }
+                    }
+                } else if (n < 0 && errno != EAGAIN && errno != EINTR && errno != 0) {
+                    break;
+                }
+            }
+
+            if (fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                ssh_channel_close(session);
+                running = 0;
+            }
         } else {
             ret = poll(fds, 2, -1);
         }
@@ -367,7 +412,7 @@ static int do_interactive_session(ssh_session_t *session) {
             running = 0;
         }
 
-        if (running && ((telnet_console ? fds[0].revents : fds[1].revents) & POLLIN)) {
+        if (running && (fds[telnet_console ? 0 : 1].revents & POLLIN)) {
             int n = ssh_channel_receive_data(session, buf, sizeof(buf));
             if (n > 0) {
                 if (write_terminal_output(buf, n) < 0) {
@@ -380,7 +425,7 @@ static int do_interactive_session(ssh_session_t *session) {
             }
         }
 
-        if ((telnet_console ? fds[0].revents : fds[1].revents) & (POLLERR | POLLHUP | POLLNVAL)) {
+        if (fds[telnet_console ? 0 : 1].revents & (POLLERR | POLLHUP | POLLNVAL)) {
             running = 0;
         }
     }
