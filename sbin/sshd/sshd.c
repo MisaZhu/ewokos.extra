@@ -22,6 +22,8 @@
 #include <openssl/rand.h>
 #include <openssl/err.h>
 #include <openssl/aes.h>
+#include <wolfssl/wolfcrypt/curve25519.h>
+#include <wolfssl/wolfcrypt/wc_mlkem.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/rsa.h>
 #include <ewoksys/core.h>
@@ -38,7 +40,7 @@
 #define SSH_DEFAULT_PORT        22
 #define SSH_MAX_PACKET_SIZE     32768
 #define SSH_SERVER_VERSION      "SSH-2.0-EwokOS_sshd"
-#define SSH_HOST_KEY_PATH       "/tmp/ssh_host_rsa_key.der"
+#define SSH_HOST_KEY_PATH       "/etc/ssh_host_rsa_key.der"
 
 #define SSH_MSG_DISCONNECT                      1
 #define SSH_MSG_SERVICE_REQUEST                 5
@@ -82,6 +84,14 @@
 #define CHILD_CTRL_WRITE   1
 
 #define SSHD_CHILD_START_MAGIC 0x53534844u
+
+#define SSH_KEX_ALG_MLKEM768_X25519_SHA256 "mlkem768x25519-sha256"
+#define SSH_KEX_ALG_DH_GROUP14_SHA256      "diffie-hellman-group14-sha256"
+
+#define SSH_X25519_KEY_LEN         CURVE25519_PUB_KEY_SIZE
+#define SSH_MLKEM768_PUB_KEY_LEN   WC_ML_KEM_768_PUBLIC_KEY_SIZE
+#define SSH_MLKEM768_CT_LEN        WC_ML_KEM_768_CIPHER_TEXT_SIZE
+#define SSH_HYBRID_SECRET_LEN      SHA256_DIGEST_LENGTH
 
 static const char dh_group14_p_hex[] =
     "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E08"
@@ -132,6 +142,7 @@ struct sshd_session {
 
     uint8_t session_id[32];
     size_t session_id_len;
+    char negotiated_kex_alg[64];
     char negotiated_hostkey_alg[32];
 
     uint8_t iv_c2s[16];
@@ -337,8 +348,61 @@ static int ssh_encode_mpint(const uint8_t* value, size_t value_len,
     return 0;
 }
 
+static int ssh_encode_string(const uint8_t* value, size_t value_len,
+        uint8_t* out, size_t out_cap, size_t* out_len) {
+    size_t off = 0;
+
+    if(write_ssh_string(out, out_cap, &off, value, (uint32_t)value_len) < 0)
+        return -1;
+    *out_len = off;
+    return 0;
+}
+
+static void sha256_update_ssh_string(SHA256_CTX* ctx, const uint8_t* data, size_t len) {
+    uint8_t len_buf[4];
+
+    ssh_write_uint32(len_buf, (uint32_t)len);
+    SHA256_Update(ctx, len_buf, sizeof(len_buf));
+    if(len > 0)
+        SHA256_Update(ctx, data, len);
+}
+
+static void ssh_reverse_copy(uint8_t* dst, const uint8_t* src, size_t len) {
+    size_t i;
+
+    for(i = 0; i < len; ++i)
+        dst[i] = src[len - 1 - i];
+}
+
+static int ssh_curve25519_shared_secret_be(curve25519_key* private_key,
+        const uint8_t* peer_public, uint8_t* out) {
+    curve25519_key peer_key;
+    byte shared_secret_le[SSH_X25519_KEY_LEN];
+    word32 shared_secret_len = sizeof(shared_secret_le);
+    int ret;
+
+    memset(&peer_key, 0, sizeof(peer_key));
+    memset(shared_secret_le, 0, sizeof(shared_secret_le));
+    wc_curve25519_init(&peer_key);
+
+    ret = wc_curve25519_import_public_ex(peer_public, SSH_X25519_KEY_LEN,
+            &peer_key, EC25519_LITTLE_ENDIAN);
+    if(ret == 0) {
+        ret = wc_curve25519_shared_secret(private_key, &peer_key,
+                shared_secret_le, &shared_secret_len);
+    }
+    if(ret == 0 && shared_secret_len != SSH_X25519_KEY_LEN)
+        ret = -1;
+    if(ret == 0)
+        ssh_reverse_copy(out, shared_secret_le, SSH_X25519_KEY_LEN);
+
+    wc_curve25519_free(&peer_key);
+    memset(shared_secret_le, 0, sizeof(shared_secret_le));
+    return ret;
+}
+
 static void derive_one_key(uint8_t* out, size_t out_len,
-        const uint8_t* shared_secret_mpint, size_t shared_secret_mpint_len,
+        const uint8_t* shared_secret_encoded, size_t shared_secret_encoded_len,
         const uint8_t* exchange_hash, size_t hash_len, uint8_t id,
         const uint8_t* session_id, size_t session_id_len) {
     uint8_t buf[4096];
@@ -346,8 +410,8 @@ static void derive_one_key(uint8_t* out, size_t out_len,
     uint8_t* p = buf;
     size_t copied = 0;
 
-    memcpy(p, shared_secret_mpint, shared_secret_mpint_len);
-    p += shared_secret_mpint_len;
+    memcpy(p, shared_secret_encoded, shared_secret_encoded_len);
+    p += shared_secret_encoded_len;
     memcpy(p, exchange_hash, hash_len);
     p += hash_len;
     *p++ = id;
@@ -805,22 +869,41 @@ static int choose_client_algo(const uint8_t* list, uint32_t list_len, const char
 
 static int choose_first_supported_algo(const uint8_t* list, uint32_t list_len,
         const char* const* desired_list, size_t desired_count, char* chosen, size_t chosen_cap) {
-    size_t i;
+    const char* p = (const char*)list;
+    size_t i = 0;
+    size_t start = 0;
 
     if(chosen == NULL || chosen_cap == 0)
         return -1;
     chosen[0] = 0;
-    for(i = 0; i < desired_count; ++i) {
-        if(choose_client_algo(list, list_len, desired_list[i]) == 0) {
-            snprintf(chosen, chosen_cap, "%s", desired_list[i]);
-            return 0;
+
+    /* RFC 4253: pick the first algorithm from the client's list that we support. */
+    while(i <= list_len) {
+        if(i == list_len || p[i] == ',') {
+            size_t token_len = i - start;
+
+            for(size_t j = 0; j < desired_count; ++j) {
+                size_t desired_len = strlen(desired_list[j]);
+
+                if(token_len == desired_len &&
+                        memcmp(p + start, desired_list[j], token_len) == 0) {
+                    snprintf(chosen, chosen_cap, "%s", desired_list[j]);
+                    return 0;
+                }
+            }
+            start = i + 1;
         }
+        i++;
     }
     return -1;
 }
 
 static int parse_client_kexinit(sshd_session_t* s,
         const uint8_t* payload, size_t payload_len) {
+    static const char* kex_pref[] = {
+        SSH_KEX_ALG_MLKEM768_X25519_SHA256,
+        SSH_KEX_ALG_DH_GROUP14_SHA256
+    };
     static const char* hostkey_pref[] = {
         "rsa-sha2-256",
         "ssh-rsa"
@@ -853,7 +936,9 @@ static int parse_client_kexinit(sshd_session_t* s,
         return -1;
     }
 
-    if(choose_client_algo(kex, kex_len, "diffie-hellman-group14-sha256") < 0) {
+    if(choose_first_supported_algo(kex, kex_len,
+                kex_pref, sizeof(kex_pref) / sizeof(kex_pref[0]),
+                s->negotiated_kex_alg, sizeof(s->negotiated_kex_alg)) < 0) {
         sshd_set_error("unsupported client kex algorithms");
         return -1;
     }
@@ -879,7 +964,8 @@ static int parse_client_kexinit(sshd_session_t* s,
         return -1;
     }
     /* #region debug-point kex-negotiation */
-    sshd_dbg("parse_client_kexinit: hostkey_alg=%s", s->negotiated_hostkey_alg);
+    sshd_dbg("parse_client_kexinit: kex_alg=%s hostkey_alg=%s",
+            s->negotiated_kex_alg, s->negotiated_hostkey_alg);
     /* #endregion debug-point kex-negotiation */
     return 0;
 }
@@ -952,7 +1038,10 @@ static int send_kexinit(sshd_session_t* s) {
     off += sizeof(cookie);
 
     if(write_ssh_string(packet.payload, sizeof(packet.payload), &off,
-                (const uint8_t*)"diffie-hellman-group14-sha256", 30) < 0 ||
+                (const uint8_t*)SSH_KEX_ALG_MLKEM768_X25519_SHA256 ","
+                SSH_KEX_ALG_DH_GROUP14_SHA256,
+                sizeof(SSH_KEX_ALG_MLKEM768_X25519_SHA256 ","
+                    SSH_KEX_ALG_DH_GROUP14_SHA256) - 1) < 0 ||
             write_ssh_string(packet.payload, sizeof(packet.payload), &off,
                 (const uint8_t*)"rsa-sha2-256,ssh-rsa", 20) < 0 ||
             write_ssh_string(packet.payload, sizeof(packet.payload), &off,
@@ -1044,7 +1133,7 @@ static int build_signature_blob(const uint8_t* exchange_hash, size_t exchange_ha
     return 0;
 }
 
-static int do_key_exchange(sshd_session_t* s) {
+static int do_key_exchange_group14_sha256(sshd_session_t* s) {
     ssh_packet_t packet;
     DH* dh = NULL;
     BIGNUM *p_bn = NULL, *g_bn = NULL, *e_bn = NULL;
@@ -1279,6 +1368,199 @@ fail:
     BN_free(p_bn);
     BN_free(g_bn);
     DH_free(dh);
+    return -1;
+}
+
+static int do_key_exchange_mlkem768x25519_sha256(sshd_session_t* s) {
+    ssh_packet_t packet;
+    WC_RNG rng;
+    curve25519_key server_key;
+    MlKemKey client_mlkem;
+    const uint8_t* c_init = NULL;
+    uint32_t c_init_len = 0;
+    const uint8_t* c_mlkem_pub;
+    const uint8_t* c_x25519_pub;
+    uint8_t server_pub[SSH_X25519_KEY_LEN];
+    word32 server_pub_len = sizeof(server_pub);
+    uint8_t s_reply[SSH_MLKEM768_CT_LEN + SSH_X25519_KEY_LEN];
+    uint8_t pq_shared[WC_ML_KEM_SS_SZ];
+    uint8_t cl_shared[SSH_X25519_KEY_LEN];
+    uint8_t hybrid_input[WC_ML_KEM_SS_SZ + SSH_X25519_KEY_LEN];
+    uint8_t k_raw[SSH_HYBRID_SECRET_LEN];
+    uint8_t k_string[4 + SSH_HYBRID_SECRET_LEN];
+    uint8_t exchange_hash[32];
+    uint8_t signature_blob[384];
+    size_t k_string_len = 0;
+    size_t signature_blob_len = 0;
+    int rng_inited = 0;
+    int server_key_inited = 0;
+    int client_mlkem_inited = 0;
+    size_t off = 0;
+
+    memset(&rng, 0, sizeof(rng));
+    memset(&server_key, 0, sizeof(server_key));
+    memset(&client_mlkem, 0, sizeof(client_mlkem));
+    memset(server_pub, 0, sizeof(server_pub));
+    memset(s_reply, 0, sizeof(s_reply));
+    memset(pq_shared, 0, sizeof(pq_shared));
+    memset(cl_shared, 0, sizeof(cl_shared));
+    memset(hybrid_input, 0, sizeof(hybrid_input));
+    memset(k_raw, 0, sizeof(k_raw));
+    memset(k_string, 0, sizeof(k_string));
+
+    if(ssh_packet_receive(s, &packet) < 0)
+        return -1;
+    if(packet.type != SSH_MSG_KEXDH_INIT) {
+        sshd_set_error("expected KEX_HYBRID_INIT, got %u", packet.type);
+        return -1;
+    }
+    if(read_ssh_string(packet.payload, packet.payload_len, &off, &c_init, &c_init_len) < 0)
+        return -1;
+    if(c_init_len != SSH_MLKEM768_PUB_KEY_LEN + SSH_X25519_KEY_LEN) {
+        sshd_set_error("invalid hybrid client key length: %u", c_init_len);
+        goto fail;
+    }
+
+    c_mlkem_pub = c_init;
+    c_x25519_pub = c_init + SSH_MLKEM768_PUB_KEY_LEN;
+
+    if(wc_InitRng(&rng) != 0) {
+        sshd_set_error("wc_InitRng failed");
+        goto fail;
+    }
+    rng_inited = 1;
+
+    wc_curve25519_init(&server_key);
+    server_key_inited = 1;
+    if(wc_curve25519_make_key(&rng, SSH_X25519_KEY_LEN, &server_key) != 0) {
+        sshd_set_error("wc_curve25519_make_key failed");
+        goto fail;
+    }
+    if(wc_curve25519_export_public_ex(&server_key, server_pub, &server_pub_len,
+                EC25519_LITTLE_ENDIAN) != 0 ||
+            server_pub_len != SSH_X25519_KEY_LEN) {
+        sshd_set_error("wc_curve25519_export_public_ex failed");
+        goto fail;
+    }
+
+    if(wc_MlKemKey_Init(&client_mlkem, WC_ML_KEM_768, NULL, INVALID_DEVID) != 0) {
+        sshd_set_error("wc_MlKemKey_Init failed");
+        goto fail;
+    }
+    client_mlkem_inited = 1;
+    if(wc_MlKemKey_DecodePublicKey(&client_mlkem, c_mlkem_pub,
+                SSH_MLKEM768_PUB_KEY_LEN) != 0) {
+        sshd_set_error("wc_MlKemKey_DecodePublicKey failed");
+        goto fail;
+    }
+    if(wc_MlKemKey_Encapsulate(&client_mlkem, s_reply, pq_shared, &rng) != 0) {
+        sshd_set_error("wc_MlKemKey_Encapsulate failed");
+        goto fail;
+    }
+    memcpy(s_reply + SSH_MLKEM768_CT_LEN, server_pub, SSH_X25519_KEY_LEN);
+
+    if(ssh_curve25519_shared_secret_be(&server_key, c_x25519_pub, cl_shared) != 0) {
+        sshd_set_error("curve25519 shared secret failed");
+        goto fail;
+    }
+
+    memcpy(hybrid_input, pq_shared, WC_ML_KEM_SS_SZ);
+    memcpy(hybrid_input + WC_ML_KEM_SS_SZ, cl_shared, SSH_X25519_KEY_LEN);
+    sha256_hash(hybrid_input, sizeof(hybrid_input), k_raw);
+    if(ssh_encode_string(k_raw, sizeof(k_raw), k_string, sizeof(k_string), &k_string_len) < 0) {
+        sshd_set_error("encode hybrid shared secret failed");
+        goto fail;
+    }
+
+    {
+        SHA256_CTX ctx;
+        SHA256_Init(&ctx);
+        sha256_update_ssh_string(&ctx, (const uint8_t*)s->client_version, strlen(s->client_version));
+        sha256_update_ssh_string(&ctx, (const uint8_t*)s->server_version, strlen(s->server_version));
+        sha256_update_ssh_string(&ctx, s->client_kexinit, s->client_kexinit_len);
+        sha256_update_ssh_string(&ctx, s->server_kexinit, s->server_kexinit_len);
+        sha256_update_ssh_string(&ctx, g_hostkey_blob, g_hostkey_blob_len);
+        sha256_update_ssh_string(&ctx, c_init, c_init_len);
+        sha256_update_ssh_string(&ctx, s_reply, sizeof(s_reply));
+        sha256_update_ssh_string(&ctx, k_raw, sizeof(k_raw));
+        SHA256_Final(exchange_hash, &ctx);
+    }
+
+    if(s->session_id_len == 0) {
+        memcpy(s->session_id, exchange_hash, sizeof(exchange_hash));
+        s->session_id_len = sizeof(exchange_hash);
+    }
+    derive_keys(s, k_string, k_string_len, exchange_hash, sizeof(exchange_hash));
+
+    if(build_signature_blob(exchange_hash, sizeof(exchange_hash), s->negotiated_hostkey_alg,
+                signature_blob, sizeof(signature_blob), &signature_blob_len) < 0) {
+        sshd_set_error("build hybrid signature failed");
+        goto fail;
+    }
+
+    memset(&packet, 0, sizeof(packet));
+    packet.type = SSH_MSG_KEXDH_REPLY;
+    off = 0;
+    if(write_ssh_string(packet.payload, sizeof(packet.payload), &off,
+                g_hostkey_blob, (uint32_t)g_hostkey_blob_len) < 0 ||
+            write_ssh_string(packet.payload, sizeof(packet.payload), &off,
+                s_reply, (uint32_t)sizeof(s_reply)) < 0 ||
+            write_ssh_string(packet.payload, sizeof(packet.payload), &off,
+                signature_blob, (uint32_t)signature_blob_len) < 0) {
+        sshd_set_error("build hybrid KEX reply failed");
+        goto fail;
+    }
+    packet.payload_len = off;
+    if(ssh_packet_send(s, &packet) < 0)
+        goto fail;
+
+    memset(&packet, 0, sizeof(packet));
+    packet.type = SSH_MSG_NEWKEYS;
+    if(ssh_packet_send(s, &packet) < 0)
+        goto fail;
+    if(ssh_packet_receive(s, &packet) < 0)
+        goto fail;
+    if(packet.type != SSH_MSG_NEWKEYS) {
+        sshd_set_error("expected NEWKEYS, got %u", packet.type);
+        goto fail;
+    }
+
+    s->encryption_enabled = 1;
+    if(client_mlkem_inited)
+        wc_MlKemKey_Free(&client_mlkem);
+    if(server_key_inited)
+        wc_curve25519_free(&server_key);
+    if(rng_inited)
+        wc_FreeRng(&rng);
+    memset(pq_shared, 0, sizeof(pq_shared));
+    memset(cl_shared, 0, sizeof(cl_shared));
+    memset(hybrid_input, 0, sizeof(hybrid_input));
+    memset(k_raw, 0, sizeof(k_raw));
+    memset(k_string, 0, sizeof(k_string));
+    return 0;
+
+fail:
+    if(client_mlkem_inited)
+        wc_MlKemKey_Free(&client_mlkem);
+    if(server_key_inited)
+        wc_curve25519_free(&server_key);
+    if(rng_inited)
+        wc_FreeRng(&rng);
+    memset(pq_shared, 0, sizeof(pq_shared));
+    memset(cl_shared, 0, sizeof(cl_shared));
+    memset(hybrid_input, 0, sizeof(hybrid_input));
+    memset(k_raw, 0, sizeof(k_raw));
+    memset(k_string, 0, sizeof(k_string));
+    return -1;
+}
+
+static int do_key_exchange(sshd_session_t* s) {
+    if(strcmp(s->negotiated_kex_alg, SSH_KEX_ALG_MLKEM768_X25519_SHA256) == 0)
+        return do_key_exchange_mlkem768x25519_sha256(s);
+    if(strcmp(s->negotiated_kex_alg, SSH_KEX_ALG_DH_GROUP14_SHA256) == 0)
+        return do_key_exchange_group14_sha256(s);
+
+    sshd_set_error("unsupported negotiated kex algorithm: %s", s->negotiated_kex_alg);
     return -1;
 }
 

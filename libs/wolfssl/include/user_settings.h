@@ -34,6 +34,8 @@
 /* Enable all OpenSSL compatibility functions */
 #define HAVE_ECC
 #define HAVE_CURVE25519
+#define WOLFSSL_HAVE_MLKEM
+#define WOLFSSL_WC_MLKEM
 /* #define HAVE_ED25519 */ /* Requires WOLFSSL_SHA512 */
 #define HAVE_RSA
 #define HAVE_DH
@@ -101,6 +103,9 @@ int ewokos_generate_seed(unsigned char* output, unsigned int sz);
 #define HAVE_HKDF
 #define HAVE_PKCS8
 #define HAVE_X963_KDF
+#define WOLFSSL_SHA3
+#define WOLFSSL_SHAKE128
+#define WOLFSSL_SHAKE256
 
 /* SNI (Server Name Indication) */
 #define HAVE_TLS_EXTENSIONS
