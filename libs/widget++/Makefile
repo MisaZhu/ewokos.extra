@@ -5,7 +5,7 @@ include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 TARGET_DIR = $(BUILD_DIR)
-FFMPEG_DIR = $(SW_ROOT_DIR)/ffmpeg
+FFMPEG_DIR = $(SW_ROOT_DIR)/libs/ffmpeg
 FFMPEG_HEADER = $(TARGET_DIR)/include/libavcodec/avcodec.h
 FFMPEG_LIBS = \
 	$(TARGET_DIR)/lib/libavcodec.a \
