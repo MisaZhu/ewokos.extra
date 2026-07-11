@@ -1,7 +1,7 @@
-prefix=../../../../system/build/raspix
+prefix=../../../../system/build/virt
 exec_prefix=${prefix}
-libdir=../../../../system/build/raspix/lib
-includedir=../../../../system/build/raspix/include
+libdir=../../../../system/build/virt/lib
+includedir=../../../../system/build/virt/include
 
 Name: libavformat
 Description: FFmpeg container format library
