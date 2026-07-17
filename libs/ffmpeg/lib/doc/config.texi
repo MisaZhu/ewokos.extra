@@ -279,7 +279,7 @@
 @set have-access yes
 @c @set have-aligned-malloc no
 @c @set have-arc4random-buf no
-@c @set have-clock-gettime no
+@set have-clock-gettime yes
 @c @set have-closesocket no
 @c @set have-commandlinetoargvw no
 @set have-fcntl yes
@@ -303,15 +303,15 @@
 @set have-isatty yes
 @c @set have-kbhit no
 @set have-localtime-r yes
-@c @set have-lstat no
+@set have-lstat yes
 @c @set have-lzo1x-999-compress no
 @c @set have-mach-absolute-time no
 @c @set have-mapviewoffile no
 @c @set have-memalign no
-@c @set have-mkstemp no
+@set have-mkstemp yes
 @c @set have-mmap no
 @c @set have-mprotect no
-@c @set have-nanosleep no
+@set have-nanosleep yes
 @c @set have-peeknamedpipe no
 @c @set have-posix-memalign no
 @c @set have-prctl no
