@@ -223,7 +223,7 @@ static int get_max_vertices(void)
 }
 
 // Define PGL_NEON_ENABLED early so texture conversion functions can use it
-#ifdef BSP_BOOST
+#ifdef ARCH_BOOST
 #if defined(__aarch64__) || defined(__ARM_NEON) || defined(ARCH_ARM)
 #include <arm_neon.h>
 #define PGL_NEON_ENABLED 1
@@ -2134,7 +2134,7 @@ static inline void pgl_neon_expand_points_to_quads(vec4* out_verts, const vec4* 
 
 #else
 #define PGL_NEON_ENABLED 0
-#endif  //endif BSP_BOOST
+#endif  //endif ARCH_BOOST
 
 extern inline vec2 make_v2(float x, float y);
 extern inline vec2 neg_v2(vec2 v);
