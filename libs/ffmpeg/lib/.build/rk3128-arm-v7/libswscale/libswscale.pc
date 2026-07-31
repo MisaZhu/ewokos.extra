@@ -1,0 +1,14 @@
+prefix=/Users/misa/work/ewokos/system/build/rk3128
+exec_prefix=${prefix}
+libdir=/Users/misa/work/ewokos/system/build/rk3128/lib
+includedir=/Users/misa/work/ewokos/system/build/rk3128/include
+
+Name: libswscale
+Description: FFmpeg image rescaling library
+Version: 7.5.100
+Requires: libavutil >= 58.29.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lswscale -lm
+Libs.private: 
+Cflags: -I${includedir}

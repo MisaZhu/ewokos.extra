@@ -1,0 +1,14 @@
+prefix=/Users/misa/work/ewokos/system/build/x86
+exec_prefix=${prefix}
+libdir=/Users/misa/work/ewokos/system/build/x86/lib
+includedir=/Users/misa/work/ewokos/system/build/x86/include
+
+Name: libavcodec
+Description: FFmpeg codec library
+Version: 60.31.102
+Requires: libswresample >= 4.12.100, libavutil >= 58.29.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavcodec -lm
+Libs.private: 
+Cflags: -I${includedir}

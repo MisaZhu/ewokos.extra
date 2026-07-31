@@ -3,7 +3,7 @@ EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
-TASK_OBJS = doom.o
+TASK_OBJS = $(ARCH)/doom.o
 
 TASK = doom
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)

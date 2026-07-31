@@ -14,13 +14,13 @@ FFMPEG_LIBS = \
 	$(TARGET_DIR)/lib/libswresample.a \
 	$(TARGET_DIR)/lib/libswscale.a
 
-LIB_WIDGET_VIDEO_OBJS = src/WidgetVideo/WidgetVideo.o
+LIB_WIDGET_VIDEO_OBJS = $(ARCH)/src/WidgetVideo/WidgetVideo.o
 LIB_WIDGET_VIDEO = $(TARGET_DIR)/lib/libWidgetVideo.a
 
 
-LIB_WIDGET_WEBVIEW_OBJS = src/WidgetWebview/el_input.o \
-	src/WidgetWebview/XContainer.o \
-	src/WidgetWebview/WidgetWebview.o
+LIB_WIDGET_WEBVIEW_OBJS = $(ARCH)/src/WidgetWebview/el_input.o \
+	$(ARCH)/src/WidgetWebview/XContainer.o \
+	$(ARCH)/src/WidgetWebview/WidgetWebview.o
 LIB_WIDGET_WEBVIEW = $(TARGET_DIR)/lib/libWidgetWebview.a
 
 # Some targets already have ffmpeg static libraries in the SDK lib dir but are
@@ -48,7 +48,8 @@ $(LIB_WIDGET_WEBVIEW): $(LIB_WIDGET_WEBVIEW_OBJS)
 	cp -r include/* $(TARGET_DIR)/include/
 
 
-%.o: %.cc
+$(ARCH)/%.o: %.cc
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

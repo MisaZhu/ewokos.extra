@@ -17,7 +17,7 @@ LDFLAGS += -lglcommon -limgui -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWO
 SRCS = imgui_demo.cpp imgui_main.cpp
 
 # Object files
-OBJS = $(patsubst %.cpp,%.o,$(SRCS))
+OBJS = $(patsubst %.cpp,$(ARCH)/%.o,$(SRCS))
 
 # Target
 TASK = imgui_demo
@@ -29,7 +29,8 @@ TARGET = $(TARGET_DIR)/$(TASK)
 all: $(TARGET)
 
 # Compile imgui_demo.cpp
-%.o: %.cpp
+$(ARCH)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS)   -c $< -o $@
 
 # Link

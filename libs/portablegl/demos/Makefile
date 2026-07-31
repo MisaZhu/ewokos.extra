@@ -36,8 +36,8 @@ CPP_SRCS = shadertoy.cpp sphere.cpp cubemap.cpp grass.cpp
 C_SRCS = balls.c
 
 # Object files
-C_OBJS = $(patsubst %.c,%.o,$(C_SRCS))
-CPP_OBJS = $(patsubst %.cpp,%.o,$(CPP_SRCS))
+C_OBJS = $(patsubst %.c,$(ARCH)/%.o,$(C_SRCS))
+CPP_OBJS = $(patsubst %.cpp,$(ARCH)/%.o,$(CPP_SRCS))
 
 # Targets in rootfs
 C_BINS = $(patsubst %.c,$(ROOTFS_BIN)/%,$(C_SRCS))
@@ -53,15 +53,17 @@ dirs:
 	@mkdir -p $(ROOTFS_BIN)
 
 # Compile C files
-%.o: %.c
+$(ARCH)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I../glcommon/include -I../glcommon/include/glcommon -I../portablegl/include -I../portablegl/include/portablegl -c $< -o $@
 
 # Compile C++ files (include glcommon for rsw_math and gltools)
-%.o: %.cpp
+$(ARCH)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I$(BUILD_DIR)/include -c $< -o $@
 
 # Link C programs
-$(ROOTFS_BIN)/%: %.o $(LD_LIB_DEPS)
+$(ROOTFS_BIN)/%: $(ARCH)/%.o $(LD_LIB_DEPS)
 	$(LD) -Ttext=100 $< $(GLCOMMON_LIB) -o $@ $(LDFLAGS)
 
 clean:

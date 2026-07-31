@@ -1,4 +1,4 @@
-TASK_OBJS = xwm.o OpenLookWM.o
+TASK_OBJS = $(ARCH)/xwm.o $(ARCH)/OpenLookWM.o
 
 SW_ROOT_DIR=../../..
 EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..

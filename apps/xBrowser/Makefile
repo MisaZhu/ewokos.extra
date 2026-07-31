@@ -12,7 +12,7 @@ LDFLAGS = -L$(TARGET_DIR)/lib -L$(BUILD_DIR)/lib
 
 CXXFLAGS += -I$(BUILD_DIR)/include -I$(SW_ROOT_DIR)/libs/widget++/include -I libs/litehtml/include
 
-BROWSER_OBJS = src/main.o
+BROWSER_OBJS = $(ARCH)/src/main.o
 LD_LIB_DEPS = \
 	$(BUILD_DIR)/lib/liblitehtml.a \
 	$(BUILD_DIR)/lib/libtinyhttpsc.a \
@@ -55,10 +55,12 @@ $(BROWSER): $(BROWSER_OBJS) $(LD_LIB_DEPS)
 		$(EWOK_LIBC) -lcxx
 	cp -r res $(BROWSER_DIR)
 
-%.o: %.cc
+$(ARCH)/%.o: %.cc
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-%.o: %.cpp
+$(ARCH)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

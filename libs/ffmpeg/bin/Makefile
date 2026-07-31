@@ -4,12 +4,15 @@ SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(FFMPEG_ROOT_DIR)/make.inc
 
 TASK = mp4player
-TASK_OBJS = mp4player.o
+TASK_OBJS = $(ARCH)/mp4player.o
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/bin/x
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
+FFMPEG_LIBS = -lavformat -lavcodec -lswscale -lswresample
+FFMPEG_AVUTIL_LIBS = --whole-archive -lavutil --no-whole-archive
+
 LDFLAGS += \
-	-lavformat -lavcodec -lswscale -lswresample -lavutil \
+	$(FFMPEG_LIBS) $(FFMPEG_AVUTIL_LIBS) \
 	-lSDL2 -lm -lopenlibm
 
 all: $(TASK)

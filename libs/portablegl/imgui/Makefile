@@ -10,12 +10,12 @@ CXXFLAGS += -I. -Iinclude -Iinclude/imgui -I $(BUILD_DIR)/include -I../external
 
 # ImGui C++ source files
 LIB_IMGUI_OBJS = \
-	imgui.o \
-	imgui_draw.o \
-	imgui_tables.o \
-	imgui_widgets.o \
-	backends/imgui_impl_pgl_geometry.o \
-	backends/imgui_impl_portablegl.o
+	$(ARCH)/imgui.o \
+	$(ARCH)/imgui_draw.o \
+	$(ARCH)/imgui_tables.o \
+	$(ARCH)/imgui_widgets.o \
+	$(ARCH)/backends/imgui_impl_pgl_geometry.o \
+	$(ARCH)/backends/imgui_impl_portablegl.o
 
 IMGUI = $(BUILD_DIR)/lib/libimgui.a
 
@@ -31,11 +31,13 @@ $(IMGUI): $(LIB_IMGUI_OBJS)
 	cp -r misc/freetype/*.h $(BUILD_DIR)/include/imgui/misc/freetype/
 
 # Compile C++ files
-%.o: %.cpp
+$(ARCH)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Compile backend C++ files
-backends/%.o: backends/%.cpp
+$(ARCH)/backends/%.o: backends/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

@@ -10,11 +10,11 @@ SDL2_TTF_HEADS_DIR=$(SYS_BUILD_DIR)/include/SDL2
 SDL2_LIB_DIR=$(SYS_BUILD_DIR)/lib
 
 all:
-	make -C SDL2
-	make -C SDL2_image
-	make -C SDL2_mixer
-	make -C SDL2_gfx
-	make -C SDL2_ttf
+	$(MAKE) -C SDL2 HW=$(HW) ARCH=$(ARCH)
+	$(MAKE) -C SDL2_image HW=$(HW) ARCH=$(ARCH)
+	$(MAKE) -C SDL2_mixer HW=$(HW) ARCH=$(ARCH)
+	$(MAKE) -C SDL2_gfx HW=$(HW) ARCH=$(ARCH)
+	$(MAKE) -C SDL2_ttf HW=$(HW) ARCH=$(ARCH)
 	mkdir -p $(SDL2_HEADS_DIR)
 	mkdir -p $(SDL2_IMG_HEADS_DIR)
 	mkdir -p $(SDL2_MIXER_HEADS_DIR)
@@ -26,15 +26,15 @@ all:
 	cp SDL2_mixer/*.h $(SDL2_MIXER_HEADS_DIR)
 	cp SDL2_gfx/*.h $(SDL2_GFX_HEADS_DIR)
 	cp SDL2_ttf/*.h $(SDL2_GFX_HEADS_DIR)
-	cp SDL2/lib*.a $(SDL2_LIB_DIR)
-	cp SDL2_image/lib*.a $(SDL2_LIB_DIR)
-	cp SDL2_mixer/lib*.a $(SDL2_LIB_DIR)
-	cp SDL2_gfx/lib*.a $(SDL2_LIB_DIR)
-	cp SDL2_ttf/lib*.a $(SDL2_LIB_DIR)
+	cp SDL2/$(ARCH)/lib*.a $(SDL2_LIB_DIR)
+	cp SDL2_image/$(ARCH)/lib*.a $(SDL2_LIB_DIR)
+	cp SDL2_mixer/$(ARCH)/lib*.a $(SDL2_LIB_DIR)
+	cp SDL2_gfx/$(ARCH)/lib*.a $(SDL2_LIB_DIR)
+	cp SDL2_ttf/$(ARCH)/lib*.a $(SDL2_LIB_DIR)
 
 clean:
-	make -C SDL2 -k clean
-	make -C SDL2_image -k clean
-	make -C SDL2_mixer -k clean
-	make -C SDL2_gfx -k clean
-	make -C SDL2_ttf -k clean
+	$(MAKE) -C SDL2 HW=$(HW) ARCH=$(ARCH) -k clean
+	$(MAKE) -C SDL2_image HW=$(HW) ARCH=$(ARCH) -k clean
+	$(MAKE) -C SDL2_mixer HW=$(HW) ARCH=$(ARCH) -k clean
+	$(MAKE) -C SDL2_gfx HW=$(HW) ARCH=$(ARCH) -k clean
+	$(MAKE) -C SDL2_ttf HW=$(HW) ARCH=$(ARCH) -k clean

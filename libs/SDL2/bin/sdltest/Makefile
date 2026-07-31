@@ -4,7 +4,7 @@ SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SDL2_ROOT_DIR)/make.inc
 
 TASK = sdltest
-TASK_OBJS = sdltest.o
+TASK_OBJS = $(ARCH)/sdltest.o
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/bin
 
 LDFLAGS += \

@@ -7,7 +7,7 @@ BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 
 CFLAGS += -Iinclude -I $(TARGET_DIR)/include
 
-LIB_PORTABLEGL_OBJS = src/portablegl.o
+LIB_PORTABLEGL_OBJS = $(ARCH)/src/portablegl.o
 
 PORTABLEGL = $(BUILD_DIR)/lib/libportablegl.a
 

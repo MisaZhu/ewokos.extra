@@ -14,7 +14,7 @@
 #include <ewoksys/klog.h>
 #include <ewoksys/proc.h>
 #include <deque>
-#include <cctype>
+#include <ctype.h>
 #include <pthread.h>
 
 using namespace Ewok;
@@ -32,7 +32,7 @@ static std::string strip_script_blocks(const std::string& html, int* removed_cou
 
     std::string lower = html;
     for(char& ch : lower) {
-        ch = (char)std::tolower((unsigned char)ch);
+        ch = (char)::tolower((unsigned char)ch);
     }
 
     std::string out;

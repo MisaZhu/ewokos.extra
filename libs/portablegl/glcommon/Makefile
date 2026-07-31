@@ -10,15 +10,15 @@ CXXFLAGS += -I. -Iinclude -Iinclude/glcommon -I $(BUILD_DIR)/include -I../extern
 
 # C source files
 LIB_GLCOMMON_C_OBJS = \
-	src/c_utils.o \
-	src/cprimitives.o \
-	src/chalfedge.o \
-	src/gltools.o \
-	src/stb_vorbis.o
+	$(ARCH)/src/c_utils.o \
+	$(ARCH)/src/cprimitives.o \
+	$(ARCH)/src/chalfedge.o \
+	$(ARCH)/src/gltools.o \
+	$(ARCH)/src/stb_vorbis.o
 
 # C++ source files
 LIB_GLCOMMON_CPP_OBJS = \
-	src/Frame.o
+	$(ARCH)/src/Frame.o
 
 LIB_GLCOMMON_OBJS = $(LIB_GLCOMMON_C_OBJS) $(LIB_GLCOMMON_CPP_OBJS)
 
@@ -29,11 +29,13 @@ $(GLCOMMON): $(LIB_GLCOMMON_OBJS)
 	cp -r include/* $(BUILD_DIR)/include
 
 # Compile C files
-src/%.o: src/%.c
+$(ARCH)/src/%.o: src/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile C++ files
-src/%.o: src/%.cpp
+$(ARCH)/src/%.o: src/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

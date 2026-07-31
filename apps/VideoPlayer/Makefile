@@ -4,7 +4,7 @@ SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
 TASK = VideoPlayer
-TASK_OBJS = VideoPlayer.o
+TASK_OBJS = $(ARCH)/VideoPlayer.o
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
 EXTRA_LIBS_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
@@ -12,8 +12,11 @@ LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 CXXFLAGS += -I $(EXTRA_LIBS_DIR)/include
 LDFLAGS += -L $(EXTRA_LIBS_DIR)/lib -lm -lopenlibm
 
+FFMPEG_LIBS = -lavformat -lavcodec -lswscale -lswresample
+FFMPEG_AVUTIL_LIBS = --whole-archive -lavutil --no-whole-archive
+
 VIDEO_LIBS = $(EXTRA_LIBS_DIR)/lib/libWidgetVideo.a \
-	-lavformat -lavcodec -lswscale -lswresample -lavutil
+	$(FFMPEG_LIBS) $(FFMPEG_AVUTIL_LIBS)
 
 all: $(TASK)
 

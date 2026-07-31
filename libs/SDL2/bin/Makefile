@@ -1,6 +1,6 @@
 
 all: 
-	cd sdltest; make
+	cd sdltest; $(MAKE) HW=$(HW) ARCH=$(ARCH)
 
 clean: 
-	cd sdltest; make clean
+	cd sdltest; $(MAKE) HW=$(HW) ARCH=$(ARCH) clean

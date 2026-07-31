@@ -12,55 +12,55 @@ CFLAGS += -Iinclude -Iinclude/litehtml -Iinclude/gumbo -I $(TARGET_DIR)/include 
 CXXFLAGS += -Iinclude -Iinclude/litehtml -Iinclude/gumbo -I $(TARGET_DIR)/include -fno-rtti -nostdinc++
 
 LITEHTML_OBJS = \
-	src/el_break.o \
-	src/el_para.o \
-	src/el_text.o \
-	src/el_script.o \
-	src/el_style.o \
-	src/el_table.o \
-	src/media_query.o \
-	src/document.o \
-	src/element.o \
-	src/el_image.o \
-	src/el_base.o \
-	src/el_anchor.o \
-	src/html_tag.o \
-	src/el_comment.o \
-	src/iterators.o \
-	src/background.o \
-	src/el_font.o \
-	src/html.o \
-	src/css_selector.o \
-	src/el_td.o \
-	src/el_tr.o \
-	src/context.o \
-	src/el_body.o \
-	src/table.o \
-	src/style.o \
-	src/box.o \
-	src/el_div.o \
-	src/el_before_after.o \
-	src/el_link.o \
-	src/css_length.o \
-	src/el_space.o \
-	src/el_cdata.o \
-	src/el_title.o \
-	src/web_color.o \
-	src/stylesheet.o
+	$(ARCH)/src/el_break.o \
+	$(ARCH)/src/el_para.o \
+	$(ARCH)/src/el_text.o \
+	$(ARCH)/src/el_script.o \
+	$(ARCH)/src/el_style.o \
+	$(ARCH)/src/el_table.o \
+	$(ARCH)/src/media_query.o \
+	$(ARCH)/src/document.o \
+	$(ARCH)/src/element.o \
+	$(ARCH)/src/el_image.o \
+	$(ARCH)/src/el_base.o \
+	$(ARCH)/src/el_anchor.o \
+	$(ARCH)/src/html_tag.o \
+	$(ARCH)/src/el_comment.o \
+	$(ARCH)/src/iterators.o \
+	$(ARCH)/src/background.o \
+	$(ARCH)/src/el_font.o \
+	$(ARCH)/src/html.o \
+	$(ARCH)/src/css_selector.o \
+	$(ARCH)/src/el_td.o \
+	$(ARCH)/src/el_tr.o \
+	$(ARCH)/src/context.o \
+	$(ARCH)/src/el_body.o \
+	$(ARCH)/src/table.o \
+	$(ARCH)/src/style.o \
+	$(ARCH)/src/box.o \
+	$(ARCH)/src/el_div.o \
+	$(ARCH)/src/el_before_after.o \
+	$(ARCH)/src/el_link.o \
+	$(ARCH)/src/css_length.o \
+	$(ARCH)/src/el_space.o \
+	$(ARCH)/src/el_cdata.o \
+	$(ARCH)/src/el_title.o \
+	$(ARCH)/src/web_color.o \
+	$(ARCH)/src/stylesheet.o
 
 # Gumbo parser source files
 GUMBO_OBJS = \
-	src/gumbo/vector.o \
-	src/gumbo/util.o \
-	src/gumbo/utf8.o \
-	src/gumbo/tokenizer.o \
-	src/gumbo/string_piece.o \
-	src/gumbo/tag.o \
-	src/gumbo/string_buffer.o \
-	src/gumbo/parser.o \
-	src/gumbo/error.o \
-	src/gumbo/char_ref.o \
-	src/gumbo/attribute.o
+	$(ARCH)/src/gumbo/vector.o \
+	$(ARCH)/src/gumbo/util.o \
+	$(ARCH)/src/gumbo/utf8.o \
+	$(ARCH)/src/gumbo/tokenizer.o \
+	$(ARCH)/src/gumbo/string_piece.o \
+	$(ARCH)/src/gumbo/tag.o \
+	$(ARCH)/src/gumbo/string_buffer.o \
+	$(ARCH)/src/gumbo/parser.o \
+	$(ARCH)/src/gumbo/error.o \
+	$(ARCH)/src/gumbo/char_ref.o \
+	$(ARCH)/src/gumbo/attribute.o
 
 TASK_OBJS = $(LITEHTML_OBJS) $(GUMBO_OBJS)
 

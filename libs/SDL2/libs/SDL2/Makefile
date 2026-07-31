@@ -1,13 +1,3 @@
-
-TOOLCHAIN := arm-none-eabi-
- 
-CC := $(TOOLCHAIN)gcc
-CXX := $(TOOLCHAIN)g++
-LD := $(TOOLCHAIN)ld
-AS := $(TOOLCHAIN)as
-AR := $(TOOLCHAIN)ar
-OBJCOPY := $(TOOLCHAIN)objcopy
-
 DEPDIR := .deps
 
 PREFIX := /opt/ewokos
@@ -20,28 +10,33 @@ ASFLAGS = --warn
 CFLAGS += -O3 -Iinclude -Isrc -I../kernel -ffreestanding -fvisibility=hidden -D_REENTRANT -D__EWOKOS__
 CXXFLAGS += $(CFLAGS) -fno-exceptions -fno-unwind-tables -fno-rtti
 
-all: libSDL2.a
+LIB = $(ARCH)/libSDL2.a
 
-OBJS = $(shell find . -name *.c -print | sed -r 's/\.c+/\.o/g')
+all: $(LIB)
+
+SRCS = $(shell find . -name '*.c' -print)
+OBJS = $(patsubst %.c,$(ARCH)/%.o,$(SRCS))
 
 -include $(shell find $(DEPDIR) -name *.Po -print)
 
-libSDL2.a: $(OBJS) Makefile
+$(LIB): $(OBJS) Makefile
+	@mkdir -p $(dir $@)
 	$(AR) rcs $@ $(OBJS)
 
-%.o: %.c
-	@mkdir -p $(DEPDIR)/$(@D)
-	$(CC) $(CFLAGS) -std=c99 -MMD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-	@mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+$(ARCH)/%.o: %.c
+	@mkdir -p $(dir $@)
+	@mkdir -p $(DEPDIR)/$(dir $*)
+	$(CC) $(CFLAGS) -std=c99 -MMD -MP -MF $(DEPDIR)/$*.Po -c -o $@ $<
 
-%.o: %.cpp
-	@mkdir -p $(DEPDIR)/$(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-	@mv -f $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+$(ARCH)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	@mkdir -p $(DEPDIR)/$(dir $*)
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(DEPDIR)/$*.Po -c -o $@ $<
 
-%.o: %.s
+$(ARCH)/%.o: %.s
+	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) -o $@ $<
 
 clean:
-	rm -f $(OBJS) libSDL2.a
+	rm -rf $(ARCH) libSDL2.a
 	rm -rf $(DEPDIR)

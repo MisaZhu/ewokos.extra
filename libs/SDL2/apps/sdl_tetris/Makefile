@@ -12,7 +12,7 @@ LDFLAGS += -L$(BUILD_DIR)/lib \
 CFLAGS += -I $(BUILD_DIR)/include
 CXXFLAGS += -I $(BUILD_DIR)/include
 
-TASK_OBJS = graphics.o input.o game.o main.o
+TASK_OBJS = $(ARCH)/graphics.o $(ARCH)/input.o $(ARCH)/game.o $(ARCH)/main.o
 
 TASK = tetris
 TASK_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
