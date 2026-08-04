@@ -1,9 +1,7 @@
-TASK_OBJS = $(ARCH)/xwm.o $(ARCH)/MacWM.o
-
 SW_ROOT_DIR=../../..
-EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
-SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
+
+TASK_OBJS = $(ARCH)/xwm.o $(ARCH)/MacWM.o
 
 LIB_DIR = $(SYS_ROOT_DIR)/build/$(HW)/lib
 

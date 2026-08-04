@@ -1,14 +1,12 @@
 SW_ROOT_DIR=../..
-EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
-SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 ROOTFS_APPS = $(BUILD_DIR)/rootfs/apps
 
 # Common flags - removed SDL includes
-CFLAGS += -I.. -I$(BUILD_DIR)/include/glcommon -I$(BUILD_DIR)/include/imgui -D__ewokos__
-CXXFLAGS += -I.. -I$(BUILD_DIR)/include/glcommon -I$(BUILD_DIR)/include/imgui -D__ewokos__ -fno-threadsafe-statics
+CFLAGS += -I.. -I $(BUILD_DIR)/include/glcommon -I $(BUILD_DIR)/include/imgui -D__ewokos__
+CXXFLAGS += -I.. -I $(BUILD_DIR)/include/glcommon -I $(BUILD_DIR)/include/imgui -D__ewokos__ -fno-threadsafe-statics
 
 # Common LDFLAGS - removed SDL libraries, added xwin libraries
 LDFLAGS += -lglcommon -limgui -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx

@@ -6,17 +6,18 @@ ifeq ($(HW),)
 export HW=virt
 endif
 
-EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
-SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
+ifeq ($(ewokos),)
+ewokos=~/work/ewokos
+endif
 
-#SDK_DIR= /usr/local/ewokos/$(ARCH)
-#ROOTFS_DIR= /usr/local/ewokos/$(ARCH)/$(HW)
+EWOKOS_ROOT_DIR = $(ewokos)
+SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 
 SDK_DIR= $(SYS_ROOT_DIR)/build/$(HW)
 BUILD_DIR = $(SDK_DIR)
 
 include $(SYS_ROOT_DIR)/platform/$(ARCH)/make.rule
 
-LDFLAGS = -L$(SDK_DIR)/lib
+LDFLAGS = -L $(SDK_DIR)/lib
 CFLAGS += -I include -I $(SDK_DIR)/include
 CXXFLAGS += -I include -I $(SDK_DIR)/include

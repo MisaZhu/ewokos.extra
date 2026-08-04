@@ -1,12 +1,10 @@
 SW_ROOT_DIR=../..
-EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
-SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 TARGET_DIR = $(BUILD_DIR)
 
-LDFLAGS = -L$(TARGET_DIR)/lib
+LDFLAGS = -L $(TARGET_DIR)/lib
 
 CFLAGS += -Iinclude -Iinclude/litehtml -Iinclude/gumbo -I $(TARGET_DIR)/include -fno-rtti -nostdinc++
 CXXFLAGS += -Iinclude -Iinclude/litehtml -Iinclude/gumbo -I $(TARGET_DIR)/include -fno-rtti -nostdinc++

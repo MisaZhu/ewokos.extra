@@ -1,6 +1,4 @@
 SW_ROOT_DIR=../..
-EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
-SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
 .DEFAULT_GOAL := all
@@ -8,9 +6,9 @@ include $(SW_ROOT_DIR)/make.inc
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 TARGET_DIR = $(BUILD_DIR)/rootfs
 
-LDFLAGS = -L$(TARGET_DIR)/lib -L$(BUILD_DIR)/lib
+LDFLAGS = -L $(TARGET_DIR)/lib -L $(BUILD_DIR)/lib
 
-CXXFLAGS += -I$(BUILD_DIR)/include -I$(SW_ROOT_DIR)/libs/widget++/include -I libs/litehtml/include
+CXXFLAGS += -I $(BUILD_DIR)/include -I $(SW_ROOT_DIR)/libs/widget++/include -I libs/litehtml/include
 
 BROWSER_OBJS = $(ARCH)/src/main.o
 LD_LIB_DEPS = \

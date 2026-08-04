@@ -91,7 +91,7 @@ CONFIGURE_FLAGS = \
 	--enable-decoder=aac,flac,h264,hevc,mjpeg,mp3,mpeg2video,mpeg4,opus,pcm_f32le,pcm_s16be,pcm_s16le,pcm_u8,vorbis \
 	--enable-bsf=aac_adtstoasc \
 	--extra-cflags="$(CFLAGS) $(FFMPEG_EXTRA_CFLAGS) -isystem $(SYS_BUILD_DIR)/include -include string.h -include math.h" \
-	--extra-ldflags="-nostartfiles -nostdlib -L$(SYS_BUILD_DIR)/lib -Wl,-Ttext=100" \
+	--extra-ldflags="-nostartfiles -nostdlib -L $(SYS_BUILD_DIR)/lib -Wl,-Ttext=100" \
 	--extra-libs="-Wl,--start-group -lewoksys -lc -lgloss -lgcc -Wl,--end-group -lm -lopenlibm" \
 	$(FFMPEG_EXTRA_CONFIGURE_FLAGS)
 

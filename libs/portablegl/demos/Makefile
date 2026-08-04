@@ -1,13 +1,11 @@
 SW_ROOT_DIR=../../..
-EWOKOS_ROOT_DIR = $(SW_ROOT_DIR)/..
-SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SW_ROOT_DIR)/make.inc
 
 BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
 ROOTFS_BIN = $(BUILD_DIR)/rootfs/bin/x
 
-CFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -D__ewokos__
-CXXFLAGS += -I.. -I../external -I$(BUILD_DIR)/include/SDL2 -I../glcommon/include -I../glcommon/include/glcommon -D__ewokos__ -fno-threadsafe-statics
+CFLAGS += -I.. -I../external -I $(BUILD_DIR)/include/SDL2 -D__ewokos__
+CXXFLAGS += -I.. -I../external -I $(BUILD_DIR)/include/SDL2 -I../glcommon/include -I../glcommon/include/glcommon -D__ewokos__ -fno-threadsafe-statics
 
 # Common LDFLAGS
 LDFLAGS += -lSDL2_image -lSDL2_mixer -lSDL2_gfx -lSDL2_ttf -lSDL2 -lfreetype -lpng -lvorbis -logg -lz -lm -lopenlibm -lportablegl $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) -lcxx
@@ -60,7 +58,7 @@ $(ARCH)/%.o: %.c
 # Compile C++ files (include glcommon for rsw_math and gltools)
 $(ARCH)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I$(BUILD_DIR)/include -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I $(BUILD_DIR)/include -c $< -o $@
 
 # Link C programs
 $(ROOTFS_BIN)/%: $(ARCH)/%.o $(LD_LIB_DEPS)

@@ -33,7 +33,7 @@ endif
 PREPEND = $(eval $(1) = $(patsubst %,$$(%), $(2)) $(value $(1)))
 
 # NASM requires -I path terminated with /
-IFLAGS     := -I. -I$(SRC_LINK)/
+IFLAGS     := -I. -I $(SRC_LINK)/
 CPPFLAGS   := $(IFLAGS) $(CPPFLAGS)
 CFLAGS     += $(ECFLAGS)
 CCFLAGS     = $(CPPFLAGS) $(CFLAGS)
@@ -43,7 +43,7 @@ ASFLAGS    := $(CPPFLAGS) $(ASFLAGS)
 # Use PREPEND here so that later (target-dependent) additions to CPPFLAGS
 # end up in CXXFLAGS.
 $(call PREPEND,CXXFLAGS, CPPFLAGS CFLAGS)
-X86ASMFLAGS += $(IFLAGS:%=%/) -I$(<D)/ -Pconfig.asm
+X86ASMFLAGS += $(IFLAGS:%=%/) -I $(<D)/ -Pconfig.asm
 
 HOSTCCFLAGS = $(IFLAGS) $(HOSTCPPFLAGS) $(HOSTCFLAGS)
 LDFLAGS    := $(ALLFFLIBS:%=$(LD_PATH)lib%) $(LDFLAGS)
