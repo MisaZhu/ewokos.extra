@@ -6,8 +6,15 @@ FFMPEG_SRC_DIR = $(CURDIR)
 SYS_BUILD_DIR = $(abspath $(SYS_ROOT_DIR)/build/$(HW))
 SDK_DIR := $(SYS_BUILD_DIR)
 BUILD_DIR := $(SYS_BUILD_DIR)
-PREFIX = $(SYS_BUILD_DIR)
-FFMPEG_BUILD_KEY = $(HW)-$(ARCH)$(if $(ARCH_VER),-$(ARCH_VER),)
+FFMPEG_STAGE_DIR = $(FFMPEG_BUILD_DIR)/_install
+PREFIX = $(FFMPEG_STAGE_DIR)
+# ffmpeg's local build tree only needs to distinguish object compatibility.
+# Keep installed SDK/archive outputs keyed by HW, but share .o intermediates by ARCH.
+FFMPEG_ARCH_VER_KEY =
+ifeq ($(ARCH),arm)
+FFMPEG_ARCH_VER_KEY = $(if $(ARCH_VER),-$(ARCH_VER),)
+endif
+FFMPEG_BUILD_KEY = $(ARCH)$(FFMPEG_ARCH_VER_KEY)
 FFMPEG_BUILD_DIR = $(FFMPEG_SRC_DIR)/.build/$(FFMPEG_BUILD_KEY)
 FFMPEG_MAKE = $(MAKE) -C $(FFMPEG_BUILD_DIR) -f Makefile
 CROSS_PREFIX = $(patsubst %gcc,%,$(CC))
@@ -102,9 +109,16 @@ TARGET_LIBS = \
 	$(SYS_BUILD_DIR)/lib/libswresample.a \
 	$(SYS_BUILD_DIR)/lib/libswscale.a
 
-TARGET_LIBS_STAMP = $(SYS_BUILD_DIR)/lib/.ffmpeg-libs-$(HW)-$(ARCH)$(if $(ARCH_VER),-$(ARCH_VER),)
+FFMPEG_STAGE_HEADER = $(FFMPEG_STAGE_DIR)/include/libavcodec/avcodec.h
+FFMPEG_BUILD_LIBS = \
+	$(FFMPEG_BUILD_DIR)/libavcodec/libavcodec.a \
+	$(FFMPEG_BUILD_DIR)/libavformat/libavformat.a \
+	$(FFMPEG_BUILD_DIR)/libavutil/libavutil.a \
+	$(FFMPEG_BUILD_DIR)/libswresample/libswresample.a \
+	$(FFMPEG_BUILD_DIR)/libswscale/libswscale.a
+TARGET_LIBS_STAMP = $(SYS_BUILD_DIR)/lib/.ffmpeg-libs-$(HW)-$(ARCH)$(FFMPEG_ARCH_VER_KEY)
 
-CONFIG_STAMP = $(FFMPEG_BUILD_DIR)/ffbuild/.ewok-config-$(HW)-$(ARCH)$(if $(ARCH_VER),-$(ARCH_VER),)
+CONFIG_STAMP = $(FFMPEG_BUILD_DIR)/ffbuild/.ewok-config-$(ARCH)$(FFMPEG_ARCH_VER_KEY)
 
 .DEFAULT_GOAL := all
 
@@ -116,7 +130,7 @@ sync-source:
 
 all: $(TARGET_LIBS_STAMP)
 
-$(CONFIG_STAMP): sync-source
+$(CONFIG_STAMP): | sync-source
 	@test -f $(FFMPEG_BUILD_DIR)/libavfilter/allfilters.c || : > $(FFMPEG_BUILD_DIR)/libavfilter/allfilters.c
 	@test -f $(FFMPEG_BUILD_DIR)/libavdevice/alldevices.c || : > $(FFMPEG_BUILD_DIR)/libavdevice/alldevices.c
 	@if [ -f $(FFMPEG_BUILD_DIR)/ffbuild/config.mak ] && \
@@ -131,10 +145,14 @@ $(CONFIG_STAMP): sync-source
 	fi
 	@touch $@
 
-$(TARGET_LIBS_STAMP): sync-source $(CONFIG_STAMP)
+$(FFMPEG_STAGE_HEADER): $(CONFIG_STAMP)
 	$(FFMPEG_MAKE)
 	$(FFMPEG_MAKE) install
+
+$(TARGET_LIBS_STAMP): $(FFMPEG_STAGE_HEADER) $(FFMPEG_BUILD_LIBS)
+	mkdir -p $(SYS_BUILD_DIR)/include
 	mkdir -p $(SYS_BUILD_DIR)/lib
+	cp -r $(FFMPEG_STAGE_DIR)/include/. $(SYS_BUILD_DIR)/include/
 	cp $(FFMPEG_BUILD_DIR)/libavcodec/libavcodec.a $(SYS_BUILD_DIR)/lib/
 	cp $(FFMPEG_BUILD_DIR)/libavformat/libavformat.a $(SYS_BUILD_DIR)/lib/
 	cp $(FFMPEG_BUILD_DIR)/libavutil/libavutil.a $(SYS_BUILD_DIR)/lib/
