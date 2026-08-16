@@ -134,11 +134,11 @@ SDL_InitSubSystem(Uint32 flags)
 #endif
 
 #if SDL_VIDEO_DRIVER_WINDOWS
-	if ((flags & (SDL_INIT_HAPTIC|SDL_INIT_JOYSTICK))) {
-		if (SDL_HelperWindowCreate() < 0) {
-			return -1;
-		}
-	}
+    if ((flags & (SDL_INIT_HAPTIC|SDL_INIT_JOYSTICK))) {
+        if (SDL_HelperWindowCreate() < 0) {
+            return -1;
+        }
+    }
 #endif
 
 #if !SDL_TIMERS_DISABLED

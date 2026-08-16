@@ -121,8 +121,8 @@ static int sdl_key(int v) {
 }
 
 static void on_event(xwin_t* xw, xevent_t* ev) {
-	if(xw == NULL)
-		return;
+    if(xw == NULL)
+        return;
     if (_video_closing || ev == NULL || xw->xinfo == NULL) {
         return;
     }
@@ -255,7 +255,7 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
 
     int flags = (window->flags & SDL_WINDOW_RESIZABLE) ? XWIN_STYLE_NORMAL : XWIN_STYLE_NO_RESIZE;     /* window is NEVER resizeable */
     x_t* x = (x_t*)_this->driverdata;
-	xwin_t* xwin = xwin_open(x, 0, 
+    xwin_t* xwin = xwin_open(x, 0, 
             window->x, window->y,
             window->w, window->h,
             window->title,

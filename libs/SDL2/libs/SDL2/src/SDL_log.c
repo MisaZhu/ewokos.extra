@@ -353,7 +353,7 @@ SDL_LogOutput(void *userdata, int category, SDL_LogPriority priority,
                     /* Newly attached */
                     consoleAttached = 1;
                 }
-			
+            
                 if (consoleAttached == 1) {
                         stderrHandle = GetStdHandle(STD_ERROR_HANDLE);
                 }

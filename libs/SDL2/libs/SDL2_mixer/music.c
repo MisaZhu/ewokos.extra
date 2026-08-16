@@ -411,14 +411,14 @@ int open_music(SDL_AudioSpec *mixer)
     }
 #endif
 #ifdef MP3_MUSIC
-	if (MP3_init(mixer) == 0) {
-		add_music_decoder("MP3");
-	}
+    if (MP3_init(mixer) == 0) {
+        add_music_decoder("MP3");
+    }
 #endif
 #ifdef MP3_MAD_MUSIC
-	/* Keep a copy of the mixer */
-	used_mixer = *mixer;
-	add_music_decoder("MP3_MAD");
+    /* Keep a copy of the mixer */
+    used_mixer = *mixer;
+    add_music_decoder("MP3_MAD");
 #endif
 
     music_playing = NULL;

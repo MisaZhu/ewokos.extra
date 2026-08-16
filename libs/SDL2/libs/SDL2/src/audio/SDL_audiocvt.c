@@ -39,7 +39,7 @@ SDL_ConvertMono(SDL_AudioCVT * cvt, SDL_AudioFormat format)
 #ifdef DEBUG_CONVERT
     fprintf(stderr, "Converting to mono\n");
 #endif
-	switch (format & (SDL_AUDIO_MASK_SIGNED |
+    switch (format & (SDL_AUDIO_MASK_SIGNED |
                       SDL_AUDIO_MASK_BITSIZE |
                       SDL_AUDIO_MASK_DATATYPE)) {
     case AUDIO_U8:
