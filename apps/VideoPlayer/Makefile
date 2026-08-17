@@ -24,7 +24,15 @@ $(TASK): $(TASK_OBJS) \
 		$(EXTRA_LIBS_DIR)/lib/libavcodec.a \
 		$(EXTRA_LIBS_DIR)/lib/libswscale.a \
 		$(EXTRA_LIBS_DIR)/lib/libswresample.a \
-		$(EXTRA_LIBS_DIR)/lib/libavutil.a
+		$(EXTRA_LIBS_DIR)/lib/libavutil.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewoksys.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewokstl.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libx++.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libx.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libfont.a \
+		$(EXTRA_LIBS_DIR)/lib/libgraph.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libwidget++.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libcxx.a
 	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(VIDEO_LIBS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) $(LIBGCC) -lcxx
 	cp -r res $(BUILD_DIR)

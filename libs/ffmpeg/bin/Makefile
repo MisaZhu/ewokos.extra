@@ -22,7 +22,16 @@ $(TASK): $(TASK_OBJS) \
 	$(SYS_ROOT_DIR)/build/$(HW)/lib/libavcodec.a \
 	$(SYS_ROOT_DIR)/build/$(HW)/lib/libswscale.a \
 	$(SYS_ROOT_DIR)/build/$(HW)/lib/libswresample.a \
-	$(SYS_ROOT_DIR)/build/$(HW)/lib/libavutil.a
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libavutil.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libewoksys.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libewokstl.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libx++.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libx.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libfont.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libgraph.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libwidget++.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libSDL2.a \
+	$(SYS_ROOT_DIR)/build/$(HW)/lib/libcxx.a
 	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) $(EWOK_LIB_X) $(EWOK_LIB_GRAPH) $(EWOK_LIBC) $(LIBGCC) -lcxx
 clean:

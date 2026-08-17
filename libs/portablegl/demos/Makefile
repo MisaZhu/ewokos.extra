@@ -61,7 +61,15 @@ $(ARCH)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -I../portablegl/include -I../portablegl/include/portablegl -I../glcommon/include -I../glcommon/include/glcommon -I $(BUILD_DIR)/include -c $< -o $@
 
 # Link C programs
-$(ROOTFS_BIN)/%: $(ARCH)/%.o $(LD_LIB_DEPS)
+$(ROOTFS_BIN)/%: $(ARCH)/%.o $(LD_LIB_DEPS) \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewoksys.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewokstl.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libx++.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libx.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libfont.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libgraph.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libwidget++.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libcxx.a
 	$(LD) -Ttext=100 $< $(GLCOMMON_LIB) -o $@ $(LDFLAGS)
 
 clean:

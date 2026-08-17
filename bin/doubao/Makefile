@@ -7,7 +7,10 @@ BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/bin
 
 all: $(TASK)
 
-$(TASK): $(TASK_OBJS)
+$(TASK): $(TASK_OBJS) \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewoksys.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libtinyhttpsc.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libsocket.a
 	mkdir -p $(BUILD_DIR)
 	$(LD) -Ttext=100 $(TASK_OBJS) -o $(BUILD_DIR)/$(TASK) $(LDFLAGS) -ltinyhttpsc -lsocket $(EWOK_LIBC)
 

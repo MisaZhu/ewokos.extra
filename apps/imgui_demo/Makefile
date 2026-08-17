@@ -32,7 +32,18 @@ $(ARCH)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS)   -c $< -o $@
 
 # Link
-$(TARGET): $(OBJS) 
+$(TARGET): $(OBJS) \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewoksys.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libewokstl.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libx++.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libx.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libfont.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libgraph.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libwidget++.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libglcommon.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libimgui.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libportablegl.a \
+		$(SYS_ROOT_DIR)/build/$(HW)/lib/libcxx.a
 	mkdir -p $(TARGET_DIR)
 	$(LD) -Ttext=100 $(OBJS)  -o $@ $(LDFLAGS)
 	cp -r res $(TARGET_DIR)
