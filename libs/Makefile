@@ -1,8 +1,14 @@
+DIRS = SDL2
+
 all: basic_libs
 	@echo "all done."
 
 basic_libs:
-	cd SDL2;make
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir || exit 1; \
+	done
 
 clean:
-	cd SDL2;make clean
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done

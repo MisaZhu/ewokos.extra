@@ -1,6 +1,12 @@
 
+DIRS = doubao
+
 all: 
-	cd doubao; make
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir || exit 1; \
+	done
 
 clean: 
-	cd doubao; make clean
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done

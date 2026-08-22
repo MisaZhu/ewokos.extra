@@ -1,13 +1,13 @@
 
+DIRS = libs apps x bin
+
 all: 
-	cd libs; make
-	cd apps; make
-	cd x; make
-	cd bin; make
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir || exit 1; \
+	done
 
 clean:	
-	cd libs; make clean
-	cd apps; make clean
-	cd x; make clean
-	cd bin; make clean
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done
 	rm -fr build

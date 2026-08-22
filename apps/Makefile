@@ -1,10 +1,12 @@
 
+DIRS = doom calculator calendar
+
 all:
-	cd doom; make
-	cd calculator; make
-	cd calendar; make
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir || exit 1; \
+	done
 
 clean:
-	cd doom; make clean
-	cd calculator; make clean
-	cd calendar; make clean
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done

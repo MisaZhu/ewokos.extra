@@ -1,8 +1,12 @@
 
+DIRS = xwm/openlook xwm/mac1984
+
 all: 
-	cd xwm/openlook; make
-	cd xwm/mac1984; make
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir || exit 1; \
+	done
 
 clean: 
-	cd xwm/openlook; make clean
-	cd xwm/mac1984; make clean
+	@for dir in $(DIRS); do \
+		$(MAKE) -C $$dir clean; \
+	done
