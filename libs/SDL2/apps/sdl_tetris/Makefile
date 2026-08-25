@@ -3,7 +3,7 @@ EWOKOS_ROOT_DIR = $(SDL2_ROOT_DIR)/../../..
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 include $(SDL2_ROOT_DIR)/make.inc
 
-BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)
+BUILD_DIR = $(SYS_ROOT_DIR)/build_$(ARCH)/$(HW)
 TARGET_DIR = $(BUILD_DIR)/rootfs
 
 LDFLAGS += -L $(BUILD_DIR)/lib \
@@ -15,7 +15,7 @@ CXXFLAGS += -I $(BUILD_DIR)/include
 TASK_OBJS = $(ARCH)/graphics.o $(ARCH)/input.o $(ARCH)/game.o $(ARCH)/main.o
 
 TASK = tetris
-TASK_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/apps/$(TASK)
+TASK_DIR = $(SYS_ROOT_DIR)/build_$(ARCH)/$(HW)/rootfs/apps/$(TASK)
 
 all: $(TASK)
 

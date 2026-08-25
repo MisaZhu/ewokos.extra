@@ -1,7 +1,7 @@
 EWOKOS_ROOT_DIR = ../../../..
 include ../make.inc
 
-SYS_BUILD_DIR=$(SYS_ROOT_DIR)/build/$(HW)
+SYS_BUILD_DIR=$(SYS_ROOT_DIR)/build_$(ARCH)/$(HW)
 SDL2_HEADS_DIR=$(SYS_BUILD_DIR)/include/SDL2
 SDL2_IMG_HEADS_DIR=$(SYS_BUILD_DIR)/include/SDL2
 SDL2_MIXER_HEADS_DIR=$(SYS_BUILD_DIR)/include/SDL2

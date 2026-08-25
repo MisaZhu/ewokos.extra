@@ -3,10 +3,10 @@ include $(SW_ROOT_DIR)/make.inc
 
 TASK_OBJS = $(ARCH)/xwm.o $(ARCH)/MacWM.o
 
-LIB_DIR = $(SYS_ROOT_DIR)/build/$(HW)/lib
+LIB_DIR = $(SYS_ROOT_DIR)/build_$(ARCH)/$(HW)/lib
 
 TASK = xwm_mac1984
-BUILD_DIR = $(SYS_ROOT_DIR)/build/$(HW)/rootfs/sbin/x
+BUILD_DIR = $(SYS_ROOT_DIR)/build_$(ARCH)/$(HW)/rootfs/sbin/x
 
 all: $(TASK)
 

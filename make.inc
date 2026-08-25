@@ -13,7 +13,7 @@ endif
 EWOKOS_ROOT_DIR = $(ewokos)
 SYS_ROOT_DIR = $(EWOKOS_ROOT_DIR)/system
 
-SDK_DIR= $(SYS_ROOT_DIR)/build/$(HW)
+SDK_DIR= $(SYS_ROOT_DIR)/build_$(ARCH)/$(HW)
 BUILD_DIR = $(SDK_DIR)
 
 include $(SYS_ROOT_DIR)/platform/$(ARCH)/make.rule
