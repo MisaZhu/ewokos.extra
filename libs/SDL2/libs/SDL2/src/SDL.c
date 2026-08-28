@@ -25,7 +25,11 @@
 
 void SDL_dbg_trace(const char *msg)
 {
+#ifdef SDL_PORTING_TRACE
     write(2, msg, strlen(msg));
+#else
+    (void)msg;
+#endif
 }
 
 #if defined(__WIN32__)

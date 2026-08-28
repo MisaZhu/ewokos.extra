@@ -29,6 +29,7 @@
 
 #include "SDL_video.h"
 #include "SDL_mouse.h"
+#include "SDL.h"
 #include "../SDL_sysvideo.h"
 #include "../SDL_pixels_c.h"
 #include "../../events/SDL_events_c.h"
@@ -137,6 +138,39 @@ static int sdl_key(int v) {
     if(v >= 'A' && v <= 'Z')
         return v - 'A' + 'a';
     return v;
+}
+
+/* EwokOS: SDL_ShowCursor() ends up here (SDL_mouse.c SDL_SetCursor):
+ * cursor == NULL means hide.  Like macemu's xwin backend, hide the WM
+ * cursor per window with xwin_hide_cursor(). */
+static int EWOKOS_ShowCursor(SDL_Cursor * cursor) {
+    (void)cursor;
+    if (_main_xwin != NULL)
+        xwin_hide_cursor(_main_xwin, cursor == NULL);
+    return 0;
+}
+
+/* EwokOS: SDL resolves the "show" state through cursor objects: focus
+ * changes and SDL_ShowCursor() all funnel into SDL_SetCursor(), which
+ * calls the ShowCursor hook with NULL when no cursor object exists —
+ * and EWOKOS_ShowCursor() treats NULL as "hide". Without a default
+ * cursor the host cursor would vanish on the first focus event and
+ * SDL_ShowCursor(SDL_ENABLE) could never bring it back. Install a dummy
+ * default cursor so the hook sees a real pointer whenever the cursor is
+ * meant to be visible (the WM draws its own cursor image anyway). */
+static SDL_Cursor* EWOKOS_CreateDefaultCursor(void) {
+    return (SDL_Cursor*)SDL_calloc(1, sizeof(SDL_Cursor));
+}
+
+/* EwokOS: SDL_SetRelativeMouseMode() would call this through a NULL
+ * pointer if the driver leaves it unset — a no-op that succeeds keeps the
+ * cursor-visibility semantics of relative mode (SDL_SetCursor hides the
+ * cursor while relative_mode is on) without crashing. Mouse events are
+ * pushed with window-relative x/y plus rx/ry deltas from the x server,
+ * so relative mode does not change input delivery here. */
+static int EWOKOS_SetRelativeMouseMode(SDL_bool enabled) {
+    (void)enabled;
+    return 0;
 }
 
 static void on_event(xwin_t* xw, xevent_t* ev) {
@@ -284,6 +318,11 @@ EWOKOS_CreateWindow(_THIS, SDL_Window * window)
     xwin->on_close = on_close;
     xwin->on_resize = on_resize;
     _main_xwin = xwin;
+    /* EwokOS: make SDL_ShowCursor() control the WM cursor */
+    SDL_GetMouse()->ShowCursor = EWOKOS_ShowCursor;
+    SDL_GetMouse()->SetRelativeMouseMode = EWOKOS_SetRelativeMouseMode;
+    if (SDL_GetDefaultCursor() == NULL)
+        SDL_SetDefaultCursor(EWOKOS_CreateDefaultCursor());
     window->driverdata = xwin;
     if(xwin->xinfo != NULL)
         window->id = xwin->xinfo->win;
