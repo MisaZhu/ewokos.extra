@@ -116,7 +116,26 @@ static int sdl_key(int v) {
             return SDLK_LEFT;
         case KEY_RIGHT:
             return SDLK_RIGHT;
+        case KEY_BACKSPACE: /* 127 */
+            return SDLK_BACKSPACE;
+        case KEY_CTRL:
+            return SDLK_LCTRL;
+        case KEY_LSHIFT:
+            return SDLK_LSHIFT;
+        case KEY_RSHIFT:
+            return SDLK_RSHIFT;
+        case KEY_POWER:
+            return SDLK_DELETE; /* NeXT power key maps to Delete/Power */
+        case KEY_HOME:
+            return SDLK_HOME;
+        case KEY_END:
+            return SDLK_END;
     }
+    /* EwokOS IM delivers shifted letters as uppercase ASCII; the apps
+     * expect plain letter keycodes (shift state arrives as separate
+     * KEY_LSHIFT/RSHIFT events) */
+    if(v >= 'A' && v <= 'Z')
+        return v - 'A' + 'a';
     return v;
 }
 
