@@ -20,6 +20,8 @@
 */
 #include "../SDL_internal.h"
 
+#include <unistd.h>
+
 #include "SDL_video.h"
 #include "SDL_sysvideo.h"
 #include "SDL_blit.h"
@@ -526,6 +528,21 @@ SDL_UpperBlit(SDL_Surface * src, const SDL_Rect * srcrect,
     if (!src || !dst) {
         return SDL_SetError("SDL_UpperBlit: passed a NULL surface");
     }
+
+    { /* EWOK debug: trace every blit (unbuffered) */
+        char buf[192];
+        int n = 0;
+        unsigned long sv = (unsigned long)src, dv = (unsigned long)dst;
+        unsigned long mf = src->map ? (unsigned long)src->map->info.flags : 0;
+        unsigned long md = (src->map && src->map->dst) ? (unsigned long)src->map->dst : 0;
+        n += SDL_snprintf(buf + n, sizeof(buf) - n,
+            "UB s=%lx %dx%d f=%lx | d=%lx %dx%d f=%lx m=%lx/%lx\n",
+            sv, src->w, src->h, (unsigned long)src->format->format,
+            dv, dst->w, dst->h, (unsigned long)dst->format->format,
+            mf, md);
+        write(2, buf, n);
+    }
+
     if (src->locked || dst->locked) {
         return SDL_SetError("Surfaces must not be locked during blit");
     }

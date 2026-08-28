@@ -19,6 +19,14 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 #include "./SDL_internal.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+
+void SDL_dbg_trace(const char *msg)
+{
+    write(2, msg, strlen(msg));
+}
 
 #if defined(__WIN32__)
 #include "core/windows/SDL_windows.h"
@@ -117,13 +125,16 @@ SDL_SetMainReady(void)
 int
 SDL_InitSubSystem(Uint32 flags)
 {
+    SDL_dbg_trace("SDL-TRACE: InitSubSystem enter\n");
     if (!SDL_MainIsReady) {
         SDL_SetError("Application didn't initialize properly, did you include SDL_main.h in the file containing your main() function?");
         return -1;
     }
+    SDL_dbg_trace("SDL-TRACE: before ClearError\n");
 
     /* Clear the error message */
     SDL_ClearError();
+    SDL_dbg_trace("SDL-TRACE: before atexit\n");
 
 #ifdef __EWOKOS__
     if (!SDL_bAutoQuitRegistered) {
@@ -132,6 +143,7 @@ SDL_InitSubSystem(Uint32 flags)
         }
     }
 #endif
+    SDL_dbg_trace("SDL-TRACE: after atexit\n");
 
 #if SDL_VIDEO_DRIVER_WINDOWS
     if ((flags & (SDL_INIT_HAPTIC|SDL_INIT_JOYSTICK))) {
@@ -144,6 +156,7 @@ SDL_InitSubSystem(Uint32 flags)
 #if !SDL_TIMERS_DISABLED
     SDL_TicksInit();
 #endif
+    SDL_dbg_trace("SDL-TRACE: ticks ok\n");
 
     if ((flags & SDL_INIT_GAMECONTROLLER)) {
         /* game controller implies joystick */
@@ -159,10 +172,12 @@ SDL_InitSubSystem(Uint32 flags)
     if ((flags & SDL_INIT_EVENTS)) {
 #if !SDL_EVENTS_DISABLED
         if (SDL_PrivateShouldInitSubsystem(SDL_INIT_EVENTS)) {
+            SDL_dbg_trace("SDL-TRACE: events start\n");
             if (SDL_StartEventLoop() < 0) {
                 return (-1);
             }
             SDL_QuitInit();
+            SDL_dbg_trace("SDL-TRACE: events done\n");
         }
         SDL_PrivateSubsystemRefCountIncr(SDL_INIT_EVENTS);
 #else
@@ -174,9 +189,11 @@ SDL_InitSubSystem(Uint32 flags)
     if ((flags & SDL_INIT_TIMER)){
 #if !SDL_TIMERS_DISABLED
         if (SDL_PrivateShouldInitSubsystem(SDL_INIT_TIMER)) {
+            SDL_dbg_trace("SDL-TRACE: timer start\n");
             if (SDL_TimerInit() < 0) {
                 return (-1);
             }
+            SDL_dbg_trace("SDL-TRACE: timer done\n");
         }
         SDL_PrivateSubsystemRefCountIncr(SDL_INIT_TIMER);
 #else
@@ -188,9 +205,11 @@ SDL_InitSubSystem(Uint32 flags)
     if ((flags & SDL_INIT_VIDEO)){
 #if !SDL_VIDEO_DISABLED
         if (SDL_PrivateShouldInitSubsystem(SDL_INIT_VIDEO)) {
+            SDL_dbg_trace("SDL-TRACE: video start\n");
             if (SDL_VideoInit(NULL) < 0) {
                 return (-1);
             }
+            SDL_dbg_trace("SDL-TRACE: video done\n");
         }
         SDL_PrivateSubsystemRefCountIncr(SDL_INIT_VIDEO);
 #else

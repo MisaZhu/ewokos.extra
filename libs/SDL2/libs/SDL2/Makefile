@@ -15,6 +15,9 @@ LIB = $(ARCH)/libSDL2.a
 all: $(LIB)
 
 SRCS = $(shell find . -name '*.c' -print)
+# keep only the ewokos thread backend; the generic one duplicates symbols
+# and SDL picks them arbitrarily at link time (mixed sem/cond implementations)
+SRCS := $(filter-out ./src/thread/generic/%,$(SRCS))
 OBJS = $(patsubst %.c,$(ARCH)/%.o,$(SRCS))
 
 -include $(shell find $(DEPDIR) -name *.Po -print)

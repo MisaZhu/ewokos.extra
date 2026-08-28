@@ -33,6 +33,9 @@
 
 #include "SDL_config.h"
 
+/* Unbuffered debug trace (bypasses stdio buffering to survive hangs) */
+void SDL_dbg_trace(const char *msg);
+
 #endif
 
 /* vi: set ts=4 sw=4 expandtab: */

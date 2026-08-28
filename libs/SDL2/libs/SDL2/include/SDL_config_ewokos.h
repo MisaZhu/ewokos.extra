@@ -162,8 +162,11 @@
 #define SDL_LOADSO_DISABLED 1
 /* #undef SDL_RENDER_DISABLED */
 
-#define SDL_THREADS_DISABLED 1
-//#define SDL_THREAD_EWOKOS 1 
+/* EwokOS note: SDL_THREADS_DISABLED must stay off. With it enabled,
+ * SDL_CreateSemaphore() skips creating count_nonzero while the wait
+ * paths still use it, which dereferences uninitialized heap memory. */
+/* #undef SDL_THREADS_DISABLED */
+#define SDL_THREAD_EWOKOS 1 
 
 /*#define SDL_TIMERS_DISABLED 1*/
 #define SDL_TIMER_EWOKOS  1

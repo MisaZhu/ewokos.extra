@@ -45,7 +45,10 @@ SDL_CreateMutex(void)
         /* Create the mutex semaphore, with initial value 1 */
         mutex->sem = SDL_CreateSemaphore(1);
         mutex->recursive = 0;
-        mutex->owner = 0;
+        /* EwokOS: an unheld mutex must not match any thread id; the
+           initial (or pre-thread) thread id can be 0, which would
+           collide with a zero owner and fake recursive locking. */
+        mutex->owner = (SDL_threadID)-1;
         if (!mutex->sem) {
             SDL_free(mutex);
             mutex = NULL;
@@ -155,7 +158,7 @@ SDL_mutexV(SDL_mutex * mutex)
            the mutex and set the ownership before we reset it,
            then release the lock semaphore.
          */
-        mutex->owner = 0;
+        mutex->owner = (SDL_threadID)-1;
         SDL_SemPost(mutex->sem);
     }
     return 0;

@@ -19,6 +19,7 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 #include "../SDL_internal.h"
+#include <stdio.h>
 
 #include "SDL_timer.h"
 #include "SDL_timer_c.h"
@@ -210,11 +211,13 @@ SDL_TimerInit(void)
 
     if (!data->active) {
         const char *name = "SDLTimer";
+        SDL_dbg_trace("SDL-TRACE: TimerInit mutex\n");
         data->timermap_lock = SDL_CreateMutex();
         if (!data->timermap_lock) {
             return -1;
         }
 
+        SDL_dbg_trace("SDL-TRACE: TimerInit sem\n");
         data->sem = SDL_CreateSemaphore(0);
         if (!data->sem) {
             SDL_DestroyMutex(data->timermap_lock);
@@ -222,6 +225,7 @@ SDL_TimerInit(void)
         }
 
         data->active = SDL_TRUE;
+        SDL_dbg_trace("SDL-TRACE: TimerInit thread create\n");
         /* !!! FIXME: this is nasty. */
 #if defined(__WIN32__) && !defined(HAVE_LIBC)
 #undef SDL_CreateThread

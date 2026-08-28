@@ -1,5 +1,5 @@
 
-DIRS = doom calculator calendar
+DIRS = calculator calendar
 
 all: $(DIRS)
 
