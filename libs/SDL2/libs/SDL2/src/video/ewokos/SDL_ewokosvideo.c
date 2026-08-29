@@ -188,7 +188,18 @@ static void on_event(xwin_t* xw, xevent_t* ev) {
             sdlEvent.type = SDL_KEYDOWN;
         else if(ev->state == XIM_STATE_RELEASE)
             sdlEvent.type = SDL_KEYUP;
-        sdlEvent.key.keysym.sym = sdl_key(ev->value.im.value);
+        /* The xim daemon cooks the value when Ctrl is held (Ctrl+C ->
+         * 0x03, see keyb_ctrl_value()), which loses the key identity;
+         * key_code keeps the raw key.  Only trust key_code for
+         * control-char values: the vkey IM fills value alone and
+         * leaves key_code unset. */
+        {
+            int v = ev->value.im.value;
+            int kc = ev->value.im.key_code;
+            if (v > 0 && v < 0x20 && kc >= 0x20 && kc < 0x100)
+                v = kc;
+            sdlEvent.key.keysym.sym = sdl_key(v);
+        }
         SDL_PushEvent(&sdlEvent);
     }
     else if(ev->type == XEVT_MOUSE) {
