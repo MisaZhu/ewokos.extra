@@ -1,4 +1,4 @@
-DIRS = SDL2
+DIRS = curses SDL2
 
 all: basic_libs
 	@echo "all done."

@@ -1,5 +1,5 @@
 
-DIRS = doubao
+DIRS = doubao curse_test
 
 all: 
 	@for dir in $(DIRS); do \
