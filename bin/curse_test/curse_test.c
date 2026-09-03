@@ -48,11 +48,32 @@ static char g_title[96];    /* current screen title, for continuations */
 static int waitkey(void);
 static void ensure_row(void);
 
+/*
+ * Filling the last column of a row leaves netbsd curses' deferred-wrap mark
+ * (__ISPASTEOL) on it, and neither clear() nor werase() resets that mark: the
+ * next write that starts on the row silently slips one row down, dragging
+ * full-width title bands (and the cursor parked below them) onto the wrong
+ * rows.  Consume the mark with a single throwaway char and put back the cell
+ * the wrap lands on; rows without a mark only get a blank rewritten.
+ */
+static void eat_wrap(int y)
+{
+	chtype saved;
+
+	if (y < 0 || y >= LINES - 1)
+		return;
+	saved = mvwinch(stdscr, y + 1, 0);
+	move(y, 0);
+	addch(' ');
+	mvwaddch(stdscr, y + 1, 0, saved);
+}
+
 static void title_band(const char *title)
 {
 	attron(A_BOLD | A_REVERSE);
 	mvprintw(0, 0, "%-*.*s", COLS, COLS, title);
 	attroff(A_BOLD | A_REVERSE);
+	eat_wrap(0);
 }
 
 static void screen_title(const char *title)
@@ -65,8 +86,8 @@ static void screen_title(const char *title)
 	/* no physical scrolling: a stray write at the last row must never
 	 * push the title band into the scrollback */
 	scrollok(stdscr, FALSE);
-	/* park the cursor off the title row: writing exactly COLS chars leaves
-	 * a pending wrap that a later stray addch would turn into a scroll. */
+	/* park the cursor below the title row; eat_wrap() inside title_band()
+	 * already consumed the pending wrap the full-width band leaves. */
 	move(1, 0);
 	g_row = 2;
 	refresh();
@@ -561,6 +582,10 @@ static void test_input(void)
 				info("you typed: %s", line);
 		}
 		noecho();
+		/* a long echoed line can fill the last column and leave the
+		 * wrap mark on the prompt row; drop it so the next screen's
+		 * check list cannot slip a row */
+		eat_wrap(g_row - 1);
 	} else {
 		info("(auto mode: getnstr skipped)");
 	}
