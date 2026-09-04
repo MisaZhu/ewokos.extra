@@ -18,7 +18,10 @@ TARGET_DIR = $(BUILD_DIR)
 # This is a trimmed port of netbsd-curses for EwokOS:
 #   - no wide-character support (DISABLE_WCHAR); EwokOS libc has no wide runtime
 #   - terminfo uses only the embedded compiled_terms[] (no TERMINFO_DB on-disk
-#     database, no runtime tic compiler), so cdbr/compile/termcap are not built
+#     database, no runtime tic compiler), so cdbr/compile are not built
+#   - termcap.c provides the termcap compatibility layer (tgetent/tgetstr/
+#     tgetflag/tgetnum/tgoto, UP/BC) on top of terminfo; it uses termcap_map.c
+#     with a linear scan instead of the generated termcap_hash.c perfect hash
 # netbsd_sys/ provides the small cdefs/endian compatibility layer.
 CFLAGS += -DDISABLE_WCHAR \
 	-I. -Ilibcurses -Ilibterminfo \
@@ -27,7 +30,7 @@ CFLAGS += -DDISABLE_WCHAR \
 # --- libterminfo -----------------------------------------------------------
 TI_SRCS = libterminfo/term.c libterminfo/ti.c libterminfo/setupterm.c \
 	libterminfo/curterm.c libterminfo/tparm.c libterminfo/tputs.c \
-	libterminfo/mi_vector_hash.c libterminfo/hash.c
+	libterminfo/mi_vector_hash.c libterminfo/hash.c libterminfo/termcap.c
 TI_OBJS = $(patsubst %.c,$(ARCH)/%.o,$(TI_SRCS))
 LIBTERMINFO = $(TARGET_DIR)/lib/libterminfo.a
 
