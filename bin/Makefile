@@ -1,5 +1,5 @@
 
-DIRS = doubao curse_test
+DIRS = doubao curse_test vim
 
 all: 
 	@for dir in $(DIRS); do \
