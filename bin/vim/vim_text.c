@@ -203,6 +203,8 @@ ewokos_addr_t text_hole_make(char* p, int size) // at "p", make a 'size' byte ho
             for (i = 0; i < ARRAY_SIZE(mark); i++)
                 if (mark[i])
                     mark[i] += bias;
+            if (vi_visual_anchor != NULL) // keep the selection anchor in text[]
+                vi_visual_anchor += bias;
         }
         text = new_text;
     }

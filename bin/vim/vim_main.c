@@ -28,6 +28,8 @@ void edit_file(char* fn) {
     ccol = 0;
 
     cmd_mode = 0; // 0=command  1=insert  2='R'eplace
+    vi_visual = 0;
+    vi_visual_anchor = NULL;
     cmdcnt = 0;
     offset = 0; // no horizontal offset
     c = '\0';
@@ -47,11 +49,19 @@ void edit_file(char* fn) {
         }
         // If c is a command that changes text[],
         // (re)start remembering the input for the "." command.
-        if (!adding2q && ioq_start == NULL && cmd_mode == 0 // command mode
-            && c > '\0'                                     // exclude NUL and non-ASCII chars
-            && c < 0x7f                                     // (Unicode and such)
+        // (visual-mode operators act on the selection, a recorded
+        // replay of them would have no selection to work on)
+        if (!adding2q && ioq_start == NULL && cmd_mode == 0 && !vi_visual // command mode
+            && c > '\0'                                                   // exclude NUL and non-ASCII chars
+            && c < 0x7f                                                   // (Unicode and such)
             && strchr(modifying_cmds, c)) {
             start_new_cmd_q(c);
+        }
+        // remember the selection before the command moves "dot"
+        char *vis_lo = NULL, *vis_hi = NULL;
+        if (vi_visual) {
+            vis_lo = vi_visual_anchor < dot ? vi_visual_anchor : dot;
+            vis_hi = vi_visual_anchor < dot ? dot : vi_visual_anchor;
         }
         do_cmd(c); // execute the user command
 
@@ -59,6 +69,18 @@ void edit_file(char* fn) {
         // not able to display output fast enough to keep up, skip
         // the display update until we catch up with input.
         if (!readbuffer[0]) {
+            // a moved/removed selection is invisible to the char-only
+            // screen diff - force the rows it touches to redraw
+            if (vi_visual) {
+                char* lo = vi_visual_anchor < dot ? vi_visual_anchor : dot;
+                char* hi = vi_visual_anchor < dot ? dot : vi_visual_anchor;
+                if (vis_lo != lo || vis_hi != hi) {
+                    visual_invalidate_rows(vis_lo, vis_hi);
+                    visual_invalidate_rows(lo, hi);
+                }
+            } else if (vis_lo != NULL) {
+                visual_invalidate_rows(vis_lo, vis_hi); // selection just ended
+            }
             // no input pending - so update output
             refresh(false);
             show_status_line();

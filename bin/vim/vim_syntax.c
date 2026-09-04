@@ -1,5 +1,5 @@
-/* vim_syntax.c — line-oriented syntax highlighting for .json, .rd, .conf and
- * .js files.
+/* vim_syntax.c — line-oriented syntax highlighting for .json, .rd, .conf,
+ * .js and .c/.h files.
  *
  * Color model: every column of the formatted screen line gets a color id,
  * then the changed slice is emitted with SGR escape sequences inserted at
@@ -58,6 +58,9 @@ void syntax_set_file(const char* fn) {
         cur_syntax = SYNTAX_CONF;
     else if (strcmp(ext, ".js") == 0)
         cur_syntax = SYNTAX_JS;
+    else if (strcmp(ext, ".c") == 0 || strcmp(ext, ".h") == 0 || strcmp(ext, ".cc") == 0 ||
+             strcmp(ext, ".cpp") == 0 || strcmp(ext, ".cxx") == 0 || strcmp(ext, ".hpp") == 0)
+        cur_syntax = SYNTAX_C;
 }
 
 int syntax_mode(void) { return cur_syntax; }
@@ -254,7 +257,7 @@ static const char* const js_literals[] = {
     "true", "false", "null", "undefined", "NaN", "Infinity", "this", NULL};
 
 // does the token s[i..j-1] exactly match one of the NUL-terminated words?
-static bool js_word_in(const char* s, int i, int j, const char* const* list) {
+static bool word_in(const char* s, int i, int j, const char* const* list) {
     int len = j - i;
     for (int k = 0; list[k] != NULL; k++) {
         if ((int)strlen(list[k]) == len && strncmp(s + i, list[k], len) == 0)
@@ -322,9 +325,9 @@ static void color_js(const char* s, int n, uint8_t* col) {
             int j = i;
             while (j < n && (isalnum((uint8_t)s[j]) || s[j] == '_' || s[j] == '$'))
                 j++;
-            if (js_word_in(s, i, j, js_literals))
+            if (word_in(s, i, j, js_literals))
                 paint(col, i, j - 1, C_LITERAL);
-            else if (js_word_in(s, i, j, js_keywords))
+            else if (word_in(s, i, j, js_keywords))
                 paint(col, i, j - 1, C_KEY);
             else {
                 // a plain identifier directly followed by '(' is a call name
@@ -351,6 +354,146 @@ static void color_js(const char* s, int n, uint8_t* col) {
     }
 }
 
+//----- .c/.h C source ---------------------------------------------------
+// Same line-oriented model as JS: colors stay a pure function of the single
+// line text, so a block comment spanning lines is colored only on the line
+// where it opens.
+static const char* const c_keywords[] = {
+    "auto",     "break",  "case",     "const",    "continue", "default", "do",
+    "else",     "enum",   "extern",   "for",      "goto",     "if",       "inline",
+    "register", "restrict", "return", "sizeof",   "static",   "struct",   "switch",
+    "typedef",  "union",  "volatile", "while",    NULL};
+
+static const char* const c_types[] = {
+    "bool",     "char",    "double",   "float",    "int",      "long",    "short",
+    "signed",   "unsigned", "void",    "size_t",   "ssize_t",  "ptrdiff_t",
+    "intptr_t", "uintptr_t", "int8_t",  "int16_t",  "int32_t",  "int64_t", "uint8_t",
+    "uint16_t", "uint32_t", "uint64_t", "ewokos_addr_t", "FILE", NULL};
+
+static const char* const c_literals[] = {"NULL", "true", "false", "EOF", NULL};
+
+static void color_c(const char* s, int n, uint8_t* col) {
+    int i = 0;
+
+    // preprocessor directive: first non-blank char of the line is '#'
+    int j = 0;
+    while (j < n && (s[j] == ' ' || s[j] == '\t'))
+        j++;
+    if (j < n && s[j] == '#') {
+        col[j++] = C_CMD;
+        int k = j;
+        while (k < n && isalpha((uint8_t)s[k])) // directive name
+            k++;
+        paint(col, j, k - 1, C_CMD);
+        // #include <...> gets the string color ("..." via the scanner below)
+        if (k - j == 7 && strncmp(s + j, "include", 7) == 0) {
+            int q = k;
+            while (q < n && (s[q] == ' ' || s[q] == '\t'))
+                q++;
+            if (q < n && s[q] == '<') {
+                int e = q + 1;
+                while (e < n && s[e] != '>')
+                    e++;
+                if (e >= n)
+                    e = n - 1; // no closing '>' on this line
+                paint(col, q, e, C_STRING);
+                i = e + 1;
+            }
+        }
+        if (i == 0)
+            i = k; // the rest of the directive scans as normal tokens
+    }
+
+    while (i < n) {
+        char c = s[i];
+        // line comment: from // to end of line
+        if (c == '/' && i + 1 < n && s[i + 1] == '/') {
+            paint(col, i, n - 1, C_COMMENT);
+            return;
+        }
+        // block comment: color the same-line portion (and closing */) only
+        if (c == '/' && i + 1 < n && s[i + 1] == '*') {
+            int q = i + 2;
+            while (q + 1 < n && !(s[q] == '*' && s[q + 1] == '/'))
+                q++;
+            int e = (q + 1 < n) ? q + 1 : n - 1; // closing */ or end of line
+            paint(col, i, e, C_COMMENT);
+            i = e + 1;
+            continue;
+        }
+        // string and char literals (a raw newline ends the token)
+        if (c == '"' || c == '\'') {
+            int q = i + 1;
+            while (q < n && s[q] != c) {
+                if (s[q] == '\\' && q + 1 < n)
+                    q++; // skip escaped char
+                q++;
+            }
+            int e = (q < n) ? q : n - 1; // closing quote or end of line
+            paint(col, i, e, C_STRING);
+            i = e + 1;
+            continue;
+        }
+        // numbers: decimal, hex, float forms with u/l/f suffixes
+        if (isdigit((uint8_t)c)) {
+            int q = i + 1;
+            if (c == '0' && q < n && (s[q] == 'x' || s[q] == 'X')) {
+                q++;
+                while (q < n && isxdigit((uint8_t)s[q]))
+                    q++;
+            } else {
+                while (q < n && (isdigit((uint8_t)s[q]) || s[q] == '.'))
+                    q++;
+                if (q < n && (s[q] == 'e' || s[q] == 'E')) {
+                    q++;
+                    if (q < n && (s[q] == '+' || s[q] == '-'))
+                        q++;
+                    while (q < n && isdigit((uint8_t)s[q]))
+                        q++;
+                }
+            }
+            while (q < n && strchr("uUlLfF", s[q]) != NULL) // integer/float suffix
+                q++;
+            paint(col, i, q - 1, C_NUMBER);
+            i = q;
+            continue;
+        }
+        // identifiers, keywords, types and literals
+        if (isalpha((uint8_t)c) || c == '_') {
+            int q = i;
+            while (q < n && (isalnum((uint8_t)s[q]) || s[q] == '_'))
+                q++;
+            if (word_in(s, i, q, c_literals))
+                paint(col, i, q - 1, C_LITERAL);
+            else if (word_in(s, i, q, c_keywords))
+                paint(col, i, q - 1, C_KEY);
+            else if (word_in(s, i, q, c_types))
+                paint(col, i, q - 1, C_PATH); // cyan, next to the keyword color
+            else {
+                // a plain identifier directly followed by '(' is a call name
+                int k = q;
+                while (k < n && (s[k] == ' ' || s[k] == '\t'))
+                    k++;
+                if (k < n && s[k] == '(')
+                    paint(col, i, q - 1, C_CMD);
+            }
+            i = q;
+            continue;
+        }
+        // braces, brackets and parentheses
+        if (c == '{' || c == '}' || c == '[' || c == ']' || c == '(' || c == ')') {
+            col[i++] = C_BRACE;
+            continue;
+        }
+        // operators and punctuation
+        if (strchr("+-*/%=<>!&|?:~^", c) != NULL) {
+            col[i++] = C_OPER;
+            continue;
+        }
+        i++;
+    }
+}
+
 // a line past the end of the file shows as '~' followed by spaces
 static bool is_filler_line(const char* s, int n) {
     if (n < 1 || s[0] != '~')
@@ -361,40 +504,48 @@ static bool is_filler_line(const char* s, int n) {
     return true;
 }
 
-void syntax_write_slice(const char* vline, int from, int to) {
-    if (cur_syntax == SYNTAX_NONE || to < from)
-        goto plain;
-
+void syntax_write_slice(const char* vline, int from, int to, const uint8_t* sel) {
     int n = (int)columns; // vline is exactly this wide (space padded)
     if (to >= n)
         to = n - 1;
-    if (to < from || is_filler_line(vline, n))
-        goto plain;
+    if (to < from)
+        return;
 
-    memset(col_buf, C_DEFAULT, n);
-    if (cur_syntax == SYNTAX_JSON)
-        color_json(vline, n, col_buf);
-    else if (cur_syntax == SYNTAX_CONF)
-        color_conf(vline, n, col_buf);
-    else if (cur_syntax == SYNTAX_JS)
-        color_js(vline, n, col_buf);
-    else
-        color_rd(vline, n, col_buf);
+    bool colored = cur_syntax != SYNTAX_NONE && !is_filler_line(vline, n);
+    if (colored) {
+        memset(col_buf, C_DEFAULT, n);
+        if (cur_syntax == SYNTAX_JSON)
+            color_json(vline, n, col_buf);
+        else if (cur_syntax == SYNTAX_CONF)
+            color_conf(vline, n, col_buf);
+        else if (cur_syntax == SYNTAX_JS)
+            color_js(vline, n, col_buf);
+        else if (cur_syntax == SYNTAX_C)
+            color_c(vline, n, col_buf);
+        else
+            color_rd(vline, n, col_buf);
+    }
 
-    int cur = -1; // SGR state currently active on the terminal
+    int cur = -1;    // SGR color currently active on the terminal
+    int cur_sel = 0; // reverse video currently active
     for (int i = from; i <= to; i++) {
-        int cl = col_buf[i];
-        if (cl != cur) {
-            puts_no_eol(sgr_seq[cl]);
-            cur = cl;
+        int s = sel ? sel[i] : 0;
+        if (s != cur_sel) {
+            puts_no_eol(ESC_NORM_TEXT); // reset color along with standout
+            if (s)
+                puts_no_eol(ESC_BOLD_TEXT); // reverse video on the selection
+            cur = -1;                     // force color re-emit
+            cur_sel = s;
+        }
+        if (colored && !s) {
+            int cl = col_buf[i];
+            if (cl != cur) {
+                puts_no_eol(sgr_seq[cl]);
+                cur = cl;
+            }
         }
         putchar(vline[i]);
     }
-    if (cur != C_DEFAULT)
+    if (cur_sel || cur > C_DEFAULT)
         puts_no_eol(ESC_NORM_TEXT);
-    return;
-
-plain:
-    for (int i = from; i <= to; i++)
-        putchar(vline[i]);
 }

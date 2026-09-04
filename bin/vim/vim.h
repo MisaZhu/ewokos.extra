@@ -6,8 +6,8 @@
  *   Licensed under GPLv2 or later, see file LICENSE in this source tree.
  *   Adapted for Raspberry Pi, 2021 lurk101
  *
- * This version adds JSON / .rd / .conf / .js syntax highlighting
- * (see vim_syntax.c).
+ * This version adds JSON / .rd / .conf / .js / C syntax highlighting
+ * (see vim_syntax.c) and a charwise visual selection mode ('v').
  */
 #pragma once
 
@@ -224,6 +224,9 @@ extern char* last_search_pattern; // last pattern from a '/' or '?' search
 extern int indentcol;             // column of recently autoindent, 0 or -1
 extern int16_t cmd_error;
 
+extern int16_t vi_visual;      // 1 while a visual ('v') selection is active
+extern char* vi_visual_anchor; // position where 'v' was pressed
+
 extern char* edit_file_cur_line;
 extern int refresh_old_offset;
 extern int format_edit_status_tot;
@@ -277,6 +280,8 @@ void new_screen(int ro, int co);
 void sync_cursor(char* d, int* row, int* col);
 char* format_line(char* src /*, int li*/);
 void refresh(int full_screen);
+// force a redraw of the screen rows whose text lines intersect [a, b]
+void visual_invalidate_rows(char* a, char* b);
 int safe_poll(uint8_t* buffer);
 int read_key(char* buffer, int timeout);
 int readit(void);

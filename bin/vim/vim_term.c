@@ -218,6 +218,75 @@ char* format_line(char* src /*, int li*/) {
     return dest;
 }
 
+//----- Visual selection drawing --------------------------------------
+// per-column selection mask of the screen line currently being refreshed
+static uint8_t vis_sel_buf[MAX_SCR_COLS + MAX_TABSTOP * 2] UDATA;
+// text[] top line as of the last refresh with an active selection
+static char* vis_last_screenbegin UDATA;
+
+// display column advance of one text[] char, mirroring format_line()
+static int vis_advance(uint8_t c, int co) {
+    if (c == '\t')
+        return next_tabstop(co);
+    if ((c & 0x80) && !is_asciionly(c))
+        return co + 1; // drawn as '.'
+    if (c < ' ' || c == 0x7f)
+        return co + 2; // drawn as ^X
+    return co + 1;
+}
+
+// fill sel[0..columns-1] with the slice of the visual selection [anchor, dot]
+// that falls on the text line starting at line_start (both ends inclusive)
+static void visual_line_mask(char* line_start, uint8_t* sel) {
+    char *lo = vi_visual_anchor, *hi = dot;
+    char* p;
+    int co = 0;
+
+    memset(sel, 0, columns);
+    if (hi < lo) {
+        lo = dot;
+        hi = vi_visual_anchor;
+    }
+    for (p = line_start; p < end; p++) {
+        int start_co = co;
+        int sc;
+        if (*p == '\n') { // a selected newline shows one phantom cell past EOL
+            sc = co - offset;
+            if (p >= lo && p <= hi && sc >= 0 && sc < (int)columns)
+                sel[sc] = 1;
+            break;
+        }
+        co = vis_advance(*p, co);
+        if (p >= lo && p <= hi) {
+            for (sc = start_co - offset; sc < co - offset; sc++)
+                if (sc >= 0 && sc < (int)columns)
+                    sel[sc] = 1;
+        }
+    }
+}
+
+// force a redraw of the screen rows whose text lines intersect [a, b]:
+// a highlight change does not alter text[], so the char-only screen diff
+// in refresh() cannot see it - poison the virtual screen rows instead
+void visual_invalidate_rows(char* a, char* b) {
+    char* t;
+    int li;
+
+    if (a == NULL || b == NULL)
+        return;
+    if (a > b) {
+        t = a;
+        a = b;
+        b = t;
+    }
+    t = screenbegin;
+    for (li = 0; li < (int)rows - 1 && t < end; li++) {
+        if (b >= t && a <= end_line(t))
+            memset(&screen[li * columns], 0xff, columns);
+        t = next_line(t);
+    }
+}
+
 //----- Refresh the changed screen lines -----------------------
 // Copy the source line from text[] into the buffer and note
 // if the current screenline is different from the new buffer.
@@ -227,9 +296,16 @@ void refresh(int full_screen) {
 
     int li, changed;
     char *tp, *sp; // pointer into text[] and screen[]
+    uint8_t* sel;  // visual selection mask of the current line
 
     sync_cursor(dot, &crow, &ccol); // where cursor will be (on "dot")
     tp = screenbegin;               // index into text[] of top line
+
+    // scrolling with an active selection shifts every row's highlight,
+    // which the char-only diff below cannot see (think duplicated lines)
+    if (vi_visual && screenbegin != vis_last_screenbegin)
+        full_screen = true;
+    vis_last_screenbegin = vi_visual ? screenbegin : NULL;
 
     // compare text[] to screen[] and mark screen[] lines that need updating
     for (li = 0; li < rows - 1; li++) {
@@ -237,6 +313,13 @@ void refresh(int full_screen) {
         char* out_buf;
         // format current text line
         out_buf = format_line(tp /*, li*/);
+
+        // columns of this line covered by the visual selection (if any)
+        sel = NULL;
+        if (vi_visual) {
+            visual_line_mask(tp, vis_sel_buf);
+            sel = vis_sel_buf;
+        }
 
         // skip to the end of the current text[] line
         if (tp < end) {
@@ -294,7 +377,7 @@ void refresh(int full_screen) {
             memcpy(sp + cs, out_buf + cs, ce - cs + 1);
             place_cursor(li, cs);
             // write line out to terminal (with syntax colors when enabled)
-            syntax_write_slice(out_buf, cs, ce);
+            syntax_write_slice(out_buf, cs, ce, sel);
             fflush(stdout);
         }
     }
@@ -344,7 +427,7 @@ int format_edit_status(void) {
     trunc_at = columns < STATUS_BUFFER_LEN - 1 ? columns : STATUS_BUFFER_LEN - 1;
 
     ret = snprintf(status_buffer, trunc_at + 1, "%c %s%s %d/%d %d%%",
-                   cmd_mode_indicator[cmd_mode & 3],
+                   vi_visual ? 'V' : cmd_mode_indicator[cmd_mode & 3],
                    (current_filename != NULL ? current_filename : "No file"),
                    (modified_count ? " [Modified]" : ""), cur, format_edit_status_tot, percent);
 

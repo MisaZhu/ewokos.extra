@@ -21,6 +21,105 @@
 //  78 x     79 y     7a z     7b {     7c |     7d }     7e ~     7f del
 //---------------------------------------------------------------------
 
+//----- Visual (charwise) selection -------------------------------------
+// 'v' anchors a selection at "dot"; motions extend it, an operator key
+// applies to the whole selection, anything else cancels it.
+
+// keys that keep the selection alive: motions, counts and scroll/redraw
+static bool is_visual_motion(int c) {
+    switch (c) {
+    case KEYCODE_UP:
+    case KEYCODE_DOWN:
+    case KEYCODE_LEFT:
+    case KEYCODE_RIGHT:
+    case KEYCODE_HOME:
+    case KEYCODE_END:
+    case KEYCODE_PAGEUP:
+    case KEYCODE_PAGEDOWN:
+    case 2:    // ctrl-B  scroll up full screen
+    case 4:    // ctrl-D  scroll down half screen
+    case 5:    // ctrl-E  scroll down one line
+    case 6:    // ctrl-F  scroll down full screen
+    case 8:    // ctrl-H  move left
+    case 0x7f: // DEL     move left
+    case 12:   // ctrl-L  redraw
+    case 18:   // ctrl-R  redraw
+    case 21:   // ctrl-U  scroll up half screen
+    case 25:   // ctrl-Y  scroll up one line
+        return true;
+    default:
+        // digits accumulate cmdcnt, '"' prefixes a register for y/d/c
+        return c > 0 && strchr("hjkl \r\n+-0$^%|wWbBeE{}gGHLMfFtT;,/?nNz\"123456789", c) != NULL;
+    }
+}
+
+// apply operator c to the selection and leave visual mode
+static void visual_operate(int c) {
+    char *lo = vi_visual_anchor, *hi = dot, *t, *p;
+    int linewise = (c == 'X' || c == 'Y' || c == 'D' || c == 'C' || c == '>' || c == '<');
+
+    if (lo > hi) {
+        t = lo;
+        lo = hi;
+        hi = t;
+    }
+    if (lo < text)
+        lo = text;
+    if (hi > end - 1)
+        hi = end - 1;
+    vi_visual = 0;
+    last_status_cksum = 0; // force status update
+
+    if (c == '>' || c == '<') { // shift the selected lines left/right
+        int li = count_lines(text, lo);   // remember what line the range starts on
+        int nlines = count_lines(lo, hi); // # of lines we are shifting
+        int allow_undo = ALLOW_UNDO;
+        int j;
+        for (p = begin_line(lo); nlines > 0; nlines--, p = next_line(p)) {
+            if (c == '<') {
+                // shift left- remove tab or tabstop spaces
+                if (*p == '\t') {
+                    p = text_hole_delete(p, p, allow_undo);
+                } else if (*p == ' ') {
+                    for (j = 0; *p == ' ' && j < tabstop; j++) {
+                        p = text_hole_delete(p, p, allow_undo);
+                        allow_undo = ALLOW_UNDO_CHAIN;
+                    }
+                }
+            } else if (p != end_line(p)) {
+                // shift right -- add tab or tabstop spaces on non-empty lines
+                p = char_insert(p, '\t', allow_undo);
+            }
+            allow_undo = ALLOW_UNDO_CHAIN;
+        }
+        dot = find_line(li); // go back to the line the selection started on
+        dot_skip_over_ws();
+    } else {
+        int yf = (c == 'y' || c == 'Y') ? YANKONLY : YANKDEL;
+        int buftype =
+            linewise ? WHOLE : (begin_line(lo) == begin_line(hi) ? PARTIAL : MULTI);
+        char* savereg = reg[YDreg]; // yank_delete() may refuse a lone newline
+        dot = yank_delete(lo, hi, buftype, yf, ALLOW_UNDO);
+        if (linewise) {
+            if (c == 'C') { // like 'cc': leave one empty line behind
+                dot = char_insert(dot, '\n', ALLOW_UNDO_CHAIN);
+                if (dot != (end - 1))
+                    dot_prev();
+            } else {
+                dot_begin();
+                dot_skip_over_ws();
+            }
+        }
+        if (reg[YDreg] != savereg)
+            yank_status(yf == YANKONLY ? "Yank" : "Delete", reg[YDreg], 1);
+        if (c == 'c' || c == 'C') {
+            cmd_mode = 1;        // start inserting, as 'c' does
+            undo_queue_commit(); // commit queue when cmd_mode changes
+        }
+    }
+    end_cmd_q(); // stop adding to q
+}
+
 //----- Execute a Vi Command -----------------------------------
 void do_cmd(int c) {
     char *p, *q, *save_dot;
@@ -85,6 +184,24 @@ void do_cmd(int c) {
     }
 
 key_cmd_mode:
+    // a pending visual selection: motions extend it, operator keys apply to
+    // it, 'v'/ESC abandon it, any other key cancels it and runs normally
+    if (vi_visual && cmd_mode == 0) {
+        if (c == 27 || c == 'v') { // abandon the selection
+            vi_visual = 0;
+            end_cmd_q();           // stop adding to q
+            last_status_cksum = 0; // force status update
+            goto dc1;
+        }
+        if (c == KEYCODE_DELETE || (c > 0 && strchr("yYdDxXcC><", c) != NULL)) {
+            visual_operate(c);
+            goto dc1;
+        }
+        if (!is_visual_motion(c)) {
+            vi_visual = 0;
+            last_status_cksum = 0; // force status update
+        }
+    }
     switch (c) {
     default: // unrecognized command
         buf[0] = c;
@@ -260,6 +377,11 @@ key_cmd_mode:
         break;
     case 'u': // u- undo last operation
         undo_pop();
+        break;
+    case 'v': // v- start a charwise visual selection ('v' again cancels it)
+        vi_visual = 1;
+        vi_visual_anchor = dot;
+        last_status_cksum = 0; // force status update
         break;
     case '$':         // $- goto end of line
     case KEYCODE_END: // Cursor Key End

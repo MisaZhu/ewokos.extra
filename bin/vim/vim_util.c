@@ -106,6 +106,9 @@ char* last_search_pattern UDATA;   // last pattern from a '/' or '?' search
 int indentcol UDATA;               // column of recently autoindent, 0 or -1
 int16_t cmd_error UDATA;
 
+int16_t vi_visual UDATA;      // 1 while a visual ('v') selection is active
+char* vi_visual_anchor UDATA; // position where 'v' was pressed
+
 // former statics
 char* edit_file_cur_line UDATA;
 int refresh_old_offset UDATA;
