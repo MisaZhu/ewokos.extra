@@ -837,7 +837,7 @@ void init_filename(char* fn) {
 void update_filename(char* fn) {
     if (fn == NULL)
         return;
-    syntax_set_file(fn); // pick .json/.rd highlighting for this file
+    syntax_set_file(fn); // pick .json/.rd/.conf/.js highlighting for this file
     if (fn != current_filename) {
         free(current_filename);
         current_filename = strdup(fn);

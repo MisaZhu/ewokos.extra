@@ -6,7 +6,8 @@
  *   Licensed under GPLv2 or later, see file LICENSE in this source tree.
  *   Adapted for Raspberry Pi, 2021 lurk101
  *
- * This version adds JSON / .rd syntax highlighting (see vim_syntax.c).
+ * This version adds JSON / .rd / .conf / .js syntax highlighting
+ * (see vim_syntax.c).
  */
 #pragma once
 
