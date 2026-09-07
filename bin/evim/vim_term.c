@@ -544,7 +544,7 @@ void redraw(int full_screen) {
 void flash(int ms) {
     standout_start();
     redraw(true);
-    proc_usleep(ms);
+    usleep(ms);
     standout_end();
     redraw(true);
 }

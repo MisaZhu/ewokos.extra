@@ -368,7 +368,7 @@ static const char* const c_types[] = {
     "bool",     "char",    "double",   "float",    "int",      "long",    "short",
     "signed",   "unsigned", "void",    "size_t",   "ssize_t",  "ptrdiff_t",
     "intptr_t", "uintptr_t", "int8_t",  "int16_t",  "int32_t",  "int64_t", "uint8_t",
-    "uint16_t", "uint32_t", "uint64_t", "ewokos_addr_t", "FILE", NULL};
+    "uint16_t", "uint32_t", "uint64_t", "intptr_t", "FILE", NULL};
 
 static const char* const c_literals[] = {"NULL", "true", "false", "EOF", NULL};
 

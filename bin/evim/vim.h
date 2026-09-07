@@ -25,22 +25,17 @@
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <ewokos_config.h>
-#include <ewoksys/proc.h>
-
-// vi cannot include <unistd.h> (libc's compat.o already defines a global
-// optind, which is why vi's own one is named vi_optind), so declare the
-// libc helpers we need here.
-// <sys/ioctl.h> is unistd-free and gives us TIOCGWINSZ / struct winsize.
-int isatty(int fd);
-int ioctl(int fd, int request, ...);
-ssize_t read(int fd, void* buf, size_t count);
+#include <unistd.h>
+#include <termios.h>
 
 #define ARRAY_SIZE(x) ((uint32_t)(sizeof(x) / sizeof((x)[0])))
 
 #define VI_VER "0.9.1-vim"
 
-#define UDATA __attribute__((section(".viudata")))
+// The EwokOS build gathered these globals into a custom ".viudata" linker
+// section. That section is meaningless on a host Mach-O/ELF build, so UDATA
+// is a no-op here.
+#define UDATA
 
 /* "Keycodes" that report an escape sequence.
  * We use something which fits into signed char,
@@ -260,6 +255,7 @@ void puts_no_eol(const char* s);
 int index_in_strings(const char* strings, const char* key);
 void* zalloc(size_t bytes);
 char* strchrnul(const char* s, int c);
+void* memrchr(const void* s, int c, size_t n); // GNU ext, absent from macOS libc
 __attribute__((__noreturn__)) void error_msg_and_die(const char* s, ...);
 char* xvsnprintf(const char* format, ...);
 void place_cursor(int row, int col);
@@ -312,13 +308,13 @@ char what_reg(void);
 void check_context(char cmd);
 char* swap_context(char* p);
 void yank_status(const char* op, const char* p, int cnt);
-ewokos_addr_t text_hole_make(char* p, int size);
+intptr_t text_hole_make(char* p, int size);
 char* text_hole_delete(char* p, char* q, int undo);
 void undo_queue_commit(void);
 void undo_push(char* src, uint32_t length, int u_type);
 void flush_undo_data(void);
 void undo_push_insert(char* p, int len, int undo);
-ewokos_addr_t string_insert(char* p, const char* s, int undo);
+intptr_t string_insert(char* p, const char* s, int undo);
 void undo_pop(void);
 void dot_left(void);
 void dot_right(void);
@@ -337,7 +333,7 @@ char* yank_delete(char* start, char* stop, int buftype, int yf, int undo);
 int file_insert(const char* fn, char* p, int initial);
 char* find_pair(char* p, const char c);
 void showmatching(char* p);
-ewokos_addr_t stupid_insert(char* p, char c);
+intptr_t stupid_insert(char* p, char c);
 size_t indent_len(char* p);
 char* char_insert(char* p, char c, int undo);
 void init_filename(char* fn);

@@ -457,7 +457,7 @@ void colon(char* buf) {
         if (q == end)
             num++;
         { // dance around potentially-reallocated text[]
-            ewokos_addr_t ofs = (ewokos_addr_t)(q - text);
+            intptr_t ofs = (intptr_t)(q - text);
             size = file_insert(fn, q, 0);
             q = text + ofs;
         }
@@ -553,7 +553,7 @@ void colon(char* buf) {
         vc4:
             found = char_search(q, F, (FORWARD << 1) | LIMITED); // search cur line only for "find"
             if (found) {
-                ewokos_addr_t bias;
+                intptr_t bias;
                 // we found the "find" pattern - delete it
                 // For undo support, the first item should not be chained
                 // This needs to be handled differently depending on

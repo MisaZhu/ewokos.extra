@@ -40,6 +40,17 @@ char* strchrnul(const char* s, int c) {
     return (char*)s;
 }
 
+// macOS libc has no memrchr() (a GNU/glibc extension). Provide a portable
+// one: scan the n bytes at s backwards for c, returning the last match or
+// NULL, matching the glibc semantics the callers rely on.
+void* memrchr(const void* s, int c, size_t n) {
+    const unsigned char* p = (const unsigned char*)s + n;
+    while (n--)
+        if (*--p == (unsigned char)c)
+            return (void*)p;
+    return NULL;
+}
+
 const char* msg_memory_exhausted = "out of memory";
 
 __attribute__((__noreturn__)) void error_msg_and_die(const char* s, ...) {

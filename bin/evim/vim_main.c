@@ -1,6 +1,41 @@
 /* vim_main.c — entry point and per-file editing loop (split from vi.c) */
 #include "vim.h"
 
+//----- POSIX terminal raw mode --------------------------------------
+// The EwokOS console handed vi unbuffered, unechoed keystrokes for free. On
+// standard POSIX the tty defaults to canonical mode (line buffered, echoing,
+// signal keys), so we must switch it to raw mode ourselves: vi needs to see
+// each key the instant it is pressed. The original settings are restored on
+// exit (both the normal path and via atexit).
+static struct termios saved_termios;
+static int termios_saved = 0;
+
+static void disable_raw_mode(void) {
+    if (termios_saved) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved_termios);
+        termios_saved = 0;
+    }
+}
+
+static void enable_raw_mode(void) {
+    if (!isatty(STDIN_FILENO))
+        return;
+    if (tcgetattr(STDIN_FILENO, &saved_termios) != 0)
+        return;
+    termios_saved = 1;
+    atexit(disable_raw_mode); // safety net: never leave the shell in raw mode
+
+    struct termios raw = saved_termios;
+    // input: no break-to-int, no CR-to-NL, no parity/strip, no XON/XOFF flow
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    // local: no echo, no canonical line editing, no extended keys, no signals
+    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    // read() returns as soon as a single byte is available
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
 void run_cmds(char* p) {
     while (p) {
         char* q = p;
@@ -120,6 +155,7 @@ void* xmalloc_open_read_close(const char* filename) {
 }
 
 int main(int argc, char** argv) {
+    enable_raw_mode(); // raw keystrokes before we probe the screen geometry
     last_modified_count = -1;
     get_screen_xy(&columns, &rows);
     /* "" but has space for 2 chars: */
@@ -165,6 +201,7 @@ int main(int argc, char** argv) {
                 edit_file(NULL); // might be NULL on 1st iteration
     }
 done:
+    disable_raw_mode(); // restore the tty before we hand the terminal back
     flush_undo_data();
     show_cursor(); // never leave the shell with an invisible cursor
     if (text)

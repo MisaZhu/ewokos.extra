@@ -1,7 +1,7 @@
 SW_ROOT_DIR=../..
 include $(SW_ROOT_DIR)/make.inc
 
-TASK = vim
+TASK = evim
 TASK_OBJS = $(ARCH)/vim_util.o \
 	$(ARCH)/vim_term.o \
 	$(ARCH)/vim_input.o \

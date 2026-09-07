@@ -182,9 +182,9 @@ void yank_status(const char* op, const char* p, int cnt) {
 // open a hole in text[]
 // might reallocate text[]! use p += text_hole_make(p, ...),
 // and be careful to not use pointers into potentially freed text[]!
-ewokos_addr_t text_hole_make(char* p, int size) // at "p", make a 'size' byte hole
+intptr_t text_hole_make(char* p, int size) // at "p", make a 'size' byte hole
 {
-    ewokos_addr_t bias = 0;
+    intptr_t bias = 0;
 
     if (size <= 0)
         return bias;
@@ -391,9 +391,9 @@ void undo_push_insert(char* p, int len, int undo) {
     }
 }
 
-ewokos_addr_t string_insert(char* p, const char* s, int undo) // insert the string at 'p'
+intptr_t string_insert(char* p, const char* s, int undo) // insert the string at 'p'
 {
-    ewokos_addr_t bias;
+    intptr_t bias;
     int i;
 
     i = strlen(s);
@@ -698,7 +698,7 @@ void showmatching(char* p) {
         save_dot = dot; // remember where we are
         dot = q;        // go to new loc
         refresh(false); // let the user see it
-        proc_usleep(1000); // give user some time
+        usleep(1000); // give user some time
         dot = save_dot; // go back to old loc
         refresh(false);
     }
@@ -706,9 +706,9 @@ void showmatching(char* p) {
 
 // might reallocate text[]! use p += stupid_insert(p, ...),
 // and be careful to not use pointers into potentially freed text[]!
-ewokos_addr_t stupid_insert(char* p, char c) // stupidly insert the char c at 'p'
+intptr_t stupid_insert(char* p, char c) // stupidly insert the char c at 'p'
 {
-    ewokos_addr_t bias;
+    intptr_t bias;
     bias = text_hole_make(p, 1);
     p += bias;
     *p = c;
