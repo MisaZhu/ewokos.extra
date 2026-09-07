@@ -30,6 +30,28 @@ void place_cursor(int row, int col) {
     puts_no_eol(cm1);
 }
 
+//----- Keep the cursor out of sight while repainting ------------
+// Every repainted row first parks the cursor at that row's first changed
+// column, so a 'v' selection spanning rows makes the visible cursor hop over
+// the screen before it comes home. Hide it for the repaint instead; both
+// xterm and consoled render through gterminal, which honours DECTCEM, and a
+// terminal that does not simply ignores it and behaves as before.
+static int cursor_hidden UDATA; // whether the cursor is hidden right now
+
+void hide_cursor(void) {
+    if (cursor_hidden)
+        return;
+    cursor_hidden = 1;
+    puts_no_eol(ESC_CURSOR_HIDE);
+}
+
+void show_cursor(void) {
+    if (!cursor_hidden)
+        return;
+    cursor_hidden = 0;
+    puts_no_eol(ESC_CURSOR_SHOW);
+}
+
 //----- Erase from cursor to end of line -----------------------
 void clear_to_eol(void) { puts_no_eol(ESC_CLEAR2EOL); }
 
@@ -235,18 +257,13 @@ static int vis_advance(uint8_t c, int co) {
     return co + 1;
 }
 
-// fill sel[0..columns-1] with the slice of the visual selection [anchor, dot]
-// that falls on the text line starting at line_start (both ends inclusive)
-static void visual_line_mask(char* line_start, uint8_t* sel) {
-    char *lo = vi_visual_anchor, *hi = dot;
+// fill sel[0..columns-1] with the columns of the text line starting at
+// line_start that fall inside [lo, hi] (both ends inclusive)
+static void visual_span_mask(char* line_start, char* lo, char* hi, uint8_t* sel) {
     char* p;
     int co = 0;
 
     memset(sel, 0, columns);
-    if (hi < lo) {
-        lo = dot;
-        hi = vi_visual_anchor;
-    }
     for (p = line_start; p < end; p++) {
         int start_co = co;
         int sc;
@@ -265,10 +282,23 @@ static void visual_line_mask(char* line_start, uint8_t* sel) {
     }
 }
 
-// force a redraw of the screen rows whose text lines intersect [a, b]:
-// a highlight change does not alter text[], so the char-only screen diff
-// in refresh() cannot see it - poison the virtual screen rows instead
-void visual_invalidate_rows(char* a, char* b) {
+// same, for the live selection [vi_visual_anchor, dot]
+static void visual_line_mask(char* line_start, uint8_t* sel) {
+    char *lo = vi_visual_anchor, *hi = dot;
+
+    if (hi < lo) {
+        lo = dot;
+        hi = vi_visual_anchor;
+    }
+    visual_span_mask(line_start, lo, hi, sel);
+}
+
+// force a redraw of the screen columns a highlight change touches in [a, b]:
+// a highlight does not alter text[], so the char-only screen diff in refresh()
+// cannot see it - poison the virtual screen instead. Only the covered columns
+// are poisoned; poisoning whole rows would repaint every line the selection
+// touches and drag the cursor from its home to column 0 on each 'v' motion.
+void visual_invalidate_span(char* a, char* b) {
     char* t;
     int li;
 
@@ -281,8 +311,19 @@ void visual_invalidate_rows(char* a, char* b) {
     }
     t = screenbegin;
     for (li = 0; li < (int)rows - 1 && t < end; li++) {
-        if (b >= t && a <= end_line(t))
-            memset(&screen[li * columns], 0xff, columns);
+        if (b >= t && a <= end_line(t)) {
+            int c0 = -1, c1 = -1, sc;
+            visual_span_mask(t, a, b, vis_sel_buf);
+            for (sc = 0; sc < (int)columns; sc++) {
+                if (vis_sel_buf[sc]) {
+                    if (c0 < 0)
+                        c0 = sc;
+                    c1 = sc;
+                }
+            }
+            if (c0 >= 0)
+                memset(&screen[li * columns + c0], 0xff, (size_t)(c1 - c0 + 1));
+        }
         t = next_line(t);
     }
 }
@@ -373,6 +414,7 @@ void refresh(int full_screen) {
         }
         // is there a change between virtual screen and out_buf
         if (changed) {
+            hide_cursor(); // the row repaint parks the cursor on this row
             // copy changed part of buffer to virtual screen
             memcpy(sp + cs, out_buf + cs, ce - cs + 1);
             place_cursor(li, cs);
@@ -383,6 +425,7 @@ void refresh(int full_screen) {
     }
 
     place_cursor(crow, ccol);
+    show_cursor(); // repaint done, the cursor belongs back on "dot"
 
     if (!keep_index)
         cindex = ccol + offset;
@@ -450,6 +493,7 @@ void redraw(int full_screen);
 void Hit_Return(void) {
     int c;
 
+    show_cursor(); // we are about to sit and wait for the user
     standout_start();
     puts_no_eol("[Hit return to continue]");
     standout_end();
@@ -469,6 +513,7 @@ void show_status_line(void) {
     }
     if (have_status_msg || ((cnt > 0 && last_status_cksum != cksum))) {
         last_status_cksum = cksum; // remember if we have seen this line
+        hide_cursor();             // the status line is drawn at the bottom row
         go_bottom_and_clear_to_eol();
         puts_no_eol(status_buffer);
         if (have_status_msg) {
@@ -479,6 +524,7 @@ void show_status_line(void) {
             have_status_msg = 0;
         }
         place_cursor(crow, ccol); // put cursor back in correct place
+        show_cursor();
     }
     fflush(stdout);
 }

@@ -68,18 +68,21 @@ void edit_file(char* fn) {
         // poll to see if there is input already waiting. if we are
         // not able to display output fast enough to keep up, skip
         // the display update until we catch up with input.
-        if (!readbuffer[0]) {
+        // A selection that just ended (ESC or an operator key) is an exception:
+        // its highlight would stay on screen as stale state until the pending
+        // keys are consumed, so redraw as soon as it goes away.
+        if (!readbuffer[0] || (vis_lo != NULL && !vi_visual)) {
             // a moved/removed selection is invisible to the char-only
-            // screen diff - force the rows it touches to redraw
+            // screen diff - force the columns it touches to redraw
             if (vi_visual) {
                 char* lo = vi_visual_anchor < dot ? vi_visual_anchor : dot;
                 char* hi = vi_visual_anchor < dot ? dot : vi_visual_anchor;
                 if (vis_lo != lo || vis_hi != hi) {
-                    visual_invalidate_rows(vis_lo, vis_hi);
-                    visual_invalidate_rows(lo, hi);
+                    visual_invalidate_span(vis_lo, vis_hi);
+                    visual_invalidate_span(lo, hi);
                 }
             } else if (vis_lo != NULL) {
-                visual_invalidate_rows(vis_lo, vis_hi); // selection just ended
+                visual_invalidate_span(vis_lo, vis_hi); // selection just ended
             }
             // no input pending - so update output
             refresh(false);
@@ -163,6 +166,7 @@ int main(int argc, char** argv) {
     }
 done:
     flush_undo_data();
+    show_cursor(); // never leave the shell with an invisible cursor
     if (text)
         free(text);
     if (screen)

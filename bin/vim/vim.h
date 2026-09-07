@@ -34,6 +34,7 @@
 // <sys/ioctl.h> is unistd-free and gives us TIOCGWINSZ / struct winsize.
 int isatty(int fd);
 int ioctl(int fd, int request, ...);
+ssize_t read(int fd, void* buf, size_t count);
 
 #define ARRAY_SIZE(x) ((uint32_t)(sizeof(x) / sizeof((x)[0])))
 
@@ -104,6 +105,9 @@ enum {
 // Cursor to given coordinate (1,1: top left)
 #define ESC_SET_CURSOR_POS ESC "[%u;%uH"
 #define ESC_SET_CURSOR_TOPLEFT ESC "[H"
+// Hide/show the cursor (VT100 DECTCEM), used while repainting
+#define ESC_CURSOR_HIDE ESC "[?25l"
+#define ESC_CURSOR_SHOW ESC "[?25h"
 
 // cmds modifying text[]
 extern const char modifying_cmds[];
@@ -259,6 +263,9 @@ char* strchrnul(const char* s, int c);
 __attribute__((__noreturn__)) void error_msg_and_die(const char* s, ...);
 char* xvsnprintf(const char* format, ...);
 void place_cursor(int row, int col);
+// keep the cursor out of sight while rows are being repainted
+void hide_cursor(void);
+void show_cursor(void);
 void clear_to_eol(void);
 void go_bottom_and_clear_to_eol(void);
 void standout_start(void);
@@ -280,9 +287,9 @@ void new_screen(int ro, int co);
 void sync_cursor(char* d, int* row, int* col);
 char* format_line(char* src /*, int li*/);
 void refresh(int full_screen);
-// force a redraw of the screen rows whose text lines intersect [a, b]
-void visual_invalidate_rows(char* a, char* b);
-int safe_poll(uint8_t* buffer);
+// force a redraw of the screen columns a highlight change touches in [a, b]
+void visual_invalidate_span(char* a, char* b);
+int safe_poll(uint8_t* buffer, int timeout);
 int read_key(char* buffer, int timeout);
 int readit(void);
 int get_one_char(void);

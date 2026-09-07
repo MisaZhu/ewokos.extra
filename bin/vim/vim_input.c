@@ -1,10 +1,32 @@
 /* vim_input.c — keyboard input handling (split from vi.c) */
 #include "vim.h"
 
-int safe_poll(uint8_t* buffer) {
-    int c = getchar();
-    *buffer = c;
-    return 1;
+/* How long to wait for the tail of an ESC sequence once its leading ESC has
+ * been seen. A terminal emits a sequence as one unit, so this only has to
+ * bridge sequences split up by a slow serial or telnet link. Keeping it short
+ * is what makes a lone ESC (leave insert mode, abandon a 'v' selection) show
+ * up at once instead of hanging until the next keypress. */
+#define ESC_SEQ_TIMEOUT_MS 50
+
+/* Read one byte from stdin into *buffer.
+ * timeout < 0 blocks for the next keypress, 0 accepts only input that is
+ * already available, > 0 waits at most that many milliseconds.
+ * Returns 1 on success, 0 when no input arrived in time, -1 on error.
+ *
+ * Only the bounded waits go through poll(): the blocking read is the one path
+ * every terminal is known to support, and a driver that reports no readiness
+ * must not turn the main key loop into a spin. */
+int safe_poll(uint8_t* buffer, int timeout) {
+    if (timeout >= 0) {
+        struct pollfd pfd;
+
+        pfd.fd = 0; // stdin
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        if (poll(&pfd, 1, timeout) <= 0)
+            return 0; // nothing available within the time limit
+    }
+    return (read(0, buffer, 1) == 1) ? 1 : -1;
 }
 
 /* Known escape sequences for cursor and function keys.
@@ -82,7 +104,7 @@ start_over:
          * When we were reading 3 bytes here, we were eating
          * "li" too, and cat was getting wrong input.
          */
-        n = safe_poll(buffer);
+        n = safe_poll(buffer, timeout);
         if (n <= 0) {
             return -1;
         }
@@ -116,7 +138,7 @@ start_over:
                  * Timeout is needed to reconnect escape sequences
                  * split up by transmission over a serial console. */
                 errno = 0;
-                if (safe_poll(buffer + n) <= 0) {
+                if (safe_poll(buffer + n, ESC_SEQ_TIMEOUT_MS) <= 0) {
                     /* No more data!
                      * Array is sorted from shortest to longest,
                      * we can't match anything later in array -
