@@ -884,7 +884,7 @@ int file_write(char* fn, char* first, char* last) {
     // but instead ftruncate() it _after_ successful write.
     // Might reduce amount of data lost on power fail etc.
     //fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC);
-    fd = open(fn, O_RDWR | O_CREAT | O_TRUNC);
+    fd = open(fn, O_RDWR | O_CREAT | O_TRUNC, 0666);
     if(fd < 0)
         return -1;
     cnt = last - first + 1;
