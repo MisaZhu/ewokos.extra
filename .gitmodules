@@ -7,3 +7,6 @@
 [submodule "mariox/mario_vm"]
 	path = mariox/mario_vm
 	url = https://github.com/misazhu/mario_vm.git
+[submodule "libs/ewebview"]
+	path = libs/ewebview
+	url = https://github.com/misazhu/ewebview
