@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Forms test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 10px 0; }
+#sum { font-size: 14px; font-weight: bold; background: #eeeeff; border: 1px solid #ccccdd; padding: 5px; margin-bottom: 10px; }
+.sec { font-size: 12px; font-weight: bold; background: #dddddd; padding: 2px 4px; margin-top: 8px; }
+.ok { font-size: 12px; color: #006600; padding: 1px 4px; }
+.bad { font-size: 12px; color: #aa0000; font-weight: bold; padding: 1px 4px; background: #ffeeee; }
+.note { font-size: 11px; color: #775500; padding: 1px 4px; background: #fffbe8; }
+.box { border: 1px solid #999999; background: #fafafa; padding: 8px; margin: 8px 0; font-size: 12px; }
+button { font-size: 13px; padding: 3px 8px; margin: 2px; }
+a { color: #003399; }
+</style>
+</head>
+<body>
+<h1>Forms: value, boolean properties, named controls, collections</h1>
+<p class="sub">js_dom.c + js_web.c. <a href="index.html">back to index</a></p>
+
+<div id="sum">running...</div>
+
+<div class="box">
+  <button id="bFill">fill the text field</button>
+  <button id="bToggle">toggle the checkbox</button>
+  <button id="bDisable">disable / enable the button below</button>
+  <button id="bTarget">target button</button>
+  <span id="readout">readout: (idle)</span>
+</div>
+
+<form id="f1" action="/submit" method="post">
+  <label id="lab" for="txt">Text</label>
+  <input id="txt" type="text" name="textfield" value="initial" placeholder="type here">
+
+  <input id="chk" type="checkbox" name="agree" checked>
+  <input id="unchk" type="checkbox" name="nope">
+
+  <input id="dis" type="text" name="locked" value="x" disabled>
+  <input id="ro" type="text" name="readonly" value="y" readonly>
+
+  <input id="r1" type="radio" name="color" value="red">
+  <input id="r2" type="radio" name="color" value="green" checked>
+  <input id="r3" type="radio" name="color" value="blue">
+
+  <textarea id="ta" name="notes">some text</textarea>
+
+  <select id="sel" name="pick">
+    <option id="oa" value="a">A</option>
+    <option id="ob" value="b" selected>B</option>
+    <option id="oc" value="c">C</option>
+  </select>
+
+  <img id="im" src="pic.png" alt="a picture" width="32" height="16">
+  <input id="hid" type="hidden" name="token" value="abc123">
+  <div id="host"></div>
+</form>
+
+<div id="log"></div>
+
+<script>
+/* ---------------- assertion harness (duplicated per page) ---------------- */
+var T_PASS = 0, T_FAIL = 0;
+function T_sum() {
+  var s = document.getElementById("sum");
+  if (s) s.textContent = "PASS " + T_PASS + "    FAIL " + T_FAIL + "    TOTAL " + (T_PASS + T_FAIL);
+}
+function T_line(text, cls) {
+  var host = document.getElementById("log");
+  if (!host) return;
+  var d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  host.appendChild(d);
+}
+function T_sec(t) { T_line("== " + t + " ==", "sec"); }
+function T_note(t) { T_line("note: " + t, "note"); }
+function T(name, cond, detail) {
+  var msg = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "   [" + detail + "]" : "");
+  if (cond) { T_PASS++; T_line(msg, "ok"); } else { T_FAIL++; T_line(msg, "bad"); }
+  console.log("TEST " + (cond ? "PASS" : "FAIL") + " forms: " + name + (detail ? " [" + detail + "]" : ""));
+  T_sum();
+}
+function T_eq(name, got, want) { T(name, got === want, "got=" + S(got) + " want=" + S(want)); }
+function T_type(name, v, t) { T(name, typeof v === t, "typeof=" + (typeof v) + " want=" + t); }
+function S(v) { return (v === null) ? "null" : ((v === undefined) ? "undefined" : String(v)); }
+function byId(id) { return document.getElementById(id); }
+
+/* The fixture is fully parsed before any script runs (BUILD_CREATE_DOC precedes
+   BUILD_RUN_JS), so every control below the <script> is already reachable. */
+T_sec("controls resolve");
+var txt = byId("txt"), chk = byId("chk"), unchk = byId("unchk");
+var dis = byId("dis"), ro = byId("ro"), ta = byId("ta"), sel = byId("sel");
+var im = byId("im"), lab = byId("lab"), f1 = byId("f1"), hid = byId("hid");
+T("text input", txt !== null);
+T("checkbox", chk !== null);
+T("textarea", ta !== null);
+T("select", sel !== null);
+T("img", im !== null);
+T("label", lab !== null);
+T("form", f1 !== null);
+
+/* ------------------------------------------------------------------ */
+T_sec("attribute-reflected string properties");
+/* id/src/href/alt/title/type/name/value/placeholder/htmlFor/width/height/
+   rel/action/method/lang are plain reflections of the matching attribute, so
+   an absent one reads as "" and never null. */
+T_eq("input.value from source", txt.value, "initial");
+T_eq("input.type", txt.type, "text");
+T_eq("input.name", txt.name, "textfield");
+T_eq("input.placeholder", txt.placeholder, "type here");
+T_eq("input.id", txt.id, "txt");
+T_eq("a missing property reads as an empty string", unchk.placeholder, "");
+T_eq("checkbox value defaults to empty here", unchk.value, "");
+T_eq("img.src", im.src, "pic.png");
+T_eq("img.alt", im.alt, "a picture");
+T_eq("img.width", im.width, "32");
+T_eq("img.height", im.height, "16");
+T_eq("label.htmlFor reflects the for attribute", lab.htmlFor, "txt");
+T_eq("form.action", f1.action, "/submit");
+T_eq("form.method", f1.method, "post");
+T_eq("hidden input value", hid.value, "abc123");
+T_eq("hidden input type", hid.type, "hidden");
+
+T_sec("writing a string property writes the attribute");
+txt.value = "changed";
+T_eq("value reads back", txt.value, "changed");
+T_eq("value is visible through getAttribute", txt.getAttribute("value"), "changed");
+txt.setAttribute("value", "via-attr");
+T_eq("setAttribute is visible through the property", txt.value, "via-attr");
+txt.placeholder = "new hint";
+T_eq("placeholder round-trip", txt.getAttribute("placeholder"), "new hint");
+lab.htmlFor = "chk";
+T_eq("htmlFor writes the for attribute", lab.getAttribute("for"), "chk");
+lab.htmlFor = "txt";
+im.alt = "another";
+T_eq("alt round-trip", im.getAttribute("alt"), "another");
+
+/* ------------------------------------------------------------------ */
+T_sec("boolean properties");
+/* An HTML boolean attribute is true by PRESENCE. Setting one writes
+   attr="attr"; clearing it removes the attribute outright, because writing
+   attr="false" would still read back as present. */
+T_eq("checked from source (valueless attribute)", chk.checked, true);
+T_eq("absent checked is false", unchk.checked, false);
+T_eq("disabled from source", dis.disabled, true);
+T_eq("absent disabled is false", txt.disabled, false);
+T_eq("readOnly from source", ro.readOnly, true);
+T_eq("absent readOnly is false", txt.readOnly, false);
+T_eq("selected option from source", byId("ob").selected, true);
+T_eq("unselected option is false", byId("oa").selected, false);
+T_eq("absent multiple is false", sel.multiple, false);
+T_eq("absent hidden is false", txt.hidden, false);
+
+chk.checked = false;
+T_eq("clearing checked flips the property", chk.checked, false);
+T_eq("clearing checked removes the attribute", chk.hasAttribute("checked"), false);
+chk.checked = true;
+T_eq("re-setting checked flips it back", chk.checked, true);
+T_eq("re-setting checked restores the attribute", chk.getAttribute("checked"), "checked");
+unchk.disabled = true;
+T_eq("setting disabled on a clean element", unchk.disabled, true);
+T_eq("it wrote disabled=\"disabled\"", unchk.getAttribute("disabled"), "disabled");
+unchk.disabled = false;
+T_eq("clearing it again", unchk.disabled, false);
+T_eq("the attribute is gone", unchk.hasAttribute("disabled"), false);
+txt.readOnly = true;
+T_eq("readOnly set", txt.readOnly, true);
+T_eq("readOnly wrote the lower-case attribute", txt.getAttribute("readonly"), "readonly");
+txt.readOnly = false;
+
+/* ------------------------------------------------------------------ */
+T_sec("attribute names are case-insensitive");
+/* litehtml stores every attribute key lower-cased, so the lookup has to be
+   folded the same way. Before that was fixed set_attr() and get_attr()
+   disagreed and a mixed-case round trip silently lost the value. */
+txt.setAttribute("readOnly", "yes");
+T_eq("setAttribute with a mixed-case name is readable lower-case",
+     txt.getAttribute("readonly"), "yes");
+T_eq("getAttribute with the same mixed-case name finds it",
+     txt.getAttribute("readOnly"), "yes");
+T_eq("hasAttribute is case-insensitive too", txt.hasAttribute("READONLY"), true);
+T_eq("and the reflected property agrees", txt.readOnly, true);
+txt.removeAttribute("ReadOnly");
+T_eq("removeAttribute with a mixed-case name removes it",
+     txt.hasAttribute("readonly"), false);
+T_eq("the property follows", txt.readOnly, false);
+/* An attribute written in upper case in the markup is stored lower-cased by the
+   parser, so both spellings must reach it. */
+var dx = byId("datax");
+T("an upper-case attribute in the source resolves", dx !== null);
+if (dx !== null) {
+  T_eq("getAttribute with the source spelling", dx.getAttribute("DATA-K"), "v");
+  T_eq("getAttribute with the stored spelling", dx.getAttribute("data-k"), "v");
+}
+
+/* ------------------------------------------------------------------ */
+T_sec("getElementsByName");
+T_type("document.getElementsByName", document.getElementsByName, "function");
+var colors = document.getElementsByName("color");
+T_eq("found the three radios", colors.length, 3);
+var vals = [];
+for (var i = 0; i < colors.length; i++) vals.push(colors[i].value);
+vals.sort();
+T_eq("each carries its own value", vals.join(","), "blue,green,red");
+var checkedCount = 0, checkedVal = "";
+for (var j = 0; j < colors.length; j++) {
+  if (colors[j].checked) { checkedCount++; checkedVal = colors[j].value; }
+}
+T_eq("exactly one radio is checked", checkedCount, 1);
+T_eq("the checked one is the one marked in the source", checkedVal, "green");
+T_eq("a name nobody uses gives an empty list",
+     document.getElementsByName("nosuchname").length, 0);
+T_eq("getElementsByName matches only the name attribute",
+     document.getElementsByName("textfield").length, 1);
+T("changing a name moves the element between lists", (function() {
+  var before = document.getElementsByName("color").length;
+  colors[0].name = "shade";
+  var mid = document.getElementsByName("color").length;
+  var shade = document.getElementsByName("shade").length;
+  colors[0].name = "color";
+  var after = document.getElementsByName("color").length;
+  return before === 3 && mid === 2 && shade === 1 && after === 3;
+})(), "");
+
+/* ------------------------------------------------------------------ */
+T_sec("form and document collections");
+T_eq("document.forms has one entry", document.forms.length, 1);
+T_eq("document.forms[0] is the form", document.forms[0].id, "f1");
+T_eq("form.tagName is upper case", f1.tagName, "FORM");
+T_eq("input.tagName is upper case", txt.tagName, "INPUT");
+T_eq("the form's action property", document.forms[0].action, "/submit");
+T("getElementsByTagName finds the inputs",
+  document.getElementsByTagName("input").length >= 9,
+  S(document.getElementsByTagName("input").length));
+T_eq("getElementsByTagName is case-insensitive",
+     document.getElementsByTagName("INPUT").length,
+     document.getElementsByTagName("input").length);
+/* A form's own controls are reachable by a scoped query. */
+T("scoped querySelectorAll inside the form",
+  f1.querySelectorAll("input").length >= 9, S(f1.querySelectorAll("input").length));
+T_eq("scoped getElementsByName-equivalent via attribute selector",
+     f1.querySelectorAll("[name='color']").length, 3);
+
+/* ------------------------------------------------------------------ */
+T_sec("textarea and select (documented gaps)");
+/* <textarea> keeps its text in a child text node, not in a value attribute,
+   and this bridge's .value is a pure attribute reflection. So .value reads ""
+   while the text is reachable through textContent - the opposite of the DOM,
+   which defines textarea.value as the child text. */
+T_eq("textarea.value is the attribute, which is absent", ta.value, "");
+T_eq("textContent is how to read a textarea here", ta.textContent, "some text");
+T_note("textarea.value does not mirror the child text; use textContent.");
+ta.value = "written";
+T_eq("writing textarea.value still round-trips as an attribute", ta.value, "written");
+T_eq("and did not disturb the text node", ta.textContent, "some text");
+ta.removeAttribute("value");
+
+/* <select> is the same story: .value is the attribute, not the chosen option.
+   The selection is reachable through the option's own selected property. */
+T_eq("select.value is the attribute, which is absent", sel.value, "");
+T_eq("the selected option is findable", byId("ob").selected, true);
+T_eq("its value is readable", byId("ob").value, "b");
+T_note("select.value does not report the chosen option; query option[selected].");
+T_eq("select.name still works", sel.name, "pick");
+T("options are reachable by tag", sel.getElementsByTagName("option").length === 3,
+  S(sel.getElementsByTagName("option").length));
+byId("oa").selected = true;
+byId("ob").selected = false;
+T_eq("selected can be moved between options (a)", byId("oa").selected, true);
+T_eq("selected can be moved between options (b)", byId("ob").selected, false);
+byId("ob").selected = true;
+byId("oa").selected = false;
+
+/* ------------------------------------------------------------------ */
+T_sec("focus / blur");
+/* el_input only draws the field - no caret, no text state, and its on_click()
+   is empty - so focus() reaches the embedder and is accepted but ignored, and
+   blur() is a no-op in the bridge. Neither is observable; both must not throw. */
+T_type("element.focus", txt.focus, "function");
+T_type("element.blur", txt.blur, "function");
+txt.focus();
+txt.blur();
+T("focus() and blur() are callable", true);
+T_eq("document.hasFocus()", document.hasFocus(), true);
+T_eq("activeElement stays body (no focus tracking)",
+     document.activeElement !== null && document.activeElement.tagName, "BODY");
+
+/* ------------------------------------------------------------------ */
+T_sec("creating controls at runtime");
+/* create_element lower-cases the tag, so "INPUT" and "input" build the same
+   thing, and a fresh control behaves exactly like a parsed one. */
+var made = document.createElement("input");
+made.type = "text";
+made.name = "created";
+made.value = "born";
+made.id = "madeInput";
+byId("host").appendChild(made);
+var back = byId("madeInput");
+T("the created input is in the document", back !== null);
+if (back !== null) {
+  T_eq("created tagName", back.tagName, "INPUT");
+  T_eq("created type", back.type, "text");
+  T_eq("created value", back.value, "born");
+  T_eq("created name is findable", document.getElementsByName("created").length, 1);
+  T_eq("created disabled defaults false", back.disabled, false);
+  back.checked = true;
+  T_eq("a created element takes boolean properties", back.getAttribute("checked"), "checked");
+  back.remove();
+  T_eq("and can be removed again", byId("madeInput"), null);
+}
+var up = document.createElement("INPUT");
+T_eq("createElement is case-insensitive", up.tagName, "INPUT");
+
+/* ------------------------------------------------------------------ */
+T_sec("interactive");
+function readout(s) { byId("readout").textContent = "readout: " + s; }
+byId("bFill").addEventListener("click", function() {
+  txt.value = "filled at " + Date.now();
+  readout("value=" + txt.value);
+  T("button wrote the text field", txt.value.indexOf("filled at ") === 0, txt.value);
+});
+byId("bToggle").addEventListener("click", function() {
+  chk.checked = !chk.checked;
+  readout("checked=" + chk.checked);
+  T_eq("button toggled the checkbox", chk.checked, chk.hasAttribute("checked"));
+});
+byId("bDisable").addEventListener("click", function() {
+  var t = byId("bTarget");
+  t.disabled = !t.disabled;
+  readout("target disabled=" + t.disabled);
+  T_eq("button toggled disabled", t.disabled, t.hasAttribute("disabled"));
+});
+
+T_sec("done");
+T_line("Forms test finished: " + T_PASS + " passed, " + T_FAIL + " failed.",
+       T_FAIL === 0 ? "ok" : "bad");
+console.log("TEST FORMS-SUMMARY pass=" + T_PASS + " fail=" + T_FAIL);
+</script>
+
+<div id="datax" DATA-K="v">upper-case attribute in source</div>
+</body>
+</html>

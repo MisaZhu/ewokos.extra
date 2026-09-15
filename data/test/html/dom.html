@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>DOM test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 10px 0; }
+#sum { font-size: 14px; font-weight: bold; background: #eeeeff; border: 1px solid #ccccdd; padding: 5px; margin-bottom: 10px; }
+.sec { font-size: 12px; font-weight: bold; background: #dddddd; padding: 2px 4px; margin-top: 8px; }
+.ok { font-size: 12px; color: #006600; padding: 1px 4px; }
+.bad { font-size: 12px; color: #aa0000; font-weight: bold; padding: 1px 4px; background: #ffeeee; }
+.fixture { border: 1px solid #999999; background: #fafafa; padding: 6px; margin: 8px 0; font-size: 12px; }
+.hi { background: #ffffcc; }
+.gone { display: none; }
+a { color: #003399; }
+</style>
+</head>
+<body>
+<h1>DOM: query, traversal, mutation, style</h1>
+<p class="sub">js_dom.c against litehtml. <a href="index.html">back to index</a></p>
+
+<div id="sum">running...</div>
+
+<!-- Fixture the tests query and mutate. Kept deliberately small and static so
+     every expectation below is a hard-coded constant rather than a guess. -->
+<div id="fixture" class="fixture">
+  <p id="p1" class="item hi" data-k="one">first paragraph</p>
+  <p id="p2" class="item" data-k="two">second paragraph</p>
+  <div id="nest"><span id="s1">span one</span><span id="s2">span two</span></div>
+  <a id="lnk" href="index.html" title="index page">index</a>
+  <ul id="list"><li>a</li><li>b</li><li>c</li></ul>
+</div>
+
+<div id="log"></div>
+
+<script>
+/* ---------------- assertion harness (duplicated per page: extract_scripts()
+   drops <script src=...>, so nothing here can live in a shared file) -------- */
+var T_PASS = 0, T_FAIL = 0;
+function T_sum() {
+  var s = document.getElementById("sum");
+  if (s) s.textContent = "PASS " + T_PASS + "    FAIL " + T_FAIL + "    TOTAL " + (T_PASS + T_FAIL);
+}
+function T_line(text, cls) {
+  var host = document.getElementById("log");
+  if (!host) return;
+  var d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  host.appendChild(d);
+}
+function T_sec(t) { T_line("== " + t + " ==", "sec"); }
+function T(name, cond, detail) {
+  var msg = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "   [" + detail + "]" : "");
+  if (cond) { T_PASS++; T_line(msg, "ok"); } else { T_FAIL++; T_line(msg, "bad"); }
+  console.log("TEST " + (cond ? "PASS" : "FAIL") + " dom: " + name + (detail ? " [" + detail + "]" : ""));
+  T_sum();
+}
+function T_eq(name, got, want) { T(name, got === want, "got=" + S(got) + " want=" + S(want)); }
+function S(v) { return (v === null) ? "null" : ((v === undefined) ? "undefined" : String(v)); }
+function T_type(name, v, t) { T(name, typeof v === t, "typeof=" + (typeof v) + " want=" + t); }
+
+/* ------------------------------------------------------------------ */
+T_sec("document accessors");
+T_eq("document.title", document.title, "DOM test");
+T("document.body is an element", document.body !== null && document.body.tagName === "BODY", S(document.body && document.body.tagName));
+T("document.head exists", document.head !== null, S(document.head && document.head.tagName));
+T("document.documentElement", document.documentElement !== null, S(document.documentElement && document.documentElement.tagName));
+T("document.readyState", document.readyState === "complete" || document.readyState === "interactive", S(document.readyState));
+T_type("document.URL is string", document.URL, "string");
+T_eq("document.characterSet", document.characterSet, "UTF-8");
+T("document.compatMode", document.compatMode === "CSS1Compat" || document.compatMode === "BackCompat", S(document.compatMode));
+T_eq("document.visibilityState", document.visibilityState, "visible");
+T_eq("document.hidden", document.hidden, false);
+T("document.getElementById is a function", typeof document.getElementById === "function", typeof document.getElementById);
+
+T_sec("getElementById");
+var fx = document.getElementById("fixture");
+T("found #fixture", fx !== null);
+T_eq("missing id returns null", document.getElementById("nope-not-here"), null);
+T("document.body via getElementById('body')", document.getElementById("body") !== null);
+
+T_sec("querySelector / querySelectorAll");
+T_eq("qs by id", document.querySelector("#p1") !== null && document.querySelector("#p1").id, "p1");
+T_eq("qs by class", document.querySelector(".item") !== null && document.querySelector(".item").id, "p1");
+T_eq("qs by tag", document.querySelector("li") !== null && document.querySelector("li").textContent, "a");
+T_eq("qs by tag.class", document.querySelector("p.hi").id, "p1");
+T_eq("qs descendant", document.querySelector("#nest span").id, "s1");
+T_eq("qs attribute", document.querySelector("[data-k='two']").id, "p2");
+T_eq("qs comma group", document.querySelector("#s2, #lnk").id, "s2");
+T_eq("qs no match -> null", document.querySelector(".does-not-exist"), null);
+
+var items = document.querySelectorAll(".item");
+T_eq("qsa length", items.length, 2);
+T_eq("qsa item(0)", items.item(0).id, "p1");
+T_eq("qsa[1]", items[1].id, "p2");
+T_eq("qsa tag li", document.querySelectorAll("#list li").length, 3);
+T_eq("qsa no match length", document.querySelectorAll(".nothing-here").length, 0);
+
+T_sec("scoped queries (element.querySelector)");
+var nest = document.getElementById("nest");
+T_eq("el.querySelector stays inside", nest.querySelector("span").id, "s1");
+T_eq("el.querySelectorAll count", nest.querySelectorAll("span").length, 2);
+T_eq("el.querySelector cannot escape", nest.querySelector("#p1"), null);
+
+T_sec("getElementsByTagName / getElementsByClassName");
+T_eq("document.getElementsByTagName('li')", document.getElementsByTagName("li").length, 3);
+T_eq("scoped getElementsByTagName", fx.getElementsByTagName("span").length, 2);
+T_eq("document.getElementsByClassName('item')", document.getElementsByClassName("item").length, 2);
+T_eq("scoped getElementsByClassName", fx.getElementsByClassName("hi").length, 1);
+
+T_sec("tree walking");
+var p1 = document.getElementById("p1");
+var p2 = document.getElementById("p2");
+T_eq("parentNode", p1.parentNode.id, "fixture");
+T_eq("parentElement", p1.parentElement.id, "fixture");
+T_eq("childElementCount", fx.childElementCount, 5);
+T_eq("children.length", fx.children.length, 5);
+T_eq("childNodes.length >= children.length", fx.childNodes.length >= fx.children.length, true);
+T_eq("firstElementChild", fx.firstElementChild.id, "p1");
+T_eq("lastElementChild", fx.lastElementChild.id, "list");
+T("firstChild not null", fx.firstChild !== null);
+T("lastChild not null", fx.lastChild !== null);
+T_eq("nextElementSibling", p1.nextElementSibling.id, "p2");
+T_eq("previousElementSibling", p2.previousElementSibling.id, "p1");
+T("nextSibling present", p1.nextSibling !== null);
+T_eq("body.parentNode is html", document.body.parentNode.tagName, "HTML");
+T_eq("contains(descendant)", fx.contains(p1), true);
+T_eq("contains(self)", fx.contains(fx), true);
+T_eq("contains(other)", fx.contains(document.getElementById("sum")), false);
+T_eq("document.contains", document.contains(fx), true);
+
+T_sec("matches / closest");
+T_eq("matches('#p1')", p1.matches("#p1"), true);
+T_eq("matches('.item.hi')", p1.matches(".item.hi"), true);
+T_eq("matches('.nope')", p1.matches(".nope"), false);
+T_eq("closest('.fixture')", p1.closest(".fixture").id, "fixture");
+T_eq("closest('body')", p1.closest("body").tagName, "BODY");
+T_eq("closest(self)", p1.closest("#p1").id, "p1");
+
+T_sec("attributes");
+T_eq("getAttribute", p1.getAttribute("data-k"), "one");
+p1.setAttribute("data-k", "ONE");
+T_eq("setAttribute round-trip", p1.getAttribute("data-k"), "ONE");
+T_eq("hasAttribute true", p1.hasAttribute("data-k"), true);
+T_eq("hasAttribute false", p1.hasAttribute("data-zzz"), false);
+p1.setAttribute("data-tmp", "x");
+p1.removeAttribute("data-tmp");
+T_eq("removeAttribute", p1.hasAttribute("data-tmp"), false);
+T_eq("getAttribute missing -> null", p1.getAttribute("data-zzz"), null);
+T_eq("id property", p1.id, "p1");
+p1.id = "p1";
+T_eq("className property", p1.className, "item hi");
+T_eq("href property", document.getElementById("lnk").href, "index.html");
+T_eq("title property", document.getElementById("lnk").title, "index page");
+T_eq("tagName is upper case", p1.tagName, "P");
+T_eq("nodeName mirrors tagName", p1.nodeName, "P");
+
+T_sec("text content");
+T_eq("textContent get", p2.textContent, "second paragraph");
+p2.textContent = "replaced text";
+T_eq("textContent set", p2.textContent, "replaced text");
+T_eq("textContent wiped children", p2.childElementCount, 0);
+p2.textContent = "second paragraph";
+var s1 = document.getElementById("s1");
+T_eq("nested textContent", nest.textContent, "span onespan two");
+T_type("innerText getter", s1.innerText, "string");
+s1.innerText = "span 1";
+T_eq("innerText set", s1.textContent, "span 1");
+s1.textContent = "span one";
+T_type("innerHTML getter", p1.innerHTML, "string");
+p1.innerHTML = "first <b>paragraph</b>";
+/* Documented MVP: litehtml has no fragment parser, so innerHTML= strips tags. */
+T_eq("innerHTML set strips tags (MVP)", p1.textContent, "first paragraph");
+
+T_sec("classList");
+var cl = p2.classList;
+T_eq("classList.length", cl.length, 1);
+T_eq("classList.contains", cl.contains("item"), true);
+cl.add("hi");
+T_eq("add", p2.className, "item hi");
+T_eq("contains after add", cl.contains("hi"), true);
+cl.add("extra", "more");
+T_eq("add multiple", cl.length, 4);
+cl.remove("extra");
+T_eq("remove", cl.contains("extra"), false);
+T_eq("toggle on", cl.toggle("tgl"), true);
+T_eq("toggle off", cl.toggle("tgl"), false);
+T_eq("toggle force true", cl.toggle("forced", true), true);
+T_eq("toggle force false", cl.toggle("forced", false), false);
+T_eq("replace", cl.replace("more", "many"), true);
+T_eq("replace took effect", cl.contains("many"), true);
+T_eq("item(0)", cl.item(0), "item");
+cl.value = "item clean";
+T_eq("classList.value setter", p2.className, "item clean");
+T_eq("classList.toString", String(cl), "item clean");
+p2.className = "item";
+
+T_sec("inline style");
+var st = p2.style;
+st.color = "#ff0000";
+T_eq("style.color camelCase", st.color, "#ff0000");
+st.setProperty("background-color", "#00ff00");
+T_eq("setProperty/getPropertyValue", st.getPropertyValue("background-color"), "#00ff00");
+T_eq("style attribute reflects it", p2.getAttribute("style").indexOf("background-color") >= 0, true);
+T("style.length > 0", st.length > 0, S(st.length));
+T_type("style.item(0)", st.item(0), "string");
+st.backgroundColor = "#0000ff";
+T_eq("camelCase overwrites dashed", st.getPropertyValue("background-color"), "#0000ff");
+st.removeProperty("background-color");
+T_eq("removeProperty", st.getPropertyValue("background-color"), "");
+T_eq("cssText is a string", typeof st.cssText, "string");
+st.cssText = "color: #123456; font-size: 15px";
+T_eq("cssText setter -> color", st.color, "#123456");
+T_eq("cssText setter -> fontSize", st.fontSize, "15px");
+st.display = "none";
+T_eq("style.display", st.display, "none");
+st.display = "block";
+p2.style.color = "";
+p2.style.fontSize = "";
+
+T_sec("getComputedStyle");
+var cs = window.getComputedStyle(p1, null);
+T("getComputedStyle returns an object", cs !== null && cs !== undefined, S(cs));
+if (cs) {
+  T_type("computed color", cs.color, "string");
+  T_type("computed display", cs.display, "string");
+  T_type("getPropertyValue", cs.getPropertyValue("font-size"), "string");
+}
+
+T_sec("geometry");
+var r = fx.getBoundingClientRect();
+T("getBoundingClientRect returns an object", r !== null && r !== undefined, S(r));
+if (r) {
+  T_type("rect.width", r.width, "number");
+  T_type("rect.height", r.height, "number");
+  T_type("rect.left", r.left, "number");
+  T_type("rect.top", r.top, "number");
+  T("rect has positive size after layout", r.width > 0 && r.height > 0, r.width + "x" + r.height);
+  T_eq("rect.right == left + width", Math.round(r.right), Math.round(r.left + r.width));
+  T_eq("rect.bottom == top + height", Math.round(r.bottom), Math.round(r.top + r.height));
+}
+T_type("offsetWidth", fx.offsetWidth, "number");
+T_type("offsetHeight", fx.offsetHeight, "number");
+T_type("offsetLeft", fx.offsetLeft, "number");
+T_type("offsetTop", fx.offsetTop, "number");
+T_type("clientWidth", fx.clientWidth, "number");
+T_type("clientHeight", fx.clientHeight, "number");
+T_type("scrollWidth", fx.scrollWidth, "number");
+T_type("scrollHeight", fx.scrollHeight, "number");
+T("offsetHeight > 0", fx.offsetHeight > 0, S(fx.offsetHeight));
+T_type("window.innerWidth", window.innerWidth, "number");
+T_type("window.innerHeight", window.innerHeight, "number");
+T_type("document.body.offsetHeight", document.body.offsetHeight, "number");
+
+T_sec("mutation: create / append / insert / replace / remove");
+var made = document.createElement("p");
+T_eq("createElement tagName", made.tagName, "P");
+made.id = "made";
+made.textContent = "created node";
+made.className = "item";
+fx.appendChild(made);
+T_eq("appendChild grew the parent", fx.childElementCount, 6);
+T_eq("appendChild is the last child", fx.lastElementChild.id, "made");
+T_eq("appended node is queryable", document.getElementById("made") !== null, true);
+T_eq("appended text survives", made.textContent, "created node");
+
+var ins = document.createElement("p");
+ins.id = "ins";
+ins.textContent = "inserted node";
+fx.insertBefore(ins, made);
+T_eq("insertBefore position", fx.lastElementChild.previousElementSibling.id, "ins");
+T_eq("insertBefore grew the parent", fx.childElementCount, 7);
+
+var txt = document.createTextNode("bare text node");
+T("createTextNode returns a node", txt !== null);
+made.appendChild(txt);
+T_eq("text node lands in textContent", made.textContent.indexOf("bare text node") >= 0, true);
+
+var rep = document.createElement("p");
+rep.id = "rep";
+rep.textContent = "replacement";
+fx.replaceChild(rep, ins);
+T_eq("replaceChild swapped in", document.getElementById("rep") !== null, true);
+T_eq("replaceChild swapped out", document.getElementById("ins"), null);
+T_eq("replaceChild kept the count", fx.childElementCount, 7);
+
+fx.removeChild(rep);
+T_eq("removeChild dropped it", document.getElementById("rep"), null);
+T_eq("removeChild shrank the parent", fx.childElementCount, 6);
+made.remove();
+T_eq("element.remove()", document.getElementById("made"), null);
+T_eq("remove() shrank the parent", fx.childElementCount, 5);
+
+/* insertBefore with a null reference must behave like appendChild. */
+var tail = document.createElement("p");
+tail.id = "tail";
+tail.textContent = "appended via insertBefore(null)";
+fx.insertBefore(tail, null);
+T_eq("insertBefore(node, null) appends", fx.lastElementChild.id, "tail");
+tail.remove();
+
+/* Moving an existing node: appendChild must relocate, not duplicate it. */
+var before = fx.childElementCount;
+fx.appendChild(p1);
+T_eq("appendChild moves an existing node", fx.childElementCount, before);
+T_eq("moved node is now last", fx.lastElementChild.id, "p1");
+fx.insertBefore(p1, fx.firstChild);
+
+T_sec("mutation reflected in rendering");
+var paint = document.createElement("div");
+paint.id = "paint";
+paint.className = "hi";
+paint.textContent = "this line was added by JavaScript";
+document.body.appendChild(paint);
+T("appended to body", document.getElementById("paint") !== null);
+T("appended node has layout", paint.offsetHeight >= 0, S(paint.offsetHeight));
+
+T_sec("done");
+T_line("DOM test finished: " + T_PASS + " passed, " + T_FAIL + " failed.", T_FAIL === 0 ? "ok" : "bad");
+console.log("TEST DOM-SUMMARY pass=" + T_PASS + " fail=" + T_FAIL);
+</script>
+</body>
+</html>

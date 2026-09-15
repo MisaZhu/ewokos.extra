@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Storage test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 10px 0; }
+#sum { font-size: 14px; font-weight: bold; background: #eeeeff; border: 1px solid #ccccdd; padding: 5px; margin-bottom: 10px; }
+.sec { font-size: 12px; font-weight: bold; background: #dddddd; padding: 2px 4px; margin-top: 8px; }
+.ok { font-size: 12px; color: #006600; padding: 1px 4px; }
+.bad { font-size: 12px; color: #aa0000; font-weight: bold; padding: 1px 4px; background: #ffeeee; }
+.box { border: 1px solid #999999; background: #fafafa; padding: 8px; margin: 8px 0; font-size: 12px; }
+button { font-size: 13px; padding: 3px 8px; margin: 2px; }
+a { color: #003399; }
+</style>
+</head>
+<body>
+<h1>Web Storage and cookies</h1>
+<p class="sub">js_web.c. Both stores live on the widget, not the VM, so they survive a navigation;
+cookies live in the browser-wide store keyed by this document's site, so they also reach its HTTP requests.
+<a href="index.html">back to index</a></p>
+
+<div id="sum">running...</div>
+
+<div class="box">
+  <div id="visits">visit counter: reading...</div>
+  <button id="again">reload this page (location.reload)</button>
+  <button id="wipe">clear both stores and the cookie jar</button>
+  <div id="jar">cookie jar: (reading)</div>
+</div>
+
+<div id="log"></div>
+
+<script>
+/* ---------------- assertion harness (duplicated per page) ---------------- */
+var T_PASS = 0, T_FAIL = 0;
+function T_sum() {
+  var s = document.getElementById("sum");
+  if (s) s.textContent = "PASS " + T_PASS + "    FAIL " + T_FAIL + "    TOTAL " + (T_PASS + T_FAIL);
+}
+function T_line(text, cls) {
+  var host = document.getElementById("log");
+  if (!host) return;
+  var d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  host.appendChild(d);
+}
+function T_sec(t) { T_line("== " + t + " ==", "sec"); }
+function T(name, cond, detail) {
+  var msg = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "   [" + detail + "]" : "");
+  if (cond) { T_PASS++; T_line(msg, "ok"); } else { T_FAIL++; T_line(msg, "bad"); }
+  console.log("TEST " + (cond ? "PASS" : "FAIL") + " storage: " + name + (detail ? " [" + detail + "]" : ""));
+  T_sum();
+}
+function T_eq(name, got, want) { T(name, got === want, "got=" + S(got) + " want=" + S(want)); }
+function T_type(name, v, t) { T(name, typeof v === t, "typeof=" + (typeof v) + " want=" + t); }
+function S(v) { return (v === null) ? "null" : ((v === undefined) ? "undefined" : String(v)); }
+
+/* ------------------------------------------------------------------ */
+T_sec("Storage surface");
+T("localStorage exists", localStorage !== null && localStorage !== undefined, typeof localStorage);
+T("sessionStorage exists", sessionStorage !== null && sessionStorage !== undefined, typeof sessionStorage);
+T("window.localStorage alias", window.localStorage !== null && window.localStorage !== undefined);
+T_eq("the two stores are different objects", localStorage === sessionStorage, false);
+T_type("getItem", localStorage.getItem, "function");
+T_type("setItem", localStorage.setItem, "function");
+T_type("removeItem", localStorage.removeItem, "function");
+T_type("clear", localStorage.clear, "function");
+T_type("key", localStorage.key, "function");
+T_type("length", localStorage.length, "number");
+
+T_sec("setItem / getItem");
+localStorage.clear();
+T_eq("length after clear", localStorage.length, 0);
+T_eq("getItem on an empty store", localStorage.getItem("nothing"), null);
+localStorage.setItem("alpha", "one");
+T_eq("round-trip", localStorage.getItem("alpha"), "one");
+T_eq("length grew", localStorage.length, 1);
+localStorage.setItem("alpha", "two");
+T_eq("overwrite replaces, does not duplicate", localStorage.getItem("alpha"), "two");
+T_eq("length unchanged by an overwrite", localStorage.length, 1);
+localStorage.setItem("beta", "b");
+localStorage.setItem("gamma", "g");
+T_eq("length after three keys", localStorage.length, 3);
+
+T_sec("values are coerced to strings");
+localStorage.setItem("num", 42);
+T_eq("a number reads back as a string", localStorage.getItem("num"), "42");
+T_type("typeof the stored number", localStorage.getItem("num"), "string");
+localStorage.setItem("bool", true);
+T_eq("a boolean reads back as a string", localStorage.getItem("bool"), "true");
+localStorage.setItem("obj", { a: 1 });
+T("an object is stringified, not thrown", localStorage.getItem("obj") !== null, S(localStorage.getItem("obj")));
+localStorage.setItem("empty", "");
+T_eq("an empty string is stored, not dropped", localStorage.getItem("empty"), "");
+T_eq("an empty value is not null", localStorage.getItem("empty") === null, false);
+localStorage.setItem("spaced key", "a b  c");
+T_eq("keys and values may contain spaces", localStorage.getItem("spaced key"), "a b  c");
+localStorage.removeItem("num"); localStorage.removeItem("bool");
+localStorage.removeItem("obj");   localStorage.removeItem("empty");
+localStorage.removeItem("spaced key");
+
+T_sec("key() enumeration");
+localStorage.clear();
+localStorage.setItem("k0", "v0");
+localStorage.setItem("k1", "v1");
+localStorage.setItem("k2", "v2");
+var seen = [];
+for (var i = 0; i < localStorage.length; i++) seen.push(localStorage.key(i));
+seen.sort();
+T_eq("key(i) walks every entry", seen.join(","), "k0,k1,k2");
+T_eq("key(out of range) is null", localStorage.key(99), null);
+var vals = [];
+for (var j = 0; j < localStorage.length; j++) vals.push(localStorage.getItem(localStorage.key(j)));
+vals.sort();
+T_eq("every enumerated key resolves", vals.join(","), "v0,v1,v2");
+
+T_sec("removeItem / clear");
+localStorage.removeItem("k1");
+T_eq("removeItem dropped the key", localStorage.getItem("k1"), null);
+T_eq("removeItem shrank length", localStorage.length, 2);
+T_eq("the other keys survived", localStorage.getItem("k0"), "v0");
+localStorage.removeItem("never-existed");
+T_eq("removing a missing key is harmless", localStorage.length, 2);
+localStorage.clear();
+T_eq("clear emptied the store", localStorage.length, 0);
+T_eq("clear removed the values too", localStorage.getItem("k0"), null);
+
+T_sec("localStorage and sessionStorage are independent");
+localStorage.setItem("shared", "from-local");
+sessionStorage.setItem("shared", "from-session");
+T_eq("localStorage keeps its own value", localStorage.getItem("shared"), "from-local");
+T_eq("sessionStorage keeps its own value", sessionStorage.getItem("shared"), "from-session");
+sessionStorage.removeItem("shared");
+T_eq("removing from session left local alone", localStorage.getItem("shared"), "from-local");
+localStorage.removeItem("shared");
+
+T_sec("persistence across a page load");
+/* The stores are loaded from the widget when the bridge registers and written
+   back on every mutation, so this counter climbs on each reload. Only the
+   "is a number" part is asserted - the actual count depends on how many times
+   the page has been opened, which a test cannot know. */
+var visits = parseInt(localStorage.getItem("visits") || "0", 10);
+visits = isNaN(visits) ? 1 : visits + 1;
+localStorage.setItem("visits", String(visits));
+document.getElementById("visits").textContent =
+  "visit counter: " + visits + (visits > 1 ? "  (localStorage survived the reload)" : "  (first load - reload to see it persist)");
+T("the visit counter is a usable number", !isNaN(visits) && visits >= 1, S(visits));
+T_eq("it reads back immediately", localStorage.getItem("visits"), String(visits));
+if (visits > 1) {
+  T("localStorage persisted across a page load", true, "visits=" + visits);
+} else {
+  T_line("Reload this page to turn the persistence check into a PASS.", "sec");
+}
+
+T_sec("document.cookie");
+T_type("document.cookie getter", document.cookie, "string");
+var jar0 = document.cookie;
+document.cookie = "ta=1";
+T("cookie appears in the jar", document.cookie.indexOf("ta=1") >= 0, document.cookie);
+document.cookie = "tb=2; path=/; max-age=3600";
+T("attributes are stored, not echoed back",
+  document.cookie.indexOf("tb=2") >= 0 && document.cookie.indexOf("path=") < 0 &&
+  document.cookie.indexOf("max-age=") < 0, document.cookie);
+T("both cookies coexist", document.cookie.indexOf("ta=1") >= 0 && document.cookie.indexOf("tb=2") >= 0,
+  document.cookie);
+document.cookie = "ta=9";
+T("writing the same name replaces it",
+  document.cookie.indexOf("ta=9") >= 0 && document.cookie.indexOf("ta=1") < 0, document.cookie);
+
+T_sec("cookie deletion");
+/* The jar is a real cookie store now, so deletion follows the standard: an
+   empty value is a cookie whose value is empty, and Max-Age=0 / a past Expires
+   is what actually removes an entry. */
+document.cookie = "ta=; Max-Age=0";
+T_eq("Max-Age=0 removes the cookie", document.cookie.indexOf("ta="), -1);
+document.cookie = "tb=1";
+document.cookie = "tb=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+T_eq("a past Expires removes it too", document.cookie.indexOf("tb="), -1);
+document.cookie = "te=1";
+document.cookie = "te=";
+T("an empty value is kept as an empty cookie", document.cookie.indexOf("te=") >= 0,
+  document.cookie);
+document.cookie = "te=; Max-Age=0";
+T_eq("and Max-Age=0 then clears it", document.cookie.indexOf("te="), -1);
+
+T_sec("cookie path scoping");
+/* A document loaded without an HTTP URL has "/" as its path, so an entry
+   restricted to a deeper path is stored but never matched back to this page. */
+document.cookie = "tp=1; path=/nowhere";
+T_eq("a cookie for another path is not visible", document.cookie.indexOf("tp=1"), -1);
+document.cookie = "tp=; path=/nowhere; Max-Age=0";
+document.cookie = "theme=dark; path=/";
+T_eq("cookie value round-trip", document.cookie.indexOf("theme=dark") >= 0, true);
+
+T_sec("cookie name whitespace is trimmed");
+/* document.cookie joins the jar with "; ", so a split-and-delete loop feeds
+   " name=" straight back into the setter. If the setter trimmed only at the end
+   that became a *different* cookie name: the real one survived and a stray
+   " name" appeared next to it. */
+document.cookie = "tc=1";
+T("baseline cookie set", document.cookie.indexOf("tc=1") >= 0, document.cookie);
+document.cookie = "   tc=";
+T_eq("leading spaces still address the same cookie", document.cookie.indexOf("tc=1"), -1);
+T_eq("no stray space-prefixed name was created", document.cookie.indexOf("  tc"), -1);
+document.cookie = "tc=2   ";
+T("trailing spaces are trimmed from the value", document.cookie.indexOf("tc=2") >= 0 &&
+  document.cookie.indexOf("tc=2 ") < 0, document.cookie);
+document.cookie = "tc=; Max-Age=0";
+document.cookie = "theme=; Max-Age=0";
+
+document.getElementById("jar").textContent = "cookie jar: " + document.cookie;
+
+T_sec("interactive");
+document.getElementById("again").addEventListener("click", function() {
+  /* Deferred to onTimer by the embedder: location.reload() must not call
+     loadHtml() while the VM thread holds the render mutex. */
+  T("location.reload() accepted", typeof location.reload === "function");
+  location.reload();
+});
+document.getElementById("wipe").addEventListener("click", function() {
+  localStorage.clear();
+  sessionStorage.clear();
+  var names = document.cookie.split(";");
+  for (var n = 0; n < names.length; n++) {
+    /* Trimmed here as well as in the setter: the jar separates entries with
+       "; ", so every entry after the first carries a leading space. Deleted
+       with Max-Age=0, the standard way - writing an empty value would only
+       replace it with an empty cookie. */
+    var one = names[n].trim();
+    var eqp = one.indexOf("=");
+    if (eqp > 0) document.cookie = one.substring(0, eqp) + "=; Max-Age=0";
+  }
+  document.getElementById("jar").textContent = "cookie jar: " + document.cookie;
+  document.getElementById("visits").textContent = "visit counter: cleared";
+  T("stores and cookie jar wiped",
+    localStorage.length === 0 && sessionStorage.length === 0 && document.cookie === "",
+    "cookie=" + document.cookie);
+});
+
+T_sec("done");
+T_line("Storage test finished: " + T_PASS + " passed, " + T_FAIL + " failed.",
+       T_FAIL === 0 ? "ok" : "bad");
+console.log("TEST STORAGE-SUMMARY pass=" + T_PASS + " fail=" + T_FAIL);
+</script>
+</body>
+</html>

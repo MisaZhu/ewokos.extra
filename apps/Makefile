@@ -1,5 +1,5 @@
 
-DIRS = calculator calendar
+DIRS = calculator calendar xBrowser
 
 all: $(DIRS)
 

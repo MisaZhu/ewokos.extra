@@ -1,0 +1,57 @@
+<html>
+<head>
+    <title>JS-Test-Original</title>
+</head>
+<body>
+    <h1>xBrowser JavaScript Smoke Test</h1>
+    <p id="status">BEFORE-JS</p>
+    <p id="info" data-probe="P0">info-placeholder</p>
+    <div id="box">static-box</div>
+
+    <script>
+      console.log("JSMARK boot: console.log works");
+
+      /* 1. getElementById + textContent setter + tagName getter */
+      var s = document.getElementById("status");
+      if (s) {
+        s.textContent = "AFTER-JS-OK";
+        console.log("JSMARK textContent set on tag=" + s.tagName);
+      } else {
+        console.log("JSMARK FAIL: no #status element");
+      }
+
+      /* 2. setAttribute + getAttribute round-trip */
+      var info = document.getElementById("info");
+      if (info) {
+        info.setAttribute("data-probe", "P9");
+        console.log("JSMARK attr read back=" + info.getAttribute("data-probe"));
+        console.log("JSMARK info id=" + info.id);
+      }
+
+      /* 3. document.title getter + setter */
+      console.log("JSMARK title before=" + document.title);
+      document.title = "JS-Test-Modified";
+      console.log("JSMARK title after=" + document.title);
+
+      /* 4. window.location.href getter */
+      console.log("JSMARK href=" + window.location.href);
+
+      /* 5. document.body access */
+      var b = document.body;
+      if (b) { console.log("JSMARK body tag=" + b.tagName); }
+
+      /* 6. alert() routes to the kernel log */
+      alert("hello-from-js");
+
+      console.log("JSMARK done");
+    </script>
+
+    <script>
+      /* Separate script block: proves globals persist across blocks and that
+       * document.write() splices markup that the reparse then renders. */
+      console.log("JSMARK script2 start");
+      document.write("<p id='written'>WRITTEN-BY-DOCUMENT-WRITE</p>");
+      console.log("JSMARK script2 wrote paragraph");
+    </script>
+</body>
+</html>

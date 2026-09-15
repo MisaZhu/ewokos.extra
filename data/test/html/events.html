@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Events test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 10px 0; }
+#sum { font-size: 14px; font-weight: bold; background: #eeeeff; border: 1px solid #ccccdd; padding: 5px; margin-bottom: 10px; }
+.sec { font-size: 12px; font-weight: bold; background: #dddddd; padding: 2px 4px; margin-top: 8px; }
+.ok { font-size: 12px; color: #006600; padding: 1px 4px; }
+.bad { font-size: 12px; color: #aa0000; font-weight: bold; padding: 1px 4px; background: #ffeeee; }
+.box { border: 1px solid #999999; background: #fafafa; padding: 8px; margin: 8px 0; font-size: 13px; }
+button { font-size: 13px; padding: 3px 8px; margin: 2px; }
+#outer { border: 2px solid #336699; padding: 8px; background: #f0f6ff; }
+#mid { border: 2px solid #339966; padding: 8px; background: #f0fff6; }
+#inner { border: 2px solid #996633; padding: 8px; background: #fffaf0; }
+a { color: #003399; }
+</style>
+</head>
+<body>
+<h1>Events: EventTarget, propagation, inline handlers</h1>
+<p class="sub">js_event.c. <a href="index.html">back to index</a></p>
+
+<div id="sum">running...</div>
+
+<div class="box">
+  <button id="btn1">click me (addEventListener)</button>
+  <button id="btn2" onclick="inlineHit()">click me (inline onclick)</button>
+  <button id="btn3">hover me (mouseover / mouseout)</button>
+  <span id="clicks">clicks: 0 / inline: 0 / hover: 0</span>
+</div>
+
+<div id="outer">outer
+  <div id="mid">mid
+    <div id="inner">inner - propagation target</div>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+/* ---------------- assertion harness (duplicated per page) ---------------- */
+var T_PASS = 0, T_FAIL = 0;
+function T_sum() {
+  var s = document.getElementById("sum");
+  if (s) s.textContent = "PASS " + T_PASS + "    FAIL " + T_FAIL + "    TOTAL " + (T_PASS + T_FAIL);
+}
+function T_line(text, cls) {
+  var host = document.getElementById("log");
+  if (!host) return;
+  var d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  host.appendChild(d);
+}
+function T_sec(t) { T_line("== " + t + " ==", "sec"); }
+function T(name, cond, detail) {
+  var msg = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "   [" + detail + "]" : "");
+  if (cond) { T_PASS++; T_line(msg, "ok"); } else { T_FAIL++; T_line(msg, "bad"); }
+  console.log("TEST " + (cond ? "PASS" : "FAIL") + " event: " + name + (detail ? " [" + detail + "]" : ""));
+  T_sum();
+}
+function T_eq(name, got, want) { T(name, got === want, "got=" + S(got) + " want=" + S(want)); }
+function T_type(name, v, t) { T(name, typeof v === t, "typeof=" + (typeof v) + " want=" + t); }
+function S(v) { return (v === null) ? "null" : ((v === undefined) ? "undefined" : String(v)); }
+
+/* Counters for the interactive section at the bottom. Declared up here because
+ * inlineHit() - reached from a synthetic dispatch part-way through the script -
+ * already repaints them, and a hoisted `var` would still be undefined there. */
+var realClicks = 0, inlineRan = 0, hoverIn = 0, hoverOut = 0, lastXY = "";
+var sawResize = false, sawScroll = false;
+
+/* ------------------------------------------------------------------ */
+T_sec("EventTarget surface");
+var btn1 = document.getElementById("btn1");
+var btn2 = document.getElementById("btn2");
+T("element.addEventListener", typeof btn1.addEventListener === "function", typeof btn1.addEventListener);
+T("element.removeEventListener", typeof btn1.removeEventListener === "function", typeof btn1.removeEventListener);
+T("element.dispatchEvent", typeof btn1.dispatchEvent === "function", typeof btn1.dispatchEvent);
+T("document.addEventListener", typeof document.addEventListener === "function", typeof document.addEventListener);
+T("window.addEventListener", typeof window.addEventListener === "function", typeof window.addEventListener);
+T("Event constructor", typeof Event === "function", typeof Event);
+T("CustomEvent constructor", typeof CustomEvent === "function", typeof CustomEvent);
+T("MouseEvent constructor", typeof MouseEvent === "function", typeof MouseEvent);
+T("KeyboardEvent constructor", typeof KeyboardEvent === "function", typeof KeyboardEvent);
+T_eq("Event.NONE", Event.NONE, 0);
+T_eq("Event.CAPTURING_PHASE", Event.CAPTURING_PHASE, 1);
+T_eq("Event.AT_TARGET", Event.AT_TARGET, 2);
+T_eq("Event.BUBBLING_PHASE", Event.BUBBLING_PHASE, 3);
+
+T_sec("addEventListener + dispatchEvent");
+var hits = [];
+function onBasic(e) { hits.push("basic:" + e.type); }
+btn1.addEventListener("click", onBasic);
+var ev1 = new Event("click", { bubbles: true, cancelable: true });
+var r1 = btn1.dispatchEvent(ev1);
+T_eq("listener ran", hits.length, 1);
+T_eq("listener got the type", hits[0], "basic:click");
+T_eq("dispatchEvent returns true when not cancelled", r1, true);
+T_eq("event.type", ev1.type, "click");
+T_eq("event.bubbles", ev1.bubbles, true);
+T_eq("event.cancelable", ev1.cancelable, true);
+T_eq("event.defaultPrevented starts false", ev1.defaultPrevented, false);
+T_eq("event.eventPhase reset after dispatch", ev1.eventPhase, 0);
+T_eq("event.currentTarget reset after dispatch", ev1.currentTarget, null);
+T("event.target is the element", ev1.target !== null && ev1.target.id === "btn1", S(ev1.target && ev1.target.id));
+T_eq("event.srcElement mirrors target", ev1.srcElement !== null && ev1.srcElement.id, "btn1");
+T_type("event.timeStamp", ev1.timeStamp, "number");
+T("event.isTrusted false for script-made events", ev1.isTrusted === false, S(ev1.isTrusted));
+
+T_sec("custom event types");
+hits = [];
+btn1.addEventListener("mything", function(e) { hits.push("mything"); });
+btn1.dispatchEvent(new Event("mything"));
+T_eq("arbitrary type dispatched", hits.length, 1);
+
+T_sec("once / passive options");
+hits = [];
+btn1.addEventListener("opt1", function(e) { hits.push("once"); }, { once: true });
+btn1.dispatchEvent(new Event("opt1"));
+btn1.dispatchEvent(new Event("opt1"));
+T_eq("once fired exactly one time", hits.length, 1);
+hits = [];
+btn1.addEventListener("opt2", function(e) { hits.push("cap-true"); }, true);
+btn1.addEventListener("opt2", function(e) { hits.push("cap-false"); }, false);
+btn1.dispatchEvent(new Event("opt2", { bubbles: true }));
+T_eq("both capture and bubble listeners run at target", hits.length, 2);
+
+T_sec("removeEventListener");
+hits = [];
+btn1.removeEventListener("click", onBasic);
+btn1.dispatchEvent(new Event("click", { bubbles: true }));
+T_eq("removed listener no longer runs", hits.length, 0);
+hits = [];
+function otherFn(e) { hits.push("other"); }
+btn1.addEventListener("rm2", otherFn);
+btn1.removeEventListener("rm2", function(e) {});   /* different function: must NOT remove */
+btn1.dispatchEvent(new Event("rm2"));
+T_eq("removal matches on the function identity", hits.length, 1);
+btn1.removeEventListener("rm2", otherFn);
+
+T_sec("propagation order");
+var order = [];
+var outer = document.getElementById("outer");
+var mid = document.getElementById("mid");
+var inner = document.getElementById("inner");
+function mk(label) { return function(e) { order.push(label); }; }
+var fOuterC = mk("outer:capture"), fOuterB = mk("outer:bubble");
+var fMidC = mk("mid:capture"),     fMidB = mk("mid:bubble");
+var fInnerA = mk("inner:a"),       fInnerB = mk("inner:b");
+var fDocC = mk("document:capture"), fDocB = mk("document:bubble");
+var fWinC = mk("window:capture"),   fWinB = mk("window:bubble");
+outer.addEventListener("prop", fOuterC, true);
+mid.addEventListener("prop", fMidC, true);
+inner.addEventListener("prop", fInnerA, true);
+inner.addEventListener("prop", fInnerB, false);
+mid.addEventListener("prop", fMidB, false);
+outer.addEventListener("prop", fOuterB, false);
+document.addEventListener("prop", fDocC, true);
+document.addEventListener("prop", fDocB, false);
+window.addEventListener("prop", fWinC, true);
+window.addEventListener("prop", fWinB, false);
+
+inner.dispatchEvent(new Event("prop", { bubbles: true }));
+T_eq("bubbling event reached every node",
+     order.join(","),
+     "window:capture,document:capture,outer:capture,mid:capture,inner:a,inner:b,mid:bubble,outer:bubble,document:bubble,window:bubble");
+
+order = [];
+inner.dispatchEvent(new Event("prop", { bubbles: false }));
+T_eq("non-bubbling event still captures, never bubbles",
+     order.join(","),
+     "window:capture,document:capture,outer:capture,mid:capture,inner:a,inner:b");
+
+/* eventPhase must be right at each stop. */
+order = [];
+var phaseProbe = function(e) { order.push(e.currentTarget === null ? "?" : String(e.eventPhase)); };
+outer.addEventListener("phase", phaseProbe, true);
+inner.addEventListener("phase", phaseProbe, false);
+document.addEventListener("phase", phaseProbe, false);
+inner.dispatchEvent(new Event("phase", { bubbles: true }));
+T_eq("eventPhase capture/target/bubble", order.join(","), "1,2,3");
+outer.removeEventListener("phase", phaseProbe, true);
+inner.removeEventListener("phase", phaseProbe, false);
+document.removeEventListener("phase", phaseProbe, false);
+
+/* composedPath() is the propagation chain, target first. */
+var pathSeen = null;
+var pathProbe = function(e) { if (pathSeen === null) pathSeen = e.composedPath(); };
+inner.addEventListener("pathq", pathProbe, false);
+inner.dispatchEvent(new Event("pathq", { bubbles: true }));
+inner.removeEventListener("pathq", pathProbe, false);
+T("composedPath() returns an array", pathSeen !== null && pathSeen.length > 0, S(pathSeen && pathSeen.length));
+if (pathSeen !== null) {
+  T_eq("composedPath[0] is the target", pathSeen[0] !== null && pathSeen[0].id, "inner");
+  T("composedPath ends at window", pathSeen[pathSeen.length - 1] !== null);
+}
+
+outer.removeEventListener("prop", fOuterC, true);
+mid.removeEventListener("prop", fMidC, true);
+inner.removeEventListener("prop", fInnerA, true);
+inner.removeEventListener("prop", fInnerB, false);
+mid.removeEventListener("prop", fMidB, false);
+outer.removeEventListener("prop", fOuterB, false);
+document.removeEventListener("prop", fDocC, true);
+document.removeEventListener("prop", fDocB, false);
+window.removeEventListener("prop", fWinC, true);
+window.removeEventListener("prop", fWinB, false);
+
+T_sec("stopPropagation");
+order = [];
+var spMid = function(e) { order.push("mid"); e.stopPropagation(); };
+var spOuter = function(e) { order.push("outer"); };
+inner.addEventListener("sp", function(e) { order.push("inner"); e.stopPropagation(); }, false);
+mid.addEventListener("sp", spMid, false);
+outer.addEventListener("sp", spOuter, false);
+inner.dispatchEvent(new Event("sp", { bubbles: true }));
+T_eq("stopPropagation halts the bubble phase", order.join(","), "inner");
+/* Removal is by function identity, so a null reference must match nothing and
+ * leave the whole "sp" chain exactly as it was. */
+inner.removeEventListener("sp", null, false);
+order = [];
+inner.dispatchEvent(new Event("sp", { bubbles: true }));
+T_eq("removeEventListener(type, null) removed nothing", order.join(","), "inner");
+
+T_sec("stopImmediatePropagation");
+order = [];
+var siA = function(e) { order.push("a"); e.stopImmediatePropagation(); };
+var siB = function(e) { order.push("b"); };
+inner.addEventListener("si", siA, false);
+inner.addEventListener("si", siB, false);
+outer.addEventListener("si", function(e) { order.push("outer"); }, false);
+inner.dispatchEvent(new Event("si", { bubbles: true }));
+T_eq("stopImmediate also silences same-node listeners", order.join(","), "a");
+
+T_sec("preventDefault");
+var pd = inner.dispatchEvent(new Event("pd", { bubbles: true, cancelable: false }));
+T_eq("dispatchEvent of a non-cancelable event returns true", pd, true);
+var cancelEv = new Event("pd2", { bubbles: true, cancelable: true });
+inner.addEventListener("pd2", function(e) { e.preventDefault(); }, false);
+var pd2 = inner.dispatchEvent(cancelEv);
+T_eq("dispatchEvent returns false after preventDefault", pd2, false);
+T_eq("defaultPrevented reflects it", cancelEv.defaultPrevented, true);
+T_eq("returnValue is the negation", cancelEv.returnValue, false);
+T_eq("cancelBubble alias", cancelEv.cancelBubble, false);
+
+T_sec("CustomEvent");
+var gotDetail = null;
+var ceHandler = function(e) { gotDetail = e.detail; };
+inner.addEventListener("ce", ceHandler, false);
+inner.dispatchEvent(new CustomEvent("ce", { detail: { n: 42, s: "hello" }, bubbles: true }));
+inner.removeEventListener("ce", ceHandler, false);
+T("CustomEvent carries detail", gotDetail !== null && gotDetail.n === 42 && gotDetail.s === "hello", S(gotDetail && gotDetail.n));
+
+T_sec("MouseEvent / KeyboardEvent objects");
+var mouseSeen = null;
+var mH = function(e) { mouseSeen = e; };
+inner.addEventListener("mk", mH, false);
+inner.dispatchEvent(new MouseEvent("mk", { clientX: 30, clientY: 40, screenX: 31, screenY: 41, button: 2, buttons: 2 }));
+inner.removeEventListener("mk", mH, false);
+T("MouseEvent built", mouseSeen !== null);
+if (mouseSeen !== null) {
+  T_eq("MouseEvent.clientX", mouseSeen.clientX, 30);
+  T_eq("MouseEvent.clientY", mouseSeen.clientY, 40);
+  T_eq("MouseEvent.button", mouseSeen.button, 2);
+  T_eq("MouseEvent.buttons", mouseSeen.buttons, 2);
+  T_eq("MouseEvent.x alias", mouseSeen.x, 30);
+  T_eq("MouseEvent.offsetX", mouseSeen.offsetX, 30);
+  T("MouseEvent.pageX >= clientX", mouseSeen.pageX >= mouseSeen.clientX, S(mouseSeen.pageX));
+}
+var keySeen = null;
+var kH = function(e) { keySeen = e; };
+inner.addEventListener("kk", kH, false);
+inner.dispatchEvent(new KeyboardEvent("kk", { key: "A", code: "KeyA", keyCode: 65, shiftKey: true, repeat: false }));
+inner.removeEventListener("kk", kH, false);
+T("KeyboardEvent built", keySeen !== null);
+if (keySeen !== null) {
+  T_eq("KeyboardEvent.key", keySeen.key, "A");
+  T_eq("KeyboardEvent.code", keySeen.code, "KeyA");
+  T_eq("KeyboardEvent.keyCode", keySeen.keyCode, 65);
+  T_eq("KeyboardEvent.which alias", keySeen.which, 65);
+  T_eq("KeyboardEvent.shiftKey", keySeen.shiftKey, true);
+  T_eq("KeyboardEvent.ctrlKey default", keySeen.ctrlKey, false);
+}
+/* A plain Event whose type is a mouse type still gets the mouse fields, which
+   is what pages that do `new Event('click')` and read clientX rely on. */
+var mixedSeen = null;
+var mixH = function(e) { mixedSeen = e; };
+inner.addEventListener("click", mixH, false);
+inner.dispatchEvent(new Event("click", { bubbles: true }));
+inner.removeEventListener("click", mixH, false);
+T("plain Event with a mouse type has clientX", mixedSeen !== null && typeof mixedSeen.clientX === "number", S(mixedSeen && mixedSeen.clientX));
+
+T_sec("inline on* attributes");
+function inlineHit() {
+  inlineRan++;
+  paintCounts();
+  if (inlineRan === 1) T("inline onclick attribute executed", true, "count=" + inlineRan);
+}
+/* Synthetic dispatch runs the attribute handler exactly like a real click. */
+btn2.dispatchEvent(new Event("click", { bubbles: true }));
+T_eq("inline handler ran once from dispatchEvent", inlineRan, 1);
+
+var inlineOrder = [];
+btn2.addEventListener("click", function(e) { inlineOrder.push("listener"); }, false);
+btn2.setAttribute("onclick", "window.__attrHit()");
+window.__attrHit = function() { inlineOrder.push("attribute"); };
+btn2.dispatchEvent(new Event("click", { bubbles: true }));
+T_eq("attribute handler precedes addEventListener at target",
+     inlineOrder.join(","), "attribute,listener");
+
+T_sec("document and window listeners");
+var docSeen = 0, winSeen = 0;
+document.addEventListener("dw", function(e) { docSeen++; }, false);
+window.addEventListener("dw", function(e) { winSeen++; }, false);
+inner.dispatchEvent(new Event("dw", { bubbles: true }));
+T_eq("document saw the bubbled event", docSeen, 1);
+T_eq("window saw the bubbled event", winSeen, 1);
+document.dispatchEvent(new Event("dw", { bubbles: true }));
+T_eq("dispatch on document bubbles to window", winSeen, 2);
+T_eq("dispatch on document hit its own listener", docSeen, 2);
+window.dispatchEvent(new Event("dw"));
+T_eq("dispatch straight on window", winSeen, 3);
+
+T_sec("lifecycle events (fire after this script, at page swap)");
+var sawDCL = false;
+document.addEventListener("DOMContentLoaded", function(e) {
+  sawDCL = true;
+  T("DOMContentLoaded fired after the inline script", true, "eventPhase=" + e.eventPhase);
+  T_eq("DOMContentLoaded phase is AT_TARGET on document", e.eventPhase, Event.AT_TARGET);
+});
+window.addEventListener("load", function(e) {
+  T("window load fired", true);
+  T("load fired after DOMContentLoaded", sawDCL === true);
+  T_eq("load target is window-ish", e.type, "load");
+  T_line("All lifecycle events observed. Final: " + T_PASS + " passed, " + T_FAIL + " failed.",
+         T_FAIL === 0 ? "ok" : "bad");
+  console.log("TEST EVENT-SUMMARY pass=" + T_PASS + " fail=" + T_FAIL);
+});
+window.addEventListener("resize", function(e) {
+  if (sawResize) return;
+  sawResize = true;
+  T("resize event delivered", true, window.innerWidth + "x" + window.innerHeight);
+});
+window.addEventListener("scroll", function(e) {
+  if (sawScroll) return;
+  sawScroll = true;
+  T("scroll event delivered", true, "scrollY=" + window.scrollY);
+});
+
+T_sec("interactive (needs real pointer input)");
+btn1.addEventListener("click", function(e) {
+  realClicks++;
+  paintCounts();
+  if (realClicks === 1) {
+    T("real click delivered to addEventListener", true, "button=" + e.button + " detail=" + e.detail);
+    T("real click is trusted", e.isTrusted === true, S(e.isTrusted));
+    T_type("real click clientX", e.clientX, "number");
+    T_type("real click pageY", e.pageY, "number");
+  }
+});
+btn1.addEventListener("mousedown", function(e) { if (realClicks === 0) T("mousedown precedes click", true); });
+btn1.addEventListener("mouseup", function(e) { T("mouseup delivered", true); });
+btn3Listeners();
+function btn3Listeners() {
+  var b3 = document.getElementById("btn3");
+  b3.addEventListener("mouseover", function(e) {
+    hoverIn++; paintCounts();
+    if (hoverIn === 1) T("mouseover delivered on hover", true);
+  });
+  b3.addEventListener("mouseout", function(e) {
+    hoverOut++; paintCounts();
+    if (hoverOut === 1) T("mouseout delivered when the pointer leaves", true);
+  });
+  b3.addEventListener("mousemove", function(e) {
+    lastXY = e.clientX + "," + e.clientY + " page " + e.pageX + "," + e.pageY;
+    paintCounts();
+  });
+}
+function paintCounts() {
+  var sp = document.getElementById("clicks");
+  if (sp) sp.textContent = "clicks: " + realClicks + " / inline: " + inlineRan +
+                           " / hover: " + hoverIn + "-" + hoverOut +
+                           (lastXY ? "   at " + lastXY : "");
+}
+
+T_sec("synchronous part finished");
+T_line("Synchronous assertions done: " + T_PASS + " passed, " + T_FAIL + " failed." +
+       " Click / hover the buttons above to run the interactive ones.",
+       T_FAIL === 0 ? "ok" : "bad");
+console.log("TEST EVENT-SYNC pass=" + T_PASS + " fail=" + T_FAIL);
+</script>
+</body>
+</html>

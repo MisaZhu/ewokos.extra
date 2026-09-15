@@ -1,3 +1,10 @@
+ifeq ($(PORTING),)
+export PORTING = ewokos
+endif
+
+ifeq ($(OS_TYPE),)
+export OS_TYPE = ewokos
+endif
 
 DIRS = libs apps x bin
 

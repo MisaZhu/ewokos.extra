@@ -1,4 +1,4 @@
-DIRS = curses SDL2
+DIRS = curses SDL2 ewebview widget++
 
 all: basic_libs
 	@echo "all done."

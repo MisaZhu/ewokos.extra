@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>BOM test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 10px 0; }
+#sum { font-size: 14px; font-weight: bold; background: #eeeeff; border: 1px solid #ccccdd; padding: 5px; margin-bottom: 10px; }
+.sec { font-size: 12px; font-weight: bold; background: #dddddd; padding: 2px 4px; margin-top: 8px; }
+.ok { font-size: 12px; color: #006600; padding: 1px 4px; }
+.bad { font-size: 12px; color: #aa0000; font-weight: bold; padding: 1px 4px; background: #ffeeee; }
+.note { font-size: 11px; color: #666666; padding: 1px 4px; }
+.box { border: 1px solid #999999; background: #fafafa; padding: 8px; margin: 8px 0; font-size: 12px; }
+button { font-size: 13px; padding: 3px 8px; margin: 2px; }
+.kv { font-size: 11px; color: #333333; padding: 0 4px; }
+.kv b { color: #003399; }
+a { color: #003399; }
+</style>
+</head>
+<body>
+<h1>BOM: window, navigator, screen, location, history, performance, crypto</h1>
+<p class="sub">js_web.c. <a href="index.html">back to index</a></p>
+
+<div id="sum">running...</div>
+
+<div class="box">
+  <button id="bReload">location.reload()</button>
+  <button id="bTop">window.scrollTo(0, 0)</button>
+  <span id="box">scroll: (reading)</span>
+</div>
+
+<div class="box" id="dump">live values: (reading)</div>
+
+<div id="log"></div>
+
+<script>
+/* ---------------- assertion harness (duplicated per page) ---------------- */
+var T_PASS = 0, T_FAIL = 0;
+function T_sum() {
+  var s = document.getElementById("sum");
+  if (s) s.textContent = "PASS " + T_PASS + "    FAIL " + T_FAIL + "    TOTAL " + (T_PASS + T_FAIL);
+}
+function T_line(text, cls) {
+  var host = document.getElementById("log");
+  if (!host) return;
+  var d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  host.appendChild(d);
+}
+function T_sec(t) { T_line("== " + t + " ==", "sec"); }
+function T(name, cond, detail) {
+  var msg = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "   [" + detail + "]" : "");
+  if (cond) { T_PASS++; T_line(msg, "ok"); } else { T_FAIL++; T_line(msg, "bad"); }
+  console.log("TEST " + (cond ? "PASS" : "FAIL") + " bom: " + name + (detail ? " [" + detail + "]" : ""));
+  T_sum();
+}
+function T_eq(name, got, want) { T(name, got === want, "got=" + S(got) + " want=" + S(want)); }
+function T_type(name, v, t) { T(name, typeof v === t, "typeof=" + (typeof v) + " want=" + t); }
+function T_num(name, v, lo) { T(name, typeof v === "number" && v >= lo, "value=" + S(v) + " min=" + lo); }
+function S(v) { return (v === null) ? "null" : ((v === undefined) ? "undefined" : String(v)); }
+
+/* ------------------------------------------------------------------ */
+T_sec("global function surface");
+var GFNS = ["parseInt", "parseFloat", "isNaN", "isFinite",
+            "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
+            "escape", "unescape", "atob", "btoa",
+            "getComputedStyle", "matchMedia", "fetch", "queueMicrotask",
+            "alert", "confirm", "prompt",
+            "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+            "requestAnimationFrame", "cancelAnimationFrame",
+            "scrollTo", "scroll", "scrollBy", "open",
+            "moveTo", "moveBy", "resizeTo", "resizeBy",
+            "close", "stop", "focus", "blur", "print", "postMessage"];
+var missing = [];
+for (var gi = 0; gi < GFNS.length; gi++) {
+  if (typeof window[GFNS[gi]] !== "function") missing.push(GFNS[gi]);
+}
+T_eq("every global function resolves on window", missing.join(","), "");
+/* Bare (unqualified) calls are what pages actually write, and they go through
+   vm->root rather than window - a different object in mario. */
+T_type("bare parseInt", parseInt, "function");
+T_type("bare encodeURIComponent", encodeURIComponent, "function");
+T_type("bare atob", atob, "function");
+T_type("bare getComputedStyle", getComputedStyle, "function");
+T_type("bare matchMedia", matchMedia, "function");
+
+/* ------------------------------------------------------------------ */
+T_sec("parseInt / parseFloat / isNaN / isFinite");
+T_eq("parseInt decimal", parseInt("42"), 42);
+T_eq("parseInt honours a radix", parseInt("1010", 2), 10);
+T_eq("parseInt hex prefix", parseInt("0x10"), 16);
+T_eq("parseInt stops at junk", parseInt("12px"), 12);
+T("parseInt of junk is NaN", isNaN(parseInt("abc")));
+T_eq("parseFloat", parseFloat("3.5"), 3.5);
+T_eq("parseFloat exponent", parseFloat("1e3"), 1000);
+T_eq("isNaN(NaN)", isNaN(NaN), true);
+T_eq("isNaN(1)", isNaN(1), false);
+T_eq('isNaN("x") coerces', isNaN("x"), true);
+T_eq("isFinite(1)", isFinite(1), true);
+T_eq("isFinite(Infinity)", isFinite(Infinity), false);
+
+T_sec("URI encoding");
+T_eq("encodeURIComponent escapes space", encodeURIComponent("a b"), "a%20b");
+T_eq("encodeURIComponent escapes reserved chars", encodeURIComponent("a&b=c"), "a%26b%3Dc");
+T_eq("encodeURI keeps reserved chars", encodeURI("a/b?c&d=e"), "a/b?c&d=e");
+T_eq("encodeURI still escapes space", encodeURI("a b/c"), "a%20b/c");
+T_eq("decodeURIComponent round-trip",
+     decodeURIComponent(encodeURIComponent("a b&c=?d")), "a b&c=?d");
+T_eq("decodeURI round-trip", decodeURI(encodeURI("/p/q?r s&t")), "/p/q?r s&t");
+T_eq("hex digits are upper case", encodeURIComponent(" "), "%20");
+T_eq("escape is present and reversible", unescape(escape("a b")), "a b");
+
+T_sec("atob / btoa");
+T_eq("btoa of a known string", btoa("hello"), "aGVsbG8=");
+T_eq("atob reverses it", atob("aGVsbG8="), "hello");
+T_eq("btoa pads a 1-byte tail", btoa("a"), "YQ==");
+T_eq("btoa pads a 2-byte tail", btoa("ab"), "YWI=");
+T_eq("btoa needs no padding at 3 bytes", btoa("abc"), "YWJj");
+T_eq("empty string round-trip", atob(btoa("")), "");
+var B64S = "The quick brown fox 0123456789";
+T_eq("a longer string round-trips", atob(btoa(B64S)), B64S);
+
+/* ------------------------------------------------------------------ */
+T_sec("window object");
+T_eq("window.window is window", window.window === window, true);
+T_eq("self is window", self === window, true);
+T_eq("top is window", top === window, true);
+T_eq("parent is window", parent === window, true);
+T_eq("frames is window", frames === window, true);
+T_eq("globalThis is window", globalThis === window, true);
+T_num("innerWidth", window.innerWidth, 1);
+T_num("innerHeight", window.innerHeight, 1);
+T_num("outerWidth", window.outerWidth, 1);
+T_num("outerHeight", window.outerHeight, 1);
+T_type("devicePixelRatio", window.devicePixelRatio, "number");
+T_type("scrollX", window.scrollX, "number");
+T_type("scrollY", window.scrollY, "number");
+T_eq("pageXOffset mirrors scrollX", window.pageXOffset, window.scrollX);
+T_eq("pageYOffset mirrors scrollY", window.pageYOffset, window.scrollY);
+T_eq("window.closed is false", window.closed, false);
+T_eq("window.status starts empty", window.status, "");
+T_eq("window.name starts empty", window.name, "");
+T_eq("window.opener is null", window.opener, null);
+T_eq("window.frameElement is null", window.frameElement, null);
+T_eq("window.document is document", window.document === document, true);
+T_eq("document.defaultView is window", document.defaultView === window, true);
+
+/* ------------------------------------------------------------------ */
+T_sec("navigator");
+T("navigator exists", navigator !== null && navigator !== undefined);
+T_eq("navigator alias on window", window.navigator === navigator, true);
+/* The identity strings are compiled-in defaults: this embedder leaves
+   get_user_agent / get_language / get_platform NULL, so js_web.c's defaults
+   are what every page sees. Asserted on content, not the whole string. */
+T("userAgent names the browser", navigator.userAgent.indexOf("xBrowser") >= 0, navigator.userAgent);
+T("userAgent names the OS", navigator.userAgent.indexOf("EwokOS") >= 0, navigator.userAgent);
+T("userAgent looks like a UA", navigator.userAgent.indexOf("Mozilla/5.0") === 0, navigator.userAgent);
+T_eq("appVersion mirrors userAgent", navigator.appVersion, navigator.userAgent);
+T_eq("appCodeName", navigator.appCodeName, "Mozilla");
+T_eq("appName", navigator.appName, "Netscape");
+T_eq("product", navigator.product, "Gecko");
+T_eq("productSub", navigator.productSub, "20030107");
+T_eq("vendor is the deprecated empty string", navigator.vendor, "");
+T_eq("doNotTrack unset is the empty string", navigator.doNotTrack, "");
+T_type("platform", navigator.platform, "string");
+T_type("language", navigator.language, "string");
+T("languages is an array", navigator.languages !== null && navigator.languages.length > 0,
+  S(navigator.languages && navigator.languages.length));
+if (navigator.languages && navigator.languages.length > 0) {
+  T_eq("languages[0] agrees with language", navigator.languages[0], navigator.language);
+}
+T_eq("hardwareConcurrency is at least 1", navigator.hardwareConcurrency >= 1, true);
+T_type("maxTouchPoints", navigator.maxTouchPoints, "number");
+T_type("deviceMemory", navigator.deviceMemory, "number");
+T_eq("onLine", navigator.onLine, true);
+T_eq("cookieEnabled", navigator.cookieEnabled, true);
+T_eq("webdriver is false", navigator.webdriver, false);
+T_eq("pdfViewerEnabled is false", navigator.pdfViewerEnabled, false);
+T_type("javaEnabled()", navigator.javaEnabled, "function");
+T_eq("javaEnabled() answers false", navigator.javaEnabled(), false);
+T_type("sendBeacon()", navigator.sendBeacon, "function");
+T_type("vibrate()", navigator.vibrate, "function");
+/* Both must be callable and must not throw; neither has an observable effect. */
+navigator.sendBeacon("/nowhere", "x");
+navigator.vibrate(10);
+T("sendBeacon / vibrate are harmless no-ops", true);
+
+/* ------------------------------------------------------------------ */
+T_sec("screen");
+T("screen exists", screen !== null && screen !== undefined);
+T_eq("screen alias on window", window.screen === screen, true);
+T_num("screen.width", screen.width, 1);
+T_num("screen.height", screen.height, 1);
+T_num("screen.availWidth", screen.availWidth, 1);
+T_num("screen.availHeight", screen.availHeight, 1);
+T_num("screen.colorDepth", screen.colorDepth, 1);
+T_num("screen.pixelDepth", screen.pixelDepth, 1);
+T("screen is at least as large as the viewport",
+  screen.width >= window.innerWidth && screen.height >= window.innerHeight,
+  screen.width + "x" + screen.height + " vs " + window.innerWidth + "x" + window.innerHeight);
+T("screen.orientation exists", screen.orientation !== null && screen.orientation !== undefined,
+  S(screen.orientation));
+
+/* ------------------------------------------------------------------ */
+T_sec("location");
+T("location exists", location !== null && location !== undefined);
+T_eq("location alias on window", window.location === location, true);
+T_type("location.href", location.href, "string");
+T_eq("toString() equals href", location.toString(), location.href);
+/* This page is loaded from a file:// URL, so the scheme is known exactly.
+   Guarded rather than assumed: opening it over http would fail the check for
+   no good reason. */
+if (location.href.indexOf("file:") === 0) {
+  T_eq("protocol keeps its colon", location.protocol, "file:");
+  T("pathname ends with this file", location.pathname.indexOf("bom.html") >= 0, location.pathname);
+} else {
+  T_line("not a file: URL - scheme checks skipped (" + location.protocol + ")", "note");
+  T("protocol is non-empty and colon-terminated",
+    location.protocol.length > 1 && location.protocol.charAt(location.protocol.length - 1) === ":",
+    location.protocol);
+}
+T_type("host", location.host, "string");
+T_type("hostname", location.hostname, "string");
+T_type("port", location.port, "string");
+T_type("pathname", location.pathname, "string");
+T_type("origin", location.origin, "string");
+T_eq("search is empty for this page", location.search, "");
+T_eq("hash is empty for this page", location.hash, "");
+T_type("assign()", location.assign, "function");
+T_type("replace()", location.replace, "function");
+T_type("reload()", location.reload, "function");
+/* assign/replace/reload and href= all navigate, so they are exercised only
+   from the button at the top of the page, never from an assertion. */
+
+/* ------------------------------------------------------------------ */
+T_sec("history");
+T("history exists", history !== null && history !== undefined);
+T_num("history.length is at least 1", history.length, 1);
+T_eq("history.state starts null", history.state, null);
+T_type("back()", history.back, "function");
+T_type("forward()", history.forward, "function");
+T_type("go()", history.go, "function");
+T_type("pushState()", history.pushState, "function");
+T_type("replaceState()", history.replaceState, "function");
+/* pushState's third argument NAVIGATES when non-empty, so it is deliberately
+   omitted here - this test must not leave the page. */
+history.pushState({ n: 1, s: "kept" }, "");
+T("pushState stored a state object", history.state !== null && history.state !== undefined,
+  S(history.state));
+if (history.state !== null) {
+  T_eq("pushState state round-trips (number)", history.state.n, 1);
+  T_eq("pushState state round-trips (string)", history.state.s, "kept");
+}
+history.replaceState({ n: 2 }, "");
+T_eq("replaceState overwrote it", history.state !== null && history.state.n, 2);
+history.pushState(null, "");
+T_eq("pushState(null) is accepted", history.state, null);
+/* back/forward/go have no session history behind them in this embedder; they
+   must be callable no-ops rather than throwing. */
+history.go(0);
+T("go(0) is a harmless no-op", true);
+
+/* ------------------------------------------------------------------ */
+T_sec("performance");
+T("performance exists", performance !== null && performance !== undefined);
+T_type("performance.now()", performance.now, "function");
+var p0 = performance.now();
+T_type("now() is a number", p0, "number");
+T("now() is non-negative", p0 >= 0, S(p0));
+var p1 = performance.now();
+T("now() never goes backwards", p1 >= p0, p0 + " -> " + p1);
+T_type("performance.timeOrigin", performance.timeOrigin, "number");
+T("mark/measure/clearMarks/clearMeasures exist",
+  typeof performance.mark === "function" && typeof performance.measure === "function" &&
+  typeof performance.clearMarks === "function" && typeof performance.clearMeasures === "function");
+performance.mark("m");
+performance.measure("x", "m");
+performance.clearMarks("m");
+performance.clearMeasures("x");
+T("the (no-op) timeline methods are callable", true);
+T("performance.navigation exists", performance.navigation !== null && performance.navigation !== undefined);
+if (performance.navigation !== null && performance.navigation !== undefined) {
+  T_eq("navigation.type is 0 (navigate)", performance.navigation.type, 0);
+  T_eq("navigation.redirectCount is 0", performance.navigation.redirectCount, 0);
+}
+T("performance.memory exists", performance.memory !== null && performance.memory !== undefined);
+if (performance.memory !== null && performance.memory !== undefined) {
+  T_type("memory.usedJSHeapSize", performance.memory.usedJSHeapSize, "number");
+  T_type("memory.totalJSHeapSize", performance.memory.totalJSHeapSize, "number");
+  T_type("memory.jsHeapSizeLimit", performance.memory.jsHeapSizeLimit, "number");
+}
+T_type("Date.now", Date.now, "function");
+T("Date.now is a wall clock, larger than performance.now", Date.now() > p0,
+  Date.now() + " vs " + p0);
+
+/* ------------------------------------------------------------------ */
+T_sec("crypto");
+T("crypto exists", crypto !== null && crypto !== undefined);
+T_type("crypto.getRandomValues", crypto.getRandomValues, "function");
+T_type("crypto.randomUUID", crypto.randomUUID, "function");
+var buf = [0, 0, 0, 0, 0, 0, 0, 0];
+var ret = crypto.getRandomValues(buf);
+T_eq("getRandomValues returns the array it filled", ret === buf, true);
+T_eq("the array kept its length", buf.length, 8);
+var inRange = true, anyNonZero = false;
+for (var bi = 0; bi < buf.length; bi++) {
+  if (typeof buf[bi] !== "number" || buf[bi] < 0 || buf[bi] > 255) inRange = false;
+  if (buf[bi] !== 0) anyNonZero = true;
+}
+T("every byte is in 0..255", inRange, buf.join(","));
+T("the bytes were actually written", anyNonZero, buf.join(","));
+var u1 = crypto.randomUUID();
+var u2 = crypto.randomUUID();
+T_type("randomUUID returns a string", u1, "string");
+T_eq("randomUUID is 36 characters", u1.length, 36);
+T_eq("randomUUID dash positions",
+     u1.charAt(8) + u1.charAt(13) + u1.charAt(18) + u1.charAt(23), "----");
+T_eq("randomUUID version nibble is 4", u1.charAt(14), "4");
+T("randomUUID variant nibble is 8/9/a/b", "89ab".indexOf(u1.charAt(19)) >= 0, u1.charAt(19));
+T_eq("two calls give different uuids", u1 === u2, false);
+
+/* ------------------------------------------------------------------ */
+T_sec("console extras");
+var CFNS = ["log", "warn", "error", "info", "debug", "trace", "dir", "assert",
+            "clear", "group", "groupCollapsed", "groupEnd",
+            "count", "countReset", "time", "timeLog", "timeEnd"];
+var cmiss = [];
+for (var ci = 0; ci < CFNS.length; ci++) {
+  if (typeof console[CFNS[ci]] !== "function") cmiss.push(CFNS[ci]);
+}
+T_eq("every console method resolves", cmiss.join(","), "");
+console.warn("bom: a warning");
+console.error("bom: an error");
+console.info("bom: info");
+console.debug("bom: debug");
+console.dir({ a: 1 });
+console.group("g"); console.groupEnd();
+console.assert(1 === 1, "should not print");
+console.assert(1 === 2, "bom: an intentional assert failure");
+T("console methods are callable", true);
+console.count("bomlabel");
+console.count("bomlabel");
+console.countReset("bomlabel");
+console.time("bomtimer");
+console.timeLog("bomtimer");
+console.timeEnd("bomtimer");
+T("count / time round-trip is callable", true);
+
+/* ------------------------------------------------------------------ */
+T_sec("matchMedia");
+var mq = matchMedia("(min-width: 1px)");
+T("matchMedia returns an object", mq !== null && mq !== undefined);
+if (mq !== null && mq !== undefined) {
+  T_eq("the query is echoed back", mq.media, "(min-width: 1px)");
+  T_type("matches is a boolean", mq.matches, "boolean");
+  T_eq("a 1px min-width always matches", mq.matches, true);
+}
+var mqBig = matchMedia("(min-width: 100000px)");
+T_eq("an absurd min-width does not match", mqBig.matches, false);
+var mqEmpty = matchMedia("");
+T_eq('matchMedia("") matches', mqEmpty.matches, true);
+
+/* ------------------------------------------------------------------ */
+T_sec("document extras");
+T_eq("document.hidden", document.hidden, false);
+T_eq("document.visibilityState", document.visibilityState, "visible");
+T_eq("document.compatMode", document.compatMode, "CSS1Compat");
+T_eq("document.contentType", document.contentType, "text/html");
+T_type("document.lastModified", document.lastModified, "string");
+T_eq("lastModified has the browser shape MM/DD/YYYY HH:MM:SS", document.lastModified.length, 19);
+T_eq("document.hasFocus()", document.hasFocus(), true);
+/* No focus tracking in the bridge, so activeElement reports <body> - which is
+   exactly what a browser returns when nothing else has focus. */
+T("document.activeElement resolves",
+  document.activeElement !== null && document.activeElement !== undefined,
+  S(document.activeElement && document.activeElement.tagName));
+T_eq("activeElement is body",
+  document.activeElement !== null && document.activeElement.tagName, "BODY");
+/* focus() reaches the embedder, which accepts and ignores it (litehtml has no
+   element focus model). blur() is a no-op in the bridge itself. Both must be
+   callable without throwing; neither is observable, so nothing is asserted
+   about the result. */
+var fEl = document.getElementById("box");
+fEl.focus();
+fEl.blur();
+T("focus() / blur() are callable no-ops", true);
+
+T_sec("document collections");
+/* Live-ish collections built by walking the document for a tag or attribute. */
+var COLLS = ["forms", "images", "scripts", "links", "anchors", "embeds", "plugins"];
+for (var ci2 = 0; ci2 < COLLS.length; ci2++) {
+  var c = document[COLLS[ci2]];
+  T("document." + COLLS[ci2] + " is array-like",
+    c !== null && c !== undefined && typeof c.length === "number", S(c && c.length));
+}
+/* The collections are built by walking the whole document for a tag or an
+   attribute, and the document is fully parsed in BUILD_CREATE_DOC before any
+   script runs (BUILD_RUN_JS) - which is why the <form> at the BOTTOM of this
+   page is already countable from here. Exact counts are asserted rather than
+   "> 0", so a collection that silently returns everything shows up.
+   links: "back to index" in the header + index/dom/events in the form = 4.
+   anchors: only a[name] counts, and only the one at the bottom has a name. */
+T_eq("document.forms found the form", document.forms.length, 1);
+T_eq("document.images found the images", document.images.length, 2);
+T_eq("document.links counts a[href]", document.links.length, 4);
+T_eq("document.anchors counts a[name]", document.anchors.length, 1);
+T("document.scripts found at least this script", document.scripts.length >= 1,
+  S(document.scripts.length));
+T_eq("document.embeds is empty here", document.embeds.length, 0);
+if (document.forms.length > 0) {
+  T_eq("forms[0] is the form element", document.forms[0].id, "f1");
+}
+
+/* ------------------------------------------------------------------ */
+T_sec("XMLHttpRequest");
+T("XMLHttpRequest is a constructor", typeof XMLHttpRequest === "function", typeof XMLHttpRequest);
+T_eq("UNSENT", XMLHttpRequest.UNSENT, 0);
+T_eq("OPENED", XMLHttpRequest.OPENED, 1);
+T_eq("HEADERS_RECEIVED", XMLHttpRequest.HEADERS_RECEIVED, 2);
+T_eq("LOADING", XMLHttpRequest.LOADING, 3);
+T_eq("DONE", XMLHttpRequest.DONE, 4);
+var xhr = new XMLHttpRequest();
+T_type("open", xhr.open, "function");
+T_type("send", xhr.send, "function");
+T_type("abort", xhr.abort, "function");
+T_type("setRequestHeader", xhr.setRequestHeader, "function");
+T_type("getResponseHeader", xhr.getResponseHeader, "function");
+T_type("getAllResponseHeaders", xhr.getAllResponseHeaders, "function");
+T_type("overrideMimeType", xhr.overrideMimeType, "function");
+T_eq("a fresh XHR is UNSENT", xhr.readyState, 0);
+/* This embedder wires no http_request hook: its HTTP path is an asynchronous
+   task queue and the VM runs on the same UI tick, so a blocking download would
+   deadlock the loop that delivers it. Every request therefore completes
+   synchronously as a network error - readyState DONE, status 0 - which is what
+   a browser reports for a failed request, and is asserted here as the
+   documented behaviour rather than as a defect. */
+xhr.open("GET", "http://127.0.0.1:1/nope");
+xhr.setRequestHeader("X-Test", "1");
+xhr.send();
+T_eq("send() completed synchronously", xhr.readyState, 4);
+T_eq("with no network hook the status is 0", xhr.status, 0);
+T_eq("getAllResponseHeaders is empty", xhr.getAllResponseHeaders(), "");
+T_eq("getResponseHeader of a missing header", xhr.getResponseHeader("X-Test"), null);
+
+/* ------------------------------------------------------------------ */
+T_sec("fetch");
+T_type("fetch", fetch, "function");
+var fetchErr = null, fetchOk = false;
+try {
+  var p = fetch("http://127.0.0.1:1/nope");
+  T("fetch returns a thenable", p !== null && p !== undefined && typeof p.then === "function",
+    typeof (p && p.then));
+  /* No http_request hook, so the promise must REJECT - not hang and not
+     resolve with a bogus Response. The handler records which happened and a
+     short timer below turns it into an assertion. */
+  if (p !== null && typeof p.then === "function") {
+    p.then(function(r) { fetchOk = true; }, function(e) { fetchErr = "rejected"; });
+  }
+} catch (e) {
+  fetchErr = "threw:" + S(e);
+}
+setTimeout(function() {
+  T("fetch rejected instead of hanging or resolving", fetchErr === "rejected",
+    "err=" + S(fetchErr) + " resolved=" + fetchOk);
+}, 200);
+
+T_sec("queueMicrotask");
+T_type("queueMicrotask", queueMicrotask, "function");
+/* Rides the DOM timer queue, so it runs on a later tick rather than before
+   the next statement - asserted from a timer for the same reason as fetch. */
+var mtRan = false;
+queueMicrotask(function() { mtRan = true; });
+T_eq("queueMicrotask did not run inline", mtRan, false);
+setTimeout(function() {
+  T("queueMicrotask ran by the next tick", mtRan === true, S(mtRan));
+  T_line("BOM test finished: " + T_PASS + " passed, " + T_FAIL + " failed.",
+         T_FAIL === 0 ? "ok" : "bad");
+  console.log("TEST BOM-SUMMARY pass=" + T_PASS + " fail=" + T_FAIL);
+}, 400);
+
+/* ------------------------------------------------------------------ */
+/* Everything above is asserted; this block just prints what the embedder
+   reported, which is the useful part when a number looks wrong. */
+function KV(k, v) {
+  var d = document.createElement("div");
+  d.className = "kv";
+  var b = document.createElement("b");
+  b.textContent = k;
+  d.appendChild(b);
+  d.appendChild(document.createTextNode(": " + S(v)));
+  document.getElementById("dump").appendChild(d);
+}
+document.getElementById("dump").textContent = "live values:";
+KV("userAgent", navigator.userAgent);
+KV("platform", navigator.platform);
+KV("language", navigator.language);
+KV("languages", navigator.languages && navigator.languages.join("|"));
+KV("href", location.href);
+KV("protocol / host / pathname", location.protocol + " " + location.host + " " + location.pathname);
+KV("origin", location.origin);
+KV("viewport (inner)", window.innerWidth + " x " + window.innerHeight);
+KV("viewport (outer)", window.outerWidth + " x " + window.outerHeight);
+KV("screen", screen.width + " x " + screen.height + "  depth " + screen.colorDepth);
+KV("devicePixelRatio", window.devicePixelRatio);
+KV("hardwareConcurrency", navigator.hardwareConcurrency);
+KV("performance.now()", performance.now());
+KV("performance.timeOrigin", performance.timeOrigin);
+KV("history.length", history.length);
+KV("lastModified", document.lastModified);
+KV("randomUUID()", crypto.randomUUID());
+
+/* ------------------------------------------------------------------ */
+T_sec("interactive");
+document.getElementById("bReload").addEventListener("click", function() {
+  /* Deferred to onTimer by the embedder: a navigation must not call loadHtml()
+     while the VM thread holds the render mutex. */
+  console.log("TEST INFO bom: reload requested");
+  location.reload();
+});
+document.getElementById("bTop").addEventListener("click", function() {
+  window.scrollTo(0, 0);
+  document.getElementById("box").textContent =
+    "scroll: " + window.scrollX + "," + window.scrollY + " (scrollTo(0,0) requested)";
+});
+function paintScroll() {
+  document.getElementById("box").textContent =
+    "scroll: " + window.scrollX + "," + window.scrollY;
+}
+window.addEventListener("scroll", paintScroll);
+window.addEventListener("resize", function() {
+  KV("resized to", window.innerWidth + " x " + window.innerHeight);
+});
+paintScroll();
+</script>
+
+<form id="f1">
+  <img src="a.png" alt="a">
+  <img src="b.png" alt="b">
+  <a href="index.html">index</a>
+  <a href="dom.html">dom</a>
+  <a href="events.html">events</a>
+  <a name="anchor1">named anchor</a>
+</form>
+</body>
+</html>

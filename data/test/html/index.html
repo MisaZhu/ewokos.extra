@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>xBrowser JS test suite</title>
+<style>
+body { font-family: sans-serif; margin: 14px; background: #ffffff; color: #111111; }
+h1 { font-size: 20px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 14px 0; }
+table { border-collapse: collapse; font-size: 13px; }
+td, th { border: 1px solid #bbbbbb; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #eeeeee; }
+a { color: #003399; }
+.note { font-size: 12px; color: #444444; margin-top: 14px; border-top: 1px solid #cccccc; padding-top: 8px; }
+#env { font-size: 12px; background: #f4f4ff; border: 1px solid #ccccdd; padding: 6px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<h1>xBrowser JavaScript test suite</h1>
+<p class="sub">Coverage for the mario natives under browser/libs/mario/natives (js_dom, js_event, js_web, js_canvas).</p>
+
+<div id="env">checking environment...</div>
+
+<table>
+<tr><th>Page</th><th>What it exercises</th><th>Bridge</th></tr>
+<tr><td><a href="dom.html">dom.html</a></td>
+    <td>document/element query, tree walking, mutation, attributes, textContent, classList, inline style, geometry</td>
+    <td>js_dom.c</td></tr>
+<tr><td><a href="events.html">events.html</a></td>
+    <td>addEventListener, inline on* attributes, dispatchEvent, CustomEvent, capture/bubble, stopPropagation, preventDefault, mouse coordinates</td>
+    <td>js_event.c</td></tr>
+<tr><td><a href="timers.html">timers.html</a></td>
+    <td>setTimeout, setInterval, clearTimeout, clearInterval, requestAnimationFrame, nested timers, DOM edits from a timer after page load</td>
+    <td>js_dom.c</td></tr>
+<tr><td><a href="storage.html">storage.html</a></td>
+    <td>localStorage, sessionStorage, key()/length, document.cookie store semantics (attributes, deletion, path scoping)</td>
+    <td>js_web.c</td></tr>
+<tr><td><a href="bom.html">bom.html</a></td>
+    <td>window, navigator, screen, location, history, performance, crypto, console extras, base64, URI encoding, global functions</td>
+    <td>js_web.c</td></tr>
+<tr><td><a href="forms.html">forms.html</a></td>
+    <td>input/checkbox value and boolean properties, getElementsByName, document.forms/images/links/scripts collections, focus/blur</td>
+    <td>js_dom.c + js_web.c</td></tr>
+<tr><td><a href="jstest.html">jstest.html</a></td>
+    <td>the original smoke test (getElementById, textContent, attributes, title, alert)</td>
+    <td>js_dom.c</td></tr>
+<tr><td><a href="clock.html">clock.html</a></td>
+    <td>canvas 2D driven by setInterval - the live-timer + canvas combination</td>
+    <td>js_canvas.c + js_dom.c</td></tr>
+</table>
+
+<p class="note">
+Every page renders its assertions into the page itself and mirrors them to the
+kernel log as <code>TEST PASS name</code> / <code>TEST FAIL name</code>, so a run
+can be checked visually or with
+<code>grep TEST&nbsp;build/qemu_xbrowser.log</code>. Each page also prints one
+<code>TEST &lt;PAGE&gt;-SUMMARY pass=N fail=N</code> line at the end.<br>
+<br>
+<code>make browser</code> in <code>system/platform</code> builds <code>browser/</code>
+and then copies <code>browser/data</code> into the staging rootfs, so this
+directory lands on the target image at <code>/data/test/html/</code> and the hub
+opens as <code>file:///data/test/html/index.html</code>. <code>file://</code> is
+resolved by stripping the scheme and reading the rest with
+<code>vfs_readfile</code>. The pages have to be re-copied after an edit - the
+staging step is a plain <code>cp -r</code>, not a build rule - and then repacked
+with <code>make final &amp;&amp; make sd</code>. Serving the directory over HTTP
+works too, and is the only way to exercise
+<code>fetch</code>/<code>XMLHttpRequest</code> against a real response - this
+widget wires no <code>http_request</code> hook, so both report a network error
+here.<br>
+<br>
+Pages must be self-contained: the loader drops <code>&lt;script src=...&gt;</code>
+rather than fetching it, so an external script never runs.
+</p>
+
+<script>
+/* Report what the running engine actually offers, so a failure on one of the
+ * sub-pages can be told apart from "this build has no JS at all". */
+var env = document.getElementById("env");
+var lines = [];
+lines.push("userAgent: " + (window.navigator ? window.navigator.userAgent : "(no navigator)"));
+lines.push("viewport: " + window.innerWidth + "x" + window.innerHeight +
+           "   screen: " + (window.screen ? (window.screen.width + "x" + window.screen.height) : "?"));
+lines.push("href: " + (window.location ? window.location.href : "(no location)"));
+lines.push("bridges: " +
+  (document.getElementById ? "dom " : "") +
+  (document.addEventListener ? "event " : "") +
+  (window.localStorage ? "storage " : "") +
+  (window.performance && window.performance.now ? "performance " : "") +
+  (window.crypto && window.crypto.randomUUID ? "crypto " : ""));
+env.textContent = lines.join("  |  ");
+console.log("TEST ENV " + lines.join(" | "));
+</script>
+</body>
+</html>

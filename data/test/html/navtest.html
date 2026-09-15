@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nav cleanup test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+#hop { font-size: 24px; font-weight: bold; color: #003399; background: #eeeeff;
+       border: 1px solid #ccccdd; padding: 8px; margin: 10px 0; }
+.box { border: 1px solid #999999; background: #fafafa; padding: 8px; margin: 8px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Navigation termination-cleanup test</h1>
+<div id="hop">hop ?</div>
+<div class="box">Every hop navigates away via location.href, which routes through
+queueNavigation -&gt; engineNavigate on the engine thread: abort the current page,
+drop pending fetches, free the old document/VM, then load the next page. The hop
+counter survives in localStorage; a steadily climbing number across screenshots
+proves repeated teardowns stay clean. Alternates with clock.html (live timers).</div>
+<div class="box" id="when">waiting...</div>
+<script>
+var n = parseInt(localStorage.getItem("navhop") || "0", 10) + 1;
+localStorage.setItem("navhop", String(n));
+document.getElementById("hop").textContent = "hop " + n;
+document.getElementById("when").textContent = "navigating to clock.html in 2.5 s...";
+setTimeout(function() { location.href = "clock.html"; }, 2500);
+</script>
+</body>
+</html>

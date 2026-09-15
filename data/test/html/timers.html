@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Timers test</title>
+<style>
+body { font-family: sans-serif; margin: 12px; background: #ffffff; color: #111111; }
+h1 { font-size: 19px; margin: 0 0 2px 0; }
+.sub { font-size: 12px; color: #555555; margin: 0 0 10px 0; }
+#sum { font-size: 14px; font-weight: bold; background: #eeeeff; border: 1px solid #ccccdd; padding: 5px; margin-bottom: 10px; }
+.sec { font-size: 12px; font-weight: bold; background: #dddddd; padding: 2px 4px; margin-top: 8px; }
+.ok { font-size: 12px; color: #006600; padding: 1px 4px; }
+.bad { font-size: 12px; color: #aa0000; font-weight: bold; padding: 1px 4px; background: #ffeeee; }
+.box { border: 1px solid #999999; background: #fafafa; padding: 8px; margin: 8px 0; font-size: 13px; }
+#live { font-size: 16px; font-weight: bold; color: #003399; }
+a { color: #003399; }
+</style>
+</head>
+<body>
+<h1>Timers: setTimeout, setInterval, requestAnimationFrame</h1>
+<p class="sub">js_dom.c. The async assertions land as the timers fire; the summary is printed about two seconds in.
+<a href="index.html">back to index</a></p>
+
+<div id="sum">running...</div>
+
+<div class="box">
+  Live DOM edits from a 500 ms interval, running long after the page loaded:
+  <div id="live">not started</div>
+  <div id="liveinfo">tick 0</div>
+</div>
+
+<div id="log"></div>
+
+<script>
+/* ---------------- assertion harness (duplicated per page) ---------------- */
+var T_PASS = 0, T_FAIL = 0;
+function T_sum() {
+  var s = document.getElementById("sum");
+  if (s) s.textContent = "PASS " + T_PASS + "    FAIL " + T_FAIL + "    TOTAL " + (T_PASS + T_FAIL);
+}
+function T_line(text, cls) {
+  var host = document.getElementById("log");
+  if (!host) return;
+  var d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  host.appendChild(d);
+}
+function T_sec(t) { T_line("== " + t + " ==", "sec"); }
+function T(name, cond, detail) {
+  var msg = (cond ? "PASS  " : "FAIL  ") + name + (detail ? "   [" + detail + "]" : "");
+  if (cond) { T_PASS++; T_line(msg, "ok"); } else { T_FAIL++; T_line(msg, "bad"); }
+  console.log("TEST " + (cond ? "PASS" : "FAIL") + " timer: " + name + (detail ? " [" + detail + "]" : ""));
+  T_sum();
+}
+function T_eq(name, got, want) { T(name, got === want, "got=" + S(got) + " want=" + S(want)); }
+function T_type(name, v, t) { T(name, typeof v === t, "typeof=" + (typeof v) + " want=" + t); }
+function S(v) { return (v === null) ? "null" : ((v === undefined) ? "undefined" : String(v)); }
+
+/* ------------------------------------------------------------------ */
+T_sec("timer surface");
+T_type("setTimeout", setTimeout, "function");
+T_type("setInterval", setInterval, "function");
+T_type("clearTimeout", clearTimeout, "function");
+T_type("clearInterval", clearInterval, "function");
+T_type("requestAnimationFrame", requestAnimationFrame, "function");
+T_type("cancelAnimationFrame", cancelAnimationFrame, "function");
+T_type("window.setTimeout alias", window.setTimeout, "function");
+T_type("Date.now", Date.now, "function");
+
+var T0 = Date.now();
+function EL() { return Date.now() - T0; }
+
+/* Ids are handed out from 1 and must be unique; 0 is the failure value. */
+var idA = setTimeout(function() {}, 100000);
+var idB = setInterval(function() {}, 100000);
+var idC = requestAnimationFrame(function() {});
+T("setTimeout returns a non-zero id", idA !== 0, S(idA));
+T("setInterval returns a non-zero id", idB !== 0, S(idB));
+T("requestAnimationFrame returns a non-zero id", idC !== 0, S(idC));
+T("ids are distinct", idA !== idB && idB !== idC && idA !== idC, idA + "/" + idB + "/" + idC);
+clearTimeout(idA);
+clearInterval(idB);
+cancelAnimationFrame(idC);
+/* Clearing an id that was never handed out must be harmless. */
+clearTimeout(0);
+clearInterval(-1);
+cancelAnimationFrame(999999);
+T("clearing unknown ids is a no-op", true);
+
+/* ------------------------------------------------------------------ */
+T_sec("scheduling (results appear as the timers fire)");
+var fired = {};
+var onceCount = 0, aAt = 0, fAt = 0, bAt = 0, cAt = 0;
+var intCount = 0, intId = 0, intStoppedAt = -1;
+
+/* A one-shot, timed. */
+setTimeout(function() {
+  aAt = EL();
+  fired.a = true;
+  T("setTimeout callback ran", true, "at " + aAt + " ms");
+  T("setTimeout honoured its delay", aAt >= 15, "elapsed=" + aAt);
+}, 20);
+
+/* Counted separately so the watchdog can prove a one-shot is not re-armed. */
+setTimeout(function() { onceCount++; }, 20);
+
+/* Nesting: a callback that schedules another callback. */
+setTimeout(function() {
+  bAt = EL();
+  fired.b = true;
+  setTimeout(function() {
+    cAt = EL();
+    fired.c = true;
+    T("nested setTimeout ran", true, "outer " + bAt + " ms, inner " + cAt + " ms");
+    T("the nested timer ran after its parent", cAt >= bAt, bAt + " -> " + cAt);
+  }, 20);
+}, 40);
+
+/* Cleared before it can fire; the watchdog turns that into an assertion. */
+var dId = setTimeout(function() { fired.d = true; }, 30);
+clearTimeout(dId);
+
+/* An interval that clears itself after three fires. */
+intId = setInterval(function() {
+  intCount++;
+  if (intCount === 3) {
+    clearInterval(intId);
+    intStoppedAt = intCount;
+  }
+}, 30);
+
+requestAnimationFrame(function() {
+  fAt = EL();
+  fired.f = true;
+  T("requestAnimationFrame callback ran", true, "at " + fAt + " ms");
+});
+
+/* A cancelled animation frame; the watchdog asserts it never ran. */
+var gId = requestAnimationFrame(function() { fired.g = true; });
+cancelAnimationFrame(gId);
+
+/* Watchdog: runs once everything above should have settled. */
+setTimeout(function() {
+  T("clearTimeout prevented the callback", fired.d !== true, S(fired.d));
+  T("cancelAnimationFrame prevented the callback", fired.g !== true, S(fired.g));
+  T("setInterval fired repeatedly", intCount >= 3, "count=" + intCount);
+  T_eq("setInterval stopped at the clearInterval", intStoppedAt, 3);
+  T_eq("a one-shot timer fired exactly once", onceCount, 1);
+  T("requestAnimationFrame ran within a frame or two", fAt > 0 && fAt < 400, "elapsed=" + fAt);
+  T_line("Scheduling assertions complete.", "sec");
+
+  /* A little later, prove the cleared interval really stayed cleared. */
+  var snapshot = intCount;
+  setTimeout(function() {
+    T_eq("interval count frozen after clearInterval", intCount, snapshot);
+  }, 120);
+}, 260);
+
+/* ------------------------------------------------------------------ */
+/* The regression that matters most: a timer that runs LONG after the build
+   document was swapped out must still reach the page on screen. getElementById
+   used to read m_buildDoc (null by then) and markLayoutDirty(true) used to set
+   flags the visible-doc path discards, so this loop silently did nothing. */
+T_sec("live DOM edits after page load");
+var ticks = 0;
+var live = document.getElementById("live");
+var firstText = (live !== null) ? live.textContent : "";
+setInterval(function() {
+  ticks++;
+  /* getElementById inside a timer: proves jsActiveDoc() follows the swap. */
+  var el = document.getElementById("live");
+  var info = document.getElementById("liveinfo");
+  if (el === null || info === null) {
+    if (ticks === 1) T("getElementById works inside a timer", false, "returned null after load");
+    return;
+  }
+  if (ticks === 1) {
+    T("getElementById works inside a timer", true);
+    T_eq("document.title readable inside a timer", document.title, "Timers test");
+  }
+  el.textContent = "running - " + ticks + " tick(s)";
+  info.textContent = "tick " + ticks + "   title=" + document.title +
+                     "   body children=" + document.body.childElementCount;
+  if (ticks === 2) {
+    /* Text edits must re-layout the visible document, or the new string is
+       never painted even though the DOM says it changed. */
+    T("text set from a timer reads back", el.textContent.indexOf("2 tick") >= 0, S(el.textContent));
+    T("the live region actually changed", el.textContent !== firstText, firstText + " -> " + el.textContent);
+  }
+  if (ticks === 3) {
+    /* A node created and appended from a timer, into the visible document. */
+    var d = document.createElement("div");
+    d.id = "timerAppended";
+    d.className = "ok";
+    d.textContent = "PASS  this line was appended by a timer after page load";
+    document.getElementById("log").appendChild(d);
+    T_PASS++;
+    /* Compared by id rather than by object identity: the bridge hands out one
+       cached wrapper per element handle, but that cache is a bounded
+       round-robin, so identity is an implementation detail, not a contract. */
+    T("appendChild from a timer reaches the visible document",
+      document.getElementById("log").lastElementChild.id === "timerAppended");
+    T("the appended node is findable by id", document.getElementById("timerAppended") !== null);
+    console.log("TEST PASS timer: appendChild from a timer after load");
+  }
+  if (ticks === 4) {
+    T_line("All timer assertions complete: " + T_PASS + " passed, " + T_FAIL + " failed.",
+           T_FAIL === 0 ? "ok" : "bad");
+    console.log("TEST TIMER-SUMMARY pass=" + T_PASS + " fail=" + T_FAIL);
+  }
+}, 500);
+</script>
+</body>
+</html>
