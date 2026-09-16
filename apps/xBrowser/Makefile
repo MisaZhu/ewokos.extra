@@ -38,6 +38,7 @@ LD_LIB_DEPS = \
 	$(BUILD_DIR)/lib/libdisplay.a \
 	$(BUILD_DIR)/lib/libkeyb.a \
 	$(BUILD_DIR)/lib/libmouse.a \
+	$(BUILD_DIR)/lib/libclipboard.a \
 	$(BUILD_DIR)/lib/libewoksys.a \
 	$(BUILD_DIR)/lib/libc.a \
 	$(BUILD_DIR)/lib/libgloss.a \
@@ -52,7 +53,7 @@ $(BROWSER): $(BROWSER_OBJS) $(LD_LIB_DEPS)
 	mkdir -p $(BROWSER_DIR)
 	$(LD) -Ttext=100 $(BROWSER_OBJS) -o $(BROWSER) $(LDFLAGS) \
 		$(EWOK_LIB_X) -lWidgetWebview -lewebview -lmario_jsn -lwebp -llitehtml -ltinyhttpsc -lsocket \
-		$(EWOK_LIB_GRAPH) \
+		$(EWOK_LIB_GRAPH) -lclipboard \
 		$(EWOK_LIBC) -lcxx
 	cp -r res $(BROWSER_DIR)
 
