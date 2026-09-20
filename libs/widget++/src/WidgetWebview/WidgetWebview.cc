@@ -33,6 +33,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>             /* lroundf/ceilf: logical<->device pixel scaling */
 
 using namespace Ewok;
 
@@ -52,9 +53,12 @@ static bool heap_stat_enabled() {
     return enabled == 1;
 }
 
-/* The EwokOS port defines eweb_surface_t == graph_t (port_ewokos.c), so an
- * adopted frame casts straight back - no copy, no surface_native() lookup. */
-static inline graph_t* frameGraph(eweb_surface_t* s) { return (graph_t*)s; }
+/* The EwokOS port wraps each frame in an opaque handle around a device-pixel
+ * graph_t (port_ewokos.c). Recover the graph_t* for the zero-copy present via
+ * the port's accessor rather than a raw cast. */
+static inline graph_t* frameGraph(eweb_surface_t* s) {
+    return (graph_t*)eweb_port_ewokos_surface_native(s);
+}
 
 /* ==================================================================
  * Lifecycle
@@ -63,6 +67,7 @@ static inline graph_t* frameGraph(eweb_surface_t* s) { return (graph_t*)s; }
 WidgetWebview::WidgetWebview()
     : m_view(nullptr)
     , m_jsEnabled(true)
+    , m_dpr(1.0f)
     , m_displayCache(nullptr)
     , m_frameScrollX(0)
     , m_frameScrollY(0)
@@ -74,8 +79,22 @@ WidgetWebview::WidgetWebview()
     , m_uiBuildOverlay(false)
     , m_lastStatLogAt(0)
 {
+    /* HiDPI mechanism, off by default on EwokOS: lay out in logical (CSS) px
+     * and rasterise at device resolution. dpr defaults to 1.0 (plain 1x, the
+     * port does no scaling); set XBROWSER_DPR (e.g. 2) to opt into HiDPI on a
+     * higher-density panel, matching the SDL reference port. */
+    const char* dprEnv = getenv("XBROWSER_DPR");
+    if(dprEnv != nullptr && dprEnv[0] != '\0') {
+        float v = (float)atof(dprEnv);
+        if(v >= 1.0f && v <= 4.0f)
+            m_dpr = v;
+    }
+
     eweb_port_t port;
     eweb_port_ewokos(&port, nullptr);
+    /* Must precede ewebview_create()/set_viewport so the frame pool allocates
+     * device-sized (logical*dpr) buffers. */
+    eweb_port_ewokos_set_dpr(m_dpr);
     m_view = ewebview_create(&port);
     if(m_view == nullptr) {
         klog("[xBrowser] ewebview_create failed\n");
@@ -106,7 +125,7 @@ WidgetWebview::~WidgetWebview()
      * it back FIRST - it becomes invalid the moment the pool is freed. */
     if(m_view != nullptr) {
         if(m_displayCache != nullptr) {
-            ewebview_release_frame(m_view, (eweb_surface_t*)m_displayCache);
+            ewebview_release_frame(m_view, m_displayCache);
             m_displayCache = nullptr;
         }
         ewebview_destroy(m_view);
@@ -157,7 +176,7 @@ void WidgetWebview::cbFrame(void* ud, struct eweb_surface* frame,
 {
     WidgetWebview* self = (WidgetWebview*)ud;
     if(self != nullptr)
-        self->adoptFrame(frameGraph((eweb_surface_t*)frame),
+        self->adoptFrame((eweb_surface_t*)frame,
                          frameScrollX, frameScrollY, docW, docH);
 }
 
@@ -262,7 +281,7 @@ void WidgetWebview::cbTasksEnd(void* ud)
  * Frame adoption + UI-local scrolling
  * ================================================================== */
 
-void WidgetWebview::adoptFrame(graph_t* buf, int renderX, int renderY, int docW, int docH)
+void WidgetWebview::adoptFrame(eweb_surface_t* buf, int renderX, int renderY, int docW, int docH)
 {
     /* UI-THREAD ONLY (from cbFrame). Take ownership of the engine-rendered
      * frame as the new front buffer and hand the previous one back to the
@@ -271,14 +290,14 @@ void WidgetWebview::adoptFrame(graph_t* buf, int renderX, int renderY, int docW,
      * it aligned to the live scroll and updateScroller sizes the scrollbar. */
     if(buf == nullptr || m_view == nullptr)
         return;
-    graph_t* old = m_displayCache;
+    eweb_surface_t* old = m_displayCache;
     m_displayCache = buf;
     m_frameScrollX = renderX;
     m_frameScrollY = renderY;
     m_docW = docW;
     m_docH = docH;
     if(old != nullptr)
-        ewebview_release_frame(m_view, (eweb_surface_t*)old);
+        ewebview_release_frame(m_view, old);
 
     updateScroller();
     update();
@@ -292,8 +311,12 @@ void WidgetWebview::uiLocalScroll(int newX, int newY)
      * the page tracks the gesture immediately. Then ewebview_scroll() so the
      * engine re-renders the newly exposed content at the new offset and fires
      * the page's scroll handlers there. */
-    int maxX = m_docW - area.w; if (maxX < 0) maxX = 0;
-    int maxY = m_docH - area.h; if (maxY < 0) maxY = 0;
+    /* m_docW/H and m_scroll* are LOGICAL px; the visible page is the device
+     * area scaled down by dpr. Clamp in logical units to match. */
+    int viewW = (int)ceilf((float)area.w / m_dpr);
+    int viewH = (int)ceilf((float)area.h / m_dpr);
+    int maxX = m_docW - viewW; if (maxX < 0) maxX = 0;
+    int maxY = m_docH - viewH; if (maxY < 0) maxY = 0;
     if (newX < 0) newX = 0; else if (newX > maxX) newX = maxX;
     if (newY < 0) newY = 0; else if (newY > maxY) newY = maxY;
     if (newX == m_scrollX && newY == m_scrollY)
@@ -358,11 +381,14 @@ void WidgetWebview::onRepaint(graph_t* g, XTheme* theme, const grect_t& r)
      * is adopted. */
     graph_fill_rect(g, r.x, r.y, r.w, r.h, 0xFFFFFFFF);
 
-    graph_t* frame = m_displayCache;
+    graph_t* frame = frameGraph(m_displayCache);
     bool has_frame = (frame != nullptr && frame->buffer != nullptr);
     if (has_frame) {
-        int dx = r.x + (m_frameScrollX - m_scrollX);
-        int dy = r.y + (m_frameScrollY - m_scrollY);
+        /* The frame is a DEVICE-pixel buffer (~area size), blitted 1:1 for a
+         * crisp result. The scroll offsets are LOGICAL, so scale the render-vs-
+         * live delta up by dpr to shift the device buffer by the right amount. */
+        int dx = r.x + (int)lroundf((float)(m_frameScrollX - m_scrollX) * m_dpr);
+        int dy = r.y + (int)lroundf((float)(m_frameScrollY - m_scrollY) * m_dpr);
         graph_set_clip(g, r.x, r.y, r.w, r.h);
         graph_blt(frame, 0, 0, frame->w, frame->h, g, dx, dy, frame->w, frame->h);
         graph_unset_clip(g);
@@ -402,11 +428,19 @@ void WidgetWebview::onResize()
 {
     /* UI-THREAD ONLY: the window changed size. Hand the new size to the engine
      * (re-layout, re-render, window.onresize all happen there); here we only
-     * refresh the UI-side drag step and scrollbar geometry. */
-    dragStep = area.h / 4;
+     * refresh the UI-side drag step and scrollbar geometry.
+     *
+     * The engine works in LOGICAL (CSS) px, so report the viewport as the
+     * device area scaled down by dpr; the port allocates the frame at
+     * logical*dpr == device px. ceilf keeps the device buffer >= the widget. */
+    int viewW = (int)ceilf((float)area.w / m_dpr);
+    int viewH = (int)ceilf((float)area.h / m_dpr);
+    if(viewW < 1) viewW = 1;
+    if(viewH < 1) viewH = 1;
+    dragStep = viewH / 4;   /* LOGICAL-px quantum (scroll offsets are logical) */
 
     if(m_view != nullptr)
-        ewebview_set_viewport(m_view, area.w, area.h);
+        ewebview_set_viewport(m_view, viewW, viewH);
 
     updateScroller();
 }
@@ -434,9 +468,12 @@ void WidgetWebview::updateScroller()
 {
     /* UI-THREAD ONLY: set the scrollbar geometry from the last-known document
      * size (reported by the engine with each frame / scroll clamp) and the live
-     * UI offset. No document access - the engine is authoritative. */
-    setScrollerInfo(m_docW, m_scrollX, area.w, true);
-    setScrollerInfo(m_docH, m_scrollY, area.h, false);
+     * UI offset. No document access - the engine is authoritative. All three
+     * inputs are LOGICAL px (doc size, offset, and the device area / dpr). */
+    int viewW = (int)ceilf((float)area.w / m_dpr);
+    int viewH = (int)ceilf((float)area.h / m_dpr);
+    setScrollerInfo(m_docW, m_scrollX, viewW, true);
+    setScrollerInfo(m_docH, m_scrollY, viewH, false);
 }
 
 bool WidgetWebview::onMouse(xevent_t* ev)
@@ -478,8 +515,10 @@ bool WidgetWebview::onMouse(xevent_t* ev)
                          (btn == MOUSE_BUTTON_MID)   ? EWEB_BUTTON_MIDDLE :
                          (btn == MOUSE_BUTTON_RIGHT) ? EWEB_BUTTON_RIGHT :
                                                        EWEB_BUTTON_NONE;
-            fev.cx = ip.x;
-            fev.cy = ip.y;
+            /* getInsidePos returns DEVICE px; the engine hit-tests in LOGICAL
+             * (CSS) px, so scale the client coordinates down by dpr. */
+            fev.cx = (int)lroundf((float)ip.x / m_dpr);
+            fev.cy = (int)lroundf((float)ip.y / m_dpr);
             fev.wheel = 0;
             ewebview_post_event(m_view, &fev);
         }

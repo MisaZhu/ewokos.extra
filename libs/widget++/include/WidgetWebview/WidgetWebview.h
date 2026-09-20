@@ -117,7 +117,7 @@ private:
      * handing the previous one back to the engine's frame pool. Records the
      * offset/geometry it was rendered at so onRepaint can blit it aligned to
      * the live scroll. UI-thread only (called from cbFrame). */
-    void adoptFrame(graph_t* buf, int renderX, int renderY, int docW, int docH);
+    void adoptFrame(struct eweb_surface* buf, int renderX, int renderY, int docW, int docH);
     /* Wheel/drag scroll: clamp the new offset to the last-known geometry, move
      * the live UI offset so the next repaint shifts the cached frame
      * immediately, then ewebview_scroll() so the engine re-renders the exposed
@@ -127,11 +127,20 @@ private:
     struct ewebview* m_view;
     bool        m_jsEnabled;        // UI-side mirror (the C API has no getter)
 
-    /* UI front buffer: the last frame adopted from the engine (a graph_t* under
-     * the EwokOS port), blitted by onRepaint shifted by (frameScroll - scroll).
-     * m_docW/m_docH is the last document geometry the engine reported, used to
-     * clamp UI-local scrolling and size the scrollbar. */
-    graph_t*    m_displayCache;
+    /* HiDPI: device pixels per logical (CSS) pixel handed to the EwokOS port
+     * (eweb_port_ewokos_set_dpr). The engine lays out / reports scroll + doc
+     * geometry in LOGICAL px and rasterises each frame at device resolution;
+     * this widget reports a logical viewport (area / m_dpr), blits the device-
+     * sized frame 1:1, and converts mouse/scroll between the two. Defaults to
+     * 1.0 (plain 1x, no scaling) unless XBROWSER_DPR overrides it. */
+    float       m_dpr;
+
+    /* UI front buffer: the last frame adopted from the engine, an opaque
+     * eweb_surface handle (its device-pixel graph_t* is recovered via
+     * eweb_port_ewokos_surface_native for the zero-copy blit in onRepaint).
+     * m_docW/m_docH is the last document geometry the engine reported (LOGICAL
+     * px), used to clamp UI-local scrolling and size the scrollbar. */
+    struct eweb_surface* m_displayCache;
     int         m_frameScrollX;
     int         m_frameScrollY;
     int         m_docW;
