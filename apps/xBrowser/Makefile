@@ -18,6 +18,7 @@ LD_LIB_DEPS = \
 	$(BUILD_DIR)/lib/libWidgetWebview.a \
 	$(BUILD_DIR)/lib/libewebview.a \
 	$(BUILD_DIR)/lib/libmario_jsn.a \
+	$(BUILD_DIR)/lib/libeasm.a \
 	$(BUILD_DIR)/lib/libwebp.a \
 	$(BUILD_DIR)/lib/libwidget++.a \
 	$(BUILD_DIR)/lib/libx++.a \
@@ -52,7 +53,7 @@ all: $(BROWSER)
 $(BROWSER): $(BROWSER_OBJS) $(LD_LIB_DEPS)
 	mkdir -p $(BROWSER_DIR)
 	$(LD) -Ttext=100 $(BROWSER_OBJS) -o $(BROWSER) $(LDFLAGS) \
-		$(EWOK_LIB_X) -lWidgetWebview -lewebview -lmario_jsn -lwebp -llitehtml -ltinyhttpsc -lsocket \
+		$(EWOK_LIB_X) -lWidgetWebview -lewebview -lmario_jsn -leasm -lwebp -llitehtml -ltinyhttpsc -lsocket \
 		$(EWOK_LIB_GRAPH) -lclipboard \
 		$(EWOK_LIBC) -lcxx
 	cp -r res $(BROWSER_DIR)
