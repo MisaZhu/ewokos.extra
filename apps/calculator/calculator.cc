@@ -14,35 +14,35 @@
 
 using namespace Ewok;
 
-// 颜色定义
-static const uint32_t COLOR_BG_DARK = 0xFF3A3A3A;    // 深灰色（顶部）
-static const uint32_t COLOR_BG_ORANGE = 0xFFE8A838;  // 橙色（底部）
-static const uint32_t COLOR_BTN_BG = 0xFFF5E6D3;     // 米色按钮
-static const uint32_t COLOR_BTN_TEXT = 0xFF5C4033;   // 深棕色文字
-static const uint32_t COLOR_EQUAL = 0xFFFF6B9D;      // 粉红色等号
-static const uint32_t COLOR_DISPLAY_BG = 0xFFF5E6D3; // 显示屏背景
+// Color definitions
+static const uint32_t COLOR_BG_DARK = 0xFF3A3A3A;    // dark gray (top)
+static const uint32_t COLOR_BG_ORANGE = 0xFFE8A838;  // orange (bottom)
+static const uint32_t COLOR_BTN_BG = 0xFFF5E6D3;     // beige button
+static const uint32_t COLOR_BTN_TEXT = 0xFF5C4033;   // dark brown text
+static const uint32_t COLOR_EQUAL = 0xFFFF6B9D;      // pink equals sign
+static const uint32_t COLOR_DISPLAY_BG = 0xFFF5E6D3; // display background
 
-// 自定义显示屏组件
+// Custom display component
 class DisplayWidget : public Widget {
 private:
     char displayText[32];
     
 protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
-        // 绘制深灰色背景（圆角）
+        // draw the dark gray background (rounded)
         graph_fill_round(g, r.x, r.y, r.w, r.h, 20, COLOR_BG_DARK);
         
-        // 绘制显示屏（米色圆角矩形，带内边距）
+        // draw the display (beige rounded rect with padding)
         int padding = 15;
         int displayX = r.x + padding;
         int displayY = r.y + padding;
         int displayW = r.w - padding * 2;
         int displayH = r.h - padding * 2;
         
-        // 显示屏背景
+        // display background
         graph_fill_round(g, displayX, displayY, displayW, displayH, 15, COLOR_DISPLAY_BG);
         
-        // 绘制文字（右对齐）
+        // draw text (right-aligned)
         uint32_t tw, th;
         font_text_size(displayText, theme->getFont(), theme->basic.fontSize + 8, &tw, &th);
         int textX = displayX + displayW - (int32_t)tw - 15;
@@ -63,7 +63,7 @@ public:
     }
 };
 
-// 自定义3D圆角椭圆形按钮
+// Custom 3D rounded oval button
 class CalcButton : public LabelButton {
 private:
     uint32_t bgColor;
@@ -74,19 +74,19 @@ protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         uint32_t color = bgColor;
         
-        // 计算圆角半径（椭圆形）
+        // compute the corner radius (oval)
         int radius = r.h / 2;
-        int roundWidth = 2; // 3D效果宽度
+        int roundWidth = 2; // 3D effect width
         
         if(pressed) {
-            // 按下状态：使用反向3D效果（凹陷）
+            // pressed state: use the inverted 3D effect (depressed)
             graph_fill_round_3d(g, r.x, r.y, r.w, r.h, radius, roundWidth, color, true);
         } else {
-            // 正常状态：使用3D凸起效果
+            // normal state: use the raised 3D effect
             graph_fill_round_3d(g, r.x, r.y, r.w, r.h, radius, roundWidth, color, false);
         }
         
-        // 绘制按钮文字
+        // draw the button text
         const string& text = getLabel();
         uint32_t tw, th;
         font_text_size(text.c_str(), theme->getFont(), theme->basic.fontSize + 6, &tw, &th);
@@ -244,17 +244,17 @@ public:
         setRoot(root);
         root->setType(Container::VERTICAL);
 
-        // 创建显示屏区域（深灰色圆角背景）
+        // create the display area (dark gray rounded background)
         display = new DisplayWidget();
         display->fix(0, 80);
         root->add(display);
 
-        // 创建按钮区域（橙色背景）
+        // create the button area (orange background)
         Container* buttonArea = new Container();
         buttonArea->setType(Container::VERTICAL);
         root->add(buttonArea);
 
-        // 按钮布局：4行 x 4列
+        // button layout: 4 rows x 4 columns
         const char* buttons[4][4] = {
             {"C", "CE", "<-", "/"},
             {"7", "8", "9", "*"},
@@ -285,7 +285,7 @@ public:
             }
         }
 
-        // 最后一行：0, ., =
+        // last row: 0, ., =
         Container* lastRow = new Container();
         lastRow->setType(Container::HORIZONTAL);
         buttonArea->add(lastRow);

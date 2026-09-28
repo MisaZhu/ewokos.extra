@@ -119,7 +119,7 @@ WidgetWebview::WidgetWebview()
 
 WidgetWebview::~WidgetWebview()
 {
-    /* "程序退出" termination path. The engine owns the documents/VM/frame pool,
+    /* "program exit" termination path. The engine owns the documents/VM/frame pool,
      * so ewebview_destroy() stops the threads and tears everything down in the
      * engine's own context. The adopted front buffer is a pooled frame, so hand
      * it back FIRST - it becomes invalid the moment the pool is freed. */
