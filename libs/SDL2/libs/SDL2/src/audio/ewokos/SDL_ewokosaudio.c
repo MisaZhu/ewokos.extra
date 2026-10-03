@@ -208,7 +208,7 @@ static int wait_avail(struct pcm *pcm, int *avail, int time_out_ms, const volati
             break;
         }
 
-        proc_usleep(SLEEP_TIME_MS * 1000);
+        usleep(SLEEP_TIME_MS * 1000);
     }
 
     return ret;
@@ -342,12 +342,12 @@ static void *audio_thread(void *arg)
     }
 
     /* Same delay as wavplayer's push_data_to_pcm */
-    proc_usleep(200 * 1000);
+    usleep(200 * 1000);
 
     while (data->enabled) {
         /* Check device paused state (set by SDL_PauseAudio) */
         if (device->paused) {
-            proc_usleep(10000);
+            usleep(10000);
             continue;
         }
 
@@ -487,7 +487,7 @@ static void EWOKOSAUD_UnlockDevice(_THIS) {
 }
 
 static void EWOKOSAUD_WaitDevice(_THIS) {
-    proc_usleep(1000);
+    usleep(1000);
 }
 
 static Uint8 *EWOKOSAUD_GetDeviceBuf(_THIS) {
@@ -499,7 +499,7 @@ static void EWOKOSAUD_PlayDevice(_THIS) {
 
 static void EWOKOSAUD_WaitDone(_THIS) {
     if (this->hidden->pcm) {
-        proc_usleep(100000);
+        usleep(100000);
     }
 }
 
