@@ -40,13 +40,10 @@ SDL_CreateSemaphore(Uint32 initial_value)
         SDL_OutOfMemory();
         return NULL;
     }
-    sem->sem_id = semaphore_alloc();
+    sem->sem_id = semaphore_alloc_count((int)initial_value);
     if (sem->sem_id <= 0) {
         SDL_free(sem);
         return NULL;
-    }
-    while (initial_value-- > 0) {
-        semaphore_quit(sem->sem_id);
     }
     return sem;
 }
@@ -118,15 +115,16 @@ SDL_CreateSemaphore(Uint32 initial_value)
         return NULL;
     }
 
-    sem->sem_id = semaphore_alloc();
+    /* semaphore_alloc() is a binary mutex that starts with its single permit
+       free, so SDL_CreateSemaphore(0) on it returned an immediately
+       acquirable semaphore: SDL_CreateThread's SDL_SemWait(args->wait) fell
+       through, args was freed, and the new thread read garbage in
+       SDL_RunThread. SDL semaphores are counting and start at initial_value,
+       which is what semaphore_alloc_count() provides. */
+    sem->sem_id = semaphore_alloc_count((int)initial_value);
     if (sem->sem_id <= 0) {
         SDL_free(sem);
         return NULL;
-    }
-
-    /* kernel semaphores start at zero; post the initial value */
-    while (initial_value-- > 0) {
-        semaphore_quit(sem->sem_id);
     }
 
     return sem;

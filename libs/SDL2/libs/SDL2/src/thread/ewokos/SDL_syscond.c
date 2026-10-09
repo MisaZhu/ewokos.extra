@@ -47,8 +47,12 @@ SDL_CreateCond(void)
 
     cond = (SDL_cond *) SDL_malloc(sizeof(SDL_cond));
     if (cond) {
-        cond->wait_sem = semaphore_alloc();
-        cond->wait_done = semaphore_alloc();
+        /* counting semaphores starting at zero: semaphore_alloc() hands out a
+           binary mutex whose single permit is already free, which would let
+           the first SDL_CondWait fall straight through and would cap
+           SDL_CondBroadcast at one post. */
+        cond->wait_sem = semaphore_alloc_count(0);
+        cond->wait_done = semaphore_alloc_count(0);
         cond->waiting = cond->signals = 0;
         if (cond->wait_sem <= 0 || cond->wait_done <= 0) {
             SDL_DestroyCond(cond);
