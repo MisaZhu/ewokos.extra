@@ -1,5 +1,5 @@
 
-DIRS = curse_test evim
+DIRS = curse_test evim sdltest
 
 all: 
 	@for dir in $(DIRS); do \
