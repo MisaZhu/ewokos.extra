@@ -176,10 +176,8 @@ static struct child_process *get_helper(struct transport *transport)
 	data->out = xfdopen(duped, "r");
 
 	sigchain_push(SIGPIPE, SIG_IGN);
-	fprintf(stderr, "pipe-debug: parent write capabilities fd=%d\n", helper->in);
 	if (write_constant_gently(helper->in, "capabilities\n") < 0)
 		die("remote helper '%s' aborted session", data->name);
-	fprintf(stderr, "pipe-debug: parent wrote capabilities\n");
 	sigchain_pop(SIGPIPE);
 
 	while (1) {
@@ -187,7 +185,6 @@ static struct child_process *get_helper(struct transport *transport)
 		int mandatory = 0;
 		if (recvline(data, &buf))
 			die("remote helper '%s' aborted session", data->name);
-		fprintf(stderr, "pipe-debug: parent capability line='%s'\n", buf.buf);
 
 		if (!*buf.buf)
 			break;

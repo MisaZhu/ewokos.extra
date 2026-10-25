@@ -1580,22 +1580,15 @@ int cmd_main(int argc, const char **argv)
 	}
 
 	http_init(remote, url.buf, 0);
-	for (int debug_fd = 0; debug_fd < 20; debug_fd++) {
-		int debug_flags = fcntl(debug_fd, F_GETFD);
-		if (debug_flags >= 0)
-			fprintf(stderr, "pipe-debug: helper open fd=%d flags=%d\n", debug_fd, debug_flags);
-	}
 
 	do {
 		const char *arg;
 
-		fprintf(stderr, "pipe-debug: helper waiting command fd=%d\n", fileno(stdin));
 		if (strbuf_getline_lf(&buf, stdin) == EOF) {
 			if (ferror(stdin))
 				error(_("remote-curl: error reading command stream from git"));
 			goto cleanup;
 		}
-		fprintf(stderr, "pipe-debug: helper got command='%s'\n", buf.buf);
 		if (buf.len == 0)
 			break;
 		if (starts_with(buf.buf, "fetch ")) {
@@ -1646,7 +1639,6 @@ int cmd_main(int argc, const char **argv)
 			printf("object-format\n");
 			printf("\n");
 			fflush(stdout);
-			fprintf(stderr, "pipe-debug: helper flushed capabilities fd=%d\n", fileno(stdout));
 		} else if (skip_prefix(buf.buf, "stateless-connect ", &arg)) {
 			if (!stateless_connect(arg))
 				break;

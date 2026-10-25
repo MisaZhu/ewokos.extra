@@ -455,6 +455,9 @@ int git_mkstemps_mode(char *pattern, int suffix_len, int mode)
 	char *filename_template;
 	size_t len;
 	int fd, count;
+#ifdef __ewokos__
+	static uint64_t sequence;
+#endif
 
 	len = strlen(pattern);
 
@@ -476,8 +479,13 @@ int git_mkstemps_mode(char *pattern, int suffix_len, int mode)
 	for (count = 0; count < TMP_MAX; ++count) {
 		int i;
 		uint64_t v;
+#ifdef __ewokos__
+		/* O_EXCL provides collision safety without an OS entropy device. */
+		v = ((uint64_t)(uint32_t)getpid() << 32) | sequence++;
+#else
 		if (csprng_bytes(&v, sizeof(v)) < 0)
 			return error_errno("unable to get random bytes for temporary file");
+#endif
 
 		/* Fill in the random bits. */
 		for (i = 0; i < num_x; i++) {

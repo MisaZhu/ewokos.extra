@@ -870,10 +870,8 @@ fail_pipe:
 	 * Note that use of this infrastructure is completely advisory,
 	 * therefore, we keep error checks minimal.
 	 */
-	fprintf(stderr, "pipe-debug: parent notify read=%d write=%d child=%d\n",
-			notify_pipe[0], notify_pipe[1], (int)cmd->pid);
 	close(notify_pipe[1]);
-	fprintf(stderr, "pipe-debug: parent closed notify write=%d\n", notify_pipe[1]);
+#ifndef __ewokos__
 	if (xread(notify_pipe[0], &cerr, sizeof(cerr)) == sizeof(cerr)) {
 		/*
 		 * At this point we know that fork() succeeded, but exec()
@@ -884,7 +882,7 @@ fail_pipe:
 		failed_errno = errno;
 		cmd->pid = -1;
 	}
-	fprintf(stderr, "pipe-debug: parent notify EOF read=%d\n", notify_pipe[0]);
+#endif
 	close(notify_pipe[0]);
 
 	if (null_fd >= 0)

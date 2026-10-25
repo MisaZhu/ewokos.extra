@@ -715,29 +715,36 @@ static int curl_process_response_headers(CURL *handle, TinyHttpsResponse *respon
     return curl_deliver_header(handle, "\r\n", 2);
 }
 
-static CURLcode curl_deliver_body(CURL *handle, TinyHttpsResponse *response)
+static CURLcode curl_deliver_body(CURL *handle, TinyHttpsResponse *response,
+        CurlBuffer *body)
 {
     if (handle->nobody)
         return CURLE_OK;
     unsigned char buffer[16384];
+    body->size = 0;
     for (;;) {
         int got = HttpsResponseReadBodyChunk(response, buffer, sizeof(buffer));
-        if (got < 0) {
-            curl_set_error(handle, CURLE_READ_ERROR, "failed while reading HTTP response body");
+        if (got < 0 || (!got && HttpsResponseError(response))) {
+            curl_set_error(handle, CURLE_READ_ERROR,
+                    HttpsResponseGetErrorMsg(response));
             return CURLE_READ_ERROR;
         }
         if (!got)
             break;
         curl_debug(handle, CURLINFO_DATA_IN, (char *)buffer, got);
-        size_t written;
-        if (handle->write_callback)
-            written = handle->write_callback((char *)buffer, 1, got, handle->write_data);
-        else
-            written = fwrite(buffer, 1, got, stdout);
-        if (written != (size_t)got) {
-            curl_set_error(handle, CURLE_WRITE_ERROR, "HTTP response callback failed");
-            return CURLE_WRITE_ERROR;
-        }
+        if (curl_buffer_append(body, buffer, got))
+            return curl_memory_error(handle);
+    }
+
+    const char *output = body->data ? body->data : "";
+    size_t written;
+    if (handle->write_callback)
+        written = handle->write_callback(output, 1, body->size, handle->write_data);
+    else
+        written = fwrite(output, 1, body->size, stdout);
+    if (written != body->size) {
+        curl_set_error(handle, CURLE_WRITE_ERROR, "HTTP response callback failed");
+        return CURLE_WRITE_ERROR;
     }
     return CURLE_OK;
 }
@@ -804,6 +811,8 @@ static CURLcode curl_perform(CURL *handle)
         return curl_memory_error(handle);
     }
     int redirects = 0;
+    int retries = 0;
+    CurlBuffer response_body = {0};
     int has_body = handle->post_fields || handle->read_callback;
     const char *method = handle->custom_request;
     if (!method) method = handle->upload ? "PUT" : handle->post ? "POST" : handle->nobody ? "HEAD" : "GET";
@@ -815,7 +824,7 @@ static CURLcode curl_perform(CURL *handle)
             break;
         }
         HttpsRequestSetMaxRedirections(request, 0);
-        HttpsRequestSetTimeout(request, 30000);
+        HttpsRequestSetTimeout(request, 4000);
         HttpsRequestSetMethod(request, method);
         if (curl_add_request_headers(handle, request, current_url, handle->url)) {
             HttpsRequestFree(request);
@@ -834,6 +843,14 @@ static CURLcode curl_perform(CURL *handle)
         if (HttpsResponseError(response)) {
             result = curl_map_response_error(handle, response);
             HttpsResponseFree(response);
+            if ((!strcmp(method, "GET") || !strcmp(method, "POST")) && retries < 1 &&
+                    (result == CURLE_COULDNT_CONNECT ||
+                     result == CURLE_READ_ERROR ||
+                     result == CURLE_SSL_CONNECT_ERROR ||
+                     result == CURLE_OPERATION_TIMEDOUT)) {
+                retries++;
+                continue;
+            }
             break;
         }
 
@@ -887,12 +904,21 @@ static CURLcode curl_perform(CURL *handle)
             curl_set_error(handle, CURLE_HTTP_RETURNED_ERROR, "HTTP server returned an error");
             result = CURLE_HTTP_RETURNED_ERROR;
         } else {
-            result = curl_deliver_body(handle, response);
+            result = curl_deliver_body(handle, response, &response_body);
         }
         HttpsResponseFree(response);
+        if ((!strcmp(method, "GET") || !strcmp(method, "POST")) && retries < 1 &&
+                (result == CURLE_COULDNT_CONNECT ||
+                 result == CURLE_READ_ERROR ||
+                 result == CURLE_SSL_CONNECT_ERROR ||
+                 result == CURLE_OPERATION_TIMEDOUT)) {
+            retries++;
+            continue;
+        }
         break;
     }
 
+    free(response_body.data);
     free(current_url);
     free(body.data);
     return result;
