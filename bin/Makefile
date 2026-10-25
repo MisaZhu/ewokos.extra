@@ -1,5 +1,5 @@
 
-DIRS = curse_test evim sdltest
+DIRS = curse_test evim sdltest git
 
 all: 
 	@for dir in $(DIRS); do \
