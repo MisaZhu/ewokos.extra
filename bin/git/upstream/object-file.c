@@ -407,13 +407,24 @@ static enum scld_error safe_create_leading_directories_1(char *path, int share)
 
 		slash_character = *slash;
 		*slash = '\0';
-		if (!stat(path, &st)) {
+		{
+			int stat_ret = stat(path, &st);
+			int stat_errno = errno;
+			fprintf(stderr, "SCLDDBG path=%s stat=%d mode=%o errno=%d\n",
+				path, stat_ret, stat_ret ? 0 : st.st_mode, stat_errno);
+			errno = stat_errno;
+			if (!stat_ret) {
 			/* path exists */
 			if (!S_ISDIR(st.st_mode)) {
 				errno = ENOTDIR;
 				ret = SCLD_EXISTS;
 			}
 		} else if (mkdir(path, 0777)) {
+			{
+				int mkdir_errno = errno;
+				fprintf(stderr, "SCLDDBG mkdir %s failed errno=%d\n", path, mkdir_errno);
+				errno = mkdir_errno;
+			}
 			if (errno == EEXIST &&
 			    !stat(path, &st) && S_ISDIR(st.st_mode))
 				; /* somebody created it since we checked */
@@ -432,6 +443,7 @@ static enum scld_error safe_create_leading_directories_1(char *path, int share)
 				ret = SCLD_FAILED;
 		} else if (share && adjust_shared_perm(path)) {
 			ret = SCLD_PERMS;
+		}
 		}
 		*slash = slash_character;
 	}
