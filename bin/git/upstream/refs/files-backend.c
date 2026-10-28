@@ -1759,7 +1759,6 @@ static int open_or_create_logfile(const char *path, void *cb)
 	*fd = open(path, O_APPEND | O_WRONLY | O_CREAT, 0666);
 	if (*fd < 0) {
 		int e = errno;
-		fprintf(stderr, "REFLOGDBG open %s errno=%d\n", path, e);
 		errno = e;
 	}
 	return (*fd < 0) ? -1 : 0;
@@ -1893,7 +1892,6 @@ static int files_log_ref_write(struct files_ref_store *refs,
 		struct strbuf sb = STRBUF_INIT;
 		int save_errno = errno;
 
-		fprintf(stderr, "REFLOGDBG write %s errno=%d\n", refname, save_errno);
 		errno = save_errno;
 		files_reflog_path(refs, &sb, refname);
 		strbuf_addf(err, "unable to append to '%s': %s",
@@ -1906,7 +1904,6 @@ static int files_log_ref_write(struct files_ref_store *refs,
 		struct strbuf sb = STRBUF_INIT;
 		int save_errno = errno;
 
-		fprintf(stderr, "REFLOGDBG close %s errno=%d\n", refname, save_errno);
 		files_reflog_path(refs, &sb, refname);
 		strbuf_addf(err, "unable to append to '%s': %s",
 			    sb.buf, strerror(save_errno));
