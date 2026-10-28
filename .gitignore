@@ -12,3 +12,14 @@ build*
 *.log
 *.d
 .build
+bin/git/upstream/command-list.h
+bin/git/upstream/config-list.h
+bin/git/upstream/git
+bin/git/upstream/GIT-CFLAGS
+bin/git/upstream/GIT-LDFLAGS
+bin/git/upstream/GIT-PREFIX
+bin/git/upstream/git-remote-http
+bin/git/upstream/git-remote-https
+bin/git/upstream/GIT-USER-AGENT
+bin/git/upstream/GIT-VERSION-FILE
+bin/git/upstream/hook-list.h
