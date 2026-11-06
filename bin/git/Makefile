@@ -5,10 +5,14 @@ BUILD_DIR = $(SYS_DIR)/build_$(ARCH)/$(HW)
 TARGET_DIR = $(BUILD_DIR)/rootfs
 UPSTREAM_DIR = upstream
 TINYHTTPSC_DIR = ../../libs/ewebview/libtinyhttpsc
+# The EwokOS libc <regex.h> provides only POSIX regexec (REG_NOTBOL/REG_NOTEOL)
+# and no REG_STARTEND, which git-compat-util.h hard-requires. NO_REGEX makes git
+# compile its own compat/regex (which supports REG_STARTEND) instead.
 UPSTREAM_MAKE = $(MAKE) -C $(UPSTREAM_DIR) SHELL=/bin/sh uname_S=EwokOS \
+	NO_REGEX=NeedsStartEnd \
 	ARCH="$(ARCH)" HW="$(HW)" BUILD_DIR="$(abspath $(BUILD_DIR))" \
 	CC="$(CC)" AR="$(AR)" \
-	CFLAGS="$(CFLAGS) -ffreestanding" \
+	CFLAGS="$(CFLAGS) -ffreestanding -Icompat/regex" \
 	LDFLAGS="-nostdlib -Wl,-Ttext=100 -L$(abspath $(BUILD_DIR))/lib" \
 	EWOK_LIBC="-Wl,--start-group -lewoksys -lc -lgloss -Wl,--end-group"
 

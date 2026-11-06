@@ -30,25 +30,25 @@ private:
 protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         // draw the dark gray background (rounded)
-        graph_fill_round(g, r.x, r.y, r.w, r.h, 20, COLOR_BG_DARK);
+        graph_fill_round(g, r.x, r.y, r.w, r.h, X::dpiSize(20), COLOR_BG_DARK);
         
         // draw the display (beige rounded rect with padding)
-        int padding = 15;
+        int padding = X::dpiSize(15);
         int displayX = r.x + padding;
         int displayY = r.y + padding;
         int displayW = r.w - padding * 2;
         int displayH = r.h - padding * 2;
         
         // display background
-        graph_fill_round(g, displayX, displayY, displayW, displayH, 15, COLOR_DISPLAY_BG);
+        graph_fill_round(g, displayX, displayY, displayW, displayH, X::dpiSize(15), COLOR_DISPLAY_BG);
         
         // draw text (right-aligned)
         uint32_t tw, th;
-        font_text_size(displayText, theme->getFont(), theme->basic.fontSize + 8, &tw, &th);
-        int textX = displayX + displayW - (int32_t)tw - 15;
+        font_text_size(displayText, theme->getFont(), theme->basic.fontSize + X::dpiSize(8), &tw, &th);
+        int textX = displayX + displayW - (int32_t)tw - X::dpiSize(15);
         int textY = displayY + (displayH - (int32_t)th) / 2;
         graph_draw_text_font(g, textX, textY, displayText, theme->getFont(), 
-                            theme->basic.fontSize + 8, 0xFF333333);
+                            theme->basic.fontSize + X::dpiSize(8), 0xFF333333);
     }
     
 public:
@@ -76,7 +76,7 @@ protected:
         
         // compute the corner radius (oval)
         int radius = r.h / 2;
-        int roundWidth = 2; // 3D effect width
+        int roundWidth = X::dpiSize(2); // 3D effect width
         
         if(pressed) {
             // pressed state: use the inverted 3D effect (depressed)
@@ -89,11 +89,11 @@ protected:
         // draw the button text
         const string& text = getLabel();
         uint32_t tw, th;
-        font_text_size(text.c_str(), theme->getFont(), theme->basic.fontSize + 6, &tw, &th);
+        font_text_size(text.c_str(), theme->getFont(), theme->basic.fontSize + X::dpiSize(6), &tw, &th);
         int textX = r.x + (r.w - (int32_t)tw) / 2;
         int textY = r.y + (r.h - (int32_t)th) / 2;
         graph_draw_text_font(g, textX, textY, text.c_str(), theme->getFont(), 
-                            theme->basic.fontSize + 6, textColor);
+                            theme->basic.fontSize + X::dpiSize(6), textColor);
     }
 
     bool onMouse(xevent_t* ev) {
@@ -111,8 +111,8 @@ protected:
 public:
     CalcButton(const char* label, uint32_t bg = 0xFFF5E6D3, uint32_t text = 0xFF5C4033) 
         : LabelButton(label), bgColor(bg), textColor(text), pressed(false) {
-        setMarginH(8);
-        setMarginV(8);
+        setMarginH(X::dpiSize(8));
+        setMarginV(X::dpiSize(8));
     }
 };
 
@@ -246,7 +246,7 @@ public:
 
         // create the display area (dark gray rounded background)
         display = new DisplayWidget();
-        display->fix(0, 80);
+        display->fix(0, X::dpiSize(80));
         root->add(display);
 
         // create the button area (orange background)
@@ -341,8 +341,8 @@ int main(int argc, char** argv) {
     grect_t wr;
     wr.x = 200;
     wr.y = 100;
-    wr.w = 260;
-    wr.h = 320;
+    wr.w = X::dpiSize(260);
+    wr.h = X::dpiSize(320);
 
     win.open(&x, -1, wr, "Calculator", XWIN_STYLE_NO_RESIZE);
     widgetXRun(&x, &win);
