@@ -81,7 +81,7 @@ private:
 protected:
     void onRepaint(graph_t* g, XTheme* theme, const grect_t& r) {
         // Draw the shadow border for a simple 3D effect.
-        int shadowOffset = X::dpiSize(4);
+        int shadowOffset = X::hidpiSize(4);
         graph_fill_rect(g, r.x + shadowOffset, r.y + shadowOffset, r.w, r.h, COLOR_SHADOW);
         
         // Draw the main background.
@@ -91,9 +91,9 @@ protected:
         graph_rect(g, r.x, r.y, r.w, r.h, COLOR_BORDER);
         
         // Compute the layout.
-        int padding = X::dpiSize(13);
-        int headerHeight = X::dpiSize(50);
-        int weekdayHeight = X::dpiSize(30);
+        int padding = X::hidpiSize(13);
+        int headerHeight = X::hidpiSize(50);
+        int weekdayHeight = X::hidpiSize(30);
         int cellHeight = (r.h - headerHeight - weekdayHeight - padding * 2) / 6;
         // Width of the content area, excluding the outer border.
         int contentW = r.w - padding * 2;
@@ -107,25 +107,25 @@ protected:
         graph_fill_rect(g, contentX, contentY, contentW, headerHeight, COLOR_HEADER_RED);
         
         // Draw the previous/next month button areas.
-        int buttonWidth = X::dpiSize(40);
-        int buttonHeight = headerHeight - X::dpiSize(10);
-        int buttonY = contentY + X::dpiSize(5);
+        int buttonWidth = X::hidpiSize(40);
+        int buttonHeight = headerHeight - X::hidpiSize(10);
+        int buttonY = contentY + X::hidpiSize(5);
         
         // Left button for the previous month.
-        int leftBtnX = contentX + X::dpiSize(5);
-        graph_fill_round(g, leftBtnX, buttonY, buttonWidth, buttonHeight, X::dpiSize(8), 0x99FFFFFF);
+        int leftBtnX = contentX + X::hidpiSize(5);
+        graph_fill_round(g, leftBtnX, buttonY, buttonWidth, buttonHeight, X::hidpiSize(8), 0x99FFFFFF);
         // Draw the left arrow.
         int arrowY = buttonY + buttonHeight / 2;
-        int arrowLeftX = leftBtnX + X::dpiSize(12);
-        int arrowRightX = leftBtnX + buttonWidth - X::dpiSize(12);
-        int arrowTopY = arrowY - X::dpiSize(8);
-        int arrowBottomY = arrowY + X::dpiSize(8);
+        int arrowLeftX = leftBtnX + X::hidpiSize(12);
+        int arrowRightX = leftBtnX + buttonWidth - X::hidpiSize(12);
+        int arrowTopY = arrowY - X::hidpiSize(8);
+        int arrowBottomY = arrowY + X::hidpiSize(8);
         graph_line(g, arrowRightX, arrowTopY, arrowLeftX, arrowY, COLOR_HEADER_TEXT);
         graph_line(g, arrowRightX, arrowBottomY, arrowLeftX, arrowY, COLOR_HEADER_TEXT);
         
         // Right button for the next month.
-        int rightBtnX = contentX + contentW - buttonWidth - X::dpiSize(5);
-        graph_fill_round(g, rightBtnX, buttonY, buttonWidth, buttonHeight, X::dpiSize(8), 0x99FFFFFF);
+        int rightBtnX = contentX + contentW - buttonWidth - X::hidpiSize(5);
+        graph_fill_round(g, rightBtnX, buttonY, buttonWidth, buttonHeight, X::hidpiSize(8), 0x99FFFFFF);
         // Draw the right arrow.
         arrowLeftX = rightBtnX + 12;
         arrowRightX = rightBtnX + buttonWidth - 12;
@@ -230,9 +230,9 @@ protected:
 
             // Compute the button bounds.
             int padding = 10;
-            int headerHeight = X::dpiSize(50);
-            int buttonWidth = X::dpiSize(40);
-            int buttonHeight = headerHeight - X::dpiSize(10);
+            int headerHeight = X::hidpiSize(50);
+            int buttonWidth = X::hidpiSize(40);
+            int buttonHeight = headerHeight - X::hidpiSize(10);
             int buttonY = padding + 5;
             int leftBtnX = padding + 5;
             int rightBtnX = area.w - padding - buttonWidth - 5;
@@ -312,8 +312,8 @@ int main(int argc, char** argv) {
     grect_t wr;
     wr.x = 200;
     wr.y = 100;
-    wr.w = X::dpiSize(320);
-    wr.h = X::dpiSize(300);
+    wr.w = X::hidpiSize(320);
+    wr.h = X::hidpiSize(300);
     
     win.open(&x, -1, wr, "Calendar", XWIN_STYLE_SPRITE);
     win.setTimer(2);
