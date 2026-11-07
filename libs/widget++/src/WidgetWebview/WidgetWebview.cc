@@ -28,6 +28,7 @@
 #include <ewebview_port.h>     /* eweb_port_ewokos(), eweb_event_t            */
 
 #include <font/font.h>         /* graph_draw_text_font: the build overlay     */
+#include <x/x.h>               /* x_hidpi_size: xwin device-pixel ratio       */
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/klog.h>
 
@@ -67,7 +68,7 @@ static inline graph_t* frameGraph(eweb_surface_t* s) {
 WidgetWebview::WidgetWebview()
     : m_view(nullptr)
     , m_jsEnabled(true)
-    , m_dpr(1.0f)
+    , m_dpr((float)x_hidpi_size(1))
     , m_displayCache(nullptr)
     , m_frameScrollX(0)
     , m_frameScrollY(0)
@@ -79,10 +80,9 @@ WidgetWebview::WidgetWebview()
     , m_uiBuildOverlay(false)
     , m_lastStatLogAt(0)
 {
-    /* HiDPI mechanism, off by default on EwokOS: lay out in logical (CSS) px
-     * and rasterise at device resolution. dpr defaults to 1.0 (plain 1x, the
-     * port does no scaling); set XBROWSER_DPR (e.g. 2) to opt into HiDPI on a
-     * higher-density panel, matching the SDL reference port. */
+    /* Follow xwin HiDPI by default: window/widget geometry is in device px,
+     * while ewebview lays out in logical (CSS) px and rasterises at native
+     * device resolution. XBROWSER_DPR remains an explicit testing override. */
     const char* dprEnv = getenv("XBROWSER_DPR");
     if(dprEnv != nullptr && dprEnv[0] != '\0') {
         float v = (float)atof(dprEnv);

@@ -131,8 +131,8 @@ private:
      * (eweb_port_ewokos_set_dpr). The engine lays out / reports scroll + doc
      * geometry in LOGICAL px and rasterises each frame at device resolution;
      * this widget reports a logical viewport (area / m_dpr), blits the device-
-     * sized frame 1:1, and converts mouse/scroll between the two. Defaults to
-     * 1.0 (plain 1x, no scaling) unless XBROWSER_DPR overrides it. */
+     * sized frame 1:1, and converts mouse/scroll between the two. Follows the
+     * xwin HiDPI setting by default; XBROWSER_DPR is an explicit override. */
     float       m_dpr;
 
     /* UI front buffer: the last frame adopted from the engine, an opaque
