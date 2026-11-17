@@ -97,7 +97,7 @@ WidgetWebview::WidgetWebview()
     eweb_port_ewokos_set_dpr(m_dpr);
     m_view = ewebview_create(&port);
     if(m_view == nullptr) {
-        klog("[xBrowser] ewebview_create failed\n");
+        slog("[xBrowser] ewebview_create failed\n");
         return;
     }
 
@@ -143,7 +143,7 @@ bool WidgetWebview::loadHtml(const std::string& url)
      * up any in-flight page and starts the new load in its own context. */
     if(m_view == nullptr || url.empty())
         return false;
-    klog("[xBrowser] queue html: %s\n", url.c_str());
+    slog("[xBrowser] queue html: %s\n", url.c_str());
     ewebview_load(m_view, url.c_str());
     return true;
 }
@@ -231,7 +231,7 @@ void WidgetWebview::cbDialog(void* ud, const char* text)
     /* alert()/confirm()/prompt() text, surfaced non-blocking (the engine never
      * waits on a modal; confirm answers "cancel", prompt answers null). */
     (void)ud;
-    klog("[xBrowser] dialog: %s\n", (text != nullptr) ? text : "");
+    slog("[xBrowser] dialog: %s\n", (text != nullptr) ? text : "");
 }
 
 void WidgetWebview::cbTaskStart(void* ud, const char* url, int type)
@@ -361,7 +361,7 @@ void WidgetWebview::onTimer(uint32_t timerFPS, uint32_t timerSteps)
             uint32_t flist_max = 0;
             ewok_heap_stat(&blocks, &free_blocks, &used_bytes, &free_bytes,
                 &flist_len, &flist_max);
-            klog("[xBrowser] ui watchdog: heap blocks=%u free=%u used=%u KB holes=%u KB flist=%u/%u flmax=%u\n",
+            slog("[xBrowser] ui watchdog: heap blocks=%u free=%u used=%u KB holes=%u KB flist=%u/%u flmax=%u\n",
                 blocks, free_blocks, used_bytes / 1024, free_bytes / 1024,
                 flist_len, free_blocks, flist_max);
         }
