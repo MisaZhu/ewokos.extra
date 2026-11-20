@@ -1,5 +1,5 @@
 
-DIRS = curse_test sdltest git
+DIRS = curse_test git
 
 all: 
 	@for dir in $(DIRS); do \
