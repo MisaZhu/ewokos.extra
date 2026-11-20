@@ -1,5 +1,5 @@
 
-DIRS = xBrowser sdl_tetris
+DIRS = xBrowser
 
 all: $(DIRS)
 
