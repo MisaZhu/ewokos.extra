@@ -1,5 +1,5 @@
 
-DIRS = calculator calendar xBrowser sdl_tetris
+DIRS = xBrowser sdl_tetris
 
 all: $(DIRS)
 

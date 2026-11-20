@@ -1,4 +1,4 @@
-DIRS = curses ewebview widget++
+DIRS = ewebview widget++
 
 all: basic_libs
 	@echo "all done."
