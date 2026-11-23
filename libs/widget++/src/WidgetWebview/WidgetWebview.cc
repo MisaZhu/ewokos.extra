@@ -381,14 +381,44 @@ void WidgetWebview::onRepaint(graph_t* g, XTheme* theme, const grect_t& r)
     graph_t* frame = frameGraph(m_displayCache);
     bool has_frame = (frame != nullptr && frame->buffer != nullptr);
     if (has_frame) {
-        /* The frame is a DEVICE-pixel buffer (~area size), blitted 1:1 for a
-         * crisp result. The scroll offsets are LOGICAL, so scale the render-vs-
-         * live delta up by dpr to shift the device buffer by the right amount. */
-        int dx = r.x + (int)lroundf((float)(m_frameScrollX - m_scrollX) * m_dpr);
-        int dy = r.y + (int)lroundf((float)(m_frameScrollY - m_scrollY) * m_dpr);
-        graph_set_clip(g, r.x, r.y, r.w, r.h);
-        graph_blt(frame, 0, 0, frame->w, frame->h, g, dx, dy, frame->w, frame->h);
-        graph_unset_clip(g);
+        /* The frame is a DEVICE-pixel buffer, but NOT viewport-sized: the
+         * engine renders EWEB_FRAME_OVERSCAN extra LOGICAL rows above and
+         * below the viewport (see ewebview.h) so scroll-shift blits never
+         * expose a gap. The viewport content starts at row overscan*dpr, so
+         * the blit must be shifted UP by that amount - without it every page
+         * sits overscan*dpr device px too low, under a blank top band.
+         * The scroll offsets are LOGICAL: scale the render-vs-live delta by
+         * dpr and clamp it to the overscan budget (as the SDL front-end does)
+         * so a fast wheel/drag cannot push the frame off the widget and flash
+         * white while the engine's refill frame is in flight. */
+        int overscan = (int)lroundf((float)EWEB_FRAME_OVERSCAN * m_dpr);
+        int shiftX = (int)lroundf((float)(m_frameScrollX - m_scrollX) * m_dpr);
+        int shiftY = (int)lroundf((float)(m_frameScrollY - m_scrollY) * m_dpr);
+        if (shiftX < -overscan) shiftX = -overscan;
+        else if (shiftX > overscan) shiftX = overscan;
+        if (shiftY < -overscan) shiftY = -overscan;
+        else if (shiftY > overscan) shiftY = overscan;
+        /* Crop the frame to the viewport region (which begins at row
+         * `overscan`) plus the scroll shift, and blit it to the widget origin
+         * with NON-NEGATIVE source AND destination coords. Passing a negative
+         * destination y to graph_blt() is unsafe here: the clip rect is already
+         * inset to r.y, and graph_blt's negative-offset source compensation
+         * then double-counts r.y, leaking a band of overscan fill (the sampled
+         * page-edge colour) across the top of every page. Keeping both origins
+         * >= 0 sidesteps that path entirely; the clip trims the overflow. */
+        int sx = -shiftX;
+        int sy = overscan - shiftY;   /* >= 0: shiftY is clamped to ±overscan */
+        int dx = r.x;
+        int dy = r.y;
+        if (sx < 0) { dx -= sx; sx = 0; }
+        if (sy < 0) { dy -= sy; sy = 0; }
+        int cw = frame->w - sx;
+        int ch = frame->h - sy;
+        if (cw > 0 && ch > 0) {
+            graph_set_clip(g, r.x, r.y, r.w, r.h);
+            graph_blt(frame, sx, sy, cw, ch, g, dx, dy, cw, ch);
+            graph_unset_clip(g);
+        }
     }
 
     /* The build overlay ("building...", progress bar) covers the page while a
