@@ -50,8 +50,16 @@ namespace Ewok {
 
 class WidgetWebview : public Scrollable {
 public:
-    WidgetWebview();
+    /* `dpr` = device pixels per logical (CSS) pixel. <= 0 (the default)
+     * follows the xwin HiDPI setting (x_hidpi_ratio, float so fractional
+     * scales like 1.6 survive); an explicit value is clamped to [1, 4].
+     * Must be decided at construction: the port and the engine's frame pool
+     * are sized from it before the first viewport. */
+    explicit WidgetWebview(float dpr = 0.0f);
     virtual ~WidgetWebview();
+
+    /* The ratio this webview rasterises at (after clamping / hidpi lookup). */
+    float getDpr() const { return m_dpr; }
 
     /* Begin loading `url`. UI-THREAD entry point (toolbar, address bar, initial
      * load): queues a navigation command with the engine and returns
@@ -132,7 +140,7 @@ private:
      * geometry in LOGICAL px and rasterises each frame at device resolution;
      * this widget reports a logical viewport (area / m_dpr), blits the device-
      * sized frame 1:1, and converts mouse/scroll between the two. Follows the
-     * xwin HiDPI setting by default; XBROWSER_DPR is an explicit override. */
+     * xwin HiDPI setting unless the ctor was given an explicit ratio. */
     float       m_dpr;
 
     /* UI front buffer: the last frame adopted from the engine, an opaque

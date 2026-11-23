@@ -28,7 +28,7 @@
 #include <ewebview_port.h>     /* eweb_port_ewokos(), eweb_event_t            */
 
 #include <font/font.h>         /* graph_draw_text_font: the build overlay     */
-#include <x/x.h>               /* x_hidpi_size: xwin device-pixel ratio       */
+#include <x/x.h>               /* x_hidpi_ratio: xwin device-pixel ratio      */
 #include <ewoksys/kernel_tic.h>
 #include <ewoksys/klog.h>
 
@@ -65,10 +65,10 @@ static inline graph_t* frameGraph(eweb_surface_t* s) {
  * Lifecycle
  * ================================================================== */
 
-WidgetWebview::WidgetWebview()
+WidgetWebview::WidgetWebview(float dpr)
     : m_view(nullptr)
     , m_jsEnabled(true)
-    , m_dpr((float)x_hidpi_size(1))
+    , m_dpr((dpr > 0.0f) ? dpr : x_hidpi_ratio())
     , m_displayCache(nullptr)
     , m_frameScrollX(0)
     , m_frameScrollY(0)
@@ -80,15 +80,12 @@ WidgetWebview::WidgetWebview()
     , m_uiBuildOverlay(false)
     , m_lastStatLogAt(0)
 {
-    /* Follow xwin HiDPI by default: window/widget geometry is in device px,
-     * while ewebview lays out in logical (CSS) px and rasterises at native
-     * device resolution. XBROWSER_DPR remains an explicit testing override. */
-    const char* dprEnv = getenv("XBROWSER_DPR");
-    if(dprEnv != nullptr && dprEnv[0] != '\0') {
-        float v = (float)atof(dprEnv);
-        if(v >= 1.0f && v <= 4.0f)
-            m_dpr = v;
-    }
+    /* No explicit ratio: follow xwin HiDPI. Window/widget geometry is in
+     * device px, while ewebview lays out in logical (CSS) px and rasterises
+     * at native device resolution. An explicit ctor ratio is clamped to the
+     * same [1, 4] range the port/engine accept. */
+    if(m_dpr < 1.0f) m_dpr = 1.0f;
+    else if(m_dpr > 4.0f) m_dpr = 4.0f;
 
     eweb_port_t port;
     eweb_port_ewokos(&port, nullptr);

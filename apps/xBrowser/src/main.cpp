@@ -10,6 +10,7 @@
 #include <Widget/Scroller.h>
 #include <Widget/Container.h>
 #include <ewoksys/keydef.h>
+#include <x/x.h>               /* x_hidpi_size: xwin hidpi scaling */
 #include <vector>
 #include <string>
 
@@ -22,7 +23,7 @@ protected:
 		graph_fill_3d(g, r.x, r.y, r.w, r.h, theme->basic.docBGColor, true);
 		font_t* font = theme->getFont();
 		int y = r.y + (r.h-font_get_height(font, theme->basic.fontSize))/2;
-		graph_draw_text_font(g, r.x+4, y, label.c_str(), font, theme->basic.fontSize, theme->basic.docFGColor);
+		graph_draw_text_font(g, r.x+x_hidpi_size(4), y, label.c_str(), font, theme->basic.fontSize, theme->basic.docFGColor);
 	}
 public:
 	StatusBar(const std::string& label) : Label(label) {}
@@ -233,22 +234,22 @@ int main(int argc, char* argv[])
     Container* toolbar = new Container();
     toolbar->setType(Container::HORIZONTAL);
     root->add(toolbar);
-    toolbar->fix(0, 24);
+    toolbar->fix(0, x_hidpi_size(24));
 
     EditLine* editline = new EditLine();
     toolbar->add(editline);
     root->focus(editline);
 
     LabelButton* backBtn = new LabelButton("<");
-    backBtn->fix(26, 0);
+    backBtn->fix(x_hidpi_size(26), 0);
     toolbar->add(backBtn);
 
     LabelButton* stopBtn = new LabelButton("X");
-    stopBtn->fix(26, 0);
+    stopBtn->fix(x_hidpi_size(26), 0);
     toolbar->add(stopBtn);
 
     LabelButton* reloadBtn = new LabelButton("R");
-    reloadBtn->fix(26, 0);
+    reloadBtn->fix(x_hidpi_size(26), 0);
     toolbar->add(reloadBtn);
 
     // Create a horizontal container for webview and vertical scroller
@@ -267,7 +268,7 @@ int main(int argc, char* argv[])
 
     // Add vertical scroller
     Scroller* sr = new Scroller();
-    sr->fix(8, 0);
+    sr->fix(x_hidpi_size(8), 0);
     webview->setScrollerV(sr);
     c->add(sr);
 
@@ -300,7 +301,7 @@ int main(int argc, char* argv[])
         webview->setJSEnabled(false);
     root->add(statusBar);
 
-    statusBar->fix(0, 16);
+    statusBar->fix(0, x_hidpi_size(16));
 
     widgetXRun(&x, &win);
     return 0;
