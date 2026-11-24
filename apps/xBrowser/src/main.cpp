@@ -10,6 +10,7 @@
 #include <Widget/Scroller.h>
 #include <Widget/Container.h>
 #include <ewoksys/keydef.h>
+#include <ewoksys/kernel_tic.h>
 #include <x/x.h>               /* x_hidpi_size: xwin hidpi scaling */
 #include <vector>
 #include <string>
@@ -199,6 +200,36 @@ static void onInputFunc(Widget* wd, uint32_t key, void* arg) {
     webview->loadHtml(full_url);
 }
 
+/* Double-click on the address bar clears it for quick retyping. The input
+ * daemons never deliver MOUSE_STATE_DOUBLE_CLICK (xmouse's report is
+ * disabled, xtouch folds double taps), so detect the second CLICK here,
+ * same as xterm does. */
+#define ADDR_DOUBLE_CLICK_MS 350 /* max gap between the two clicks */
+static void onAddressEvent(Widget* wd, xevent_t* evt, void* arg) {
+    (void)arg;
+    if(evt->type != XEVT_MOUSE || evt->value.mouse.button != MOUSE_BUTTON_LEFT)
+        return;
+    if(evt->state != MOUSE_STATE_CLICK && evt->state != MOUSE_STATE_DOUBLE_CLICK)
+        return;
+
+    static uint64_t lastClickTime = 0;
+    static int32_t lastClickX = 0, lastClickY = 0;
+    int32_t slop = x_hidpi_size(24); /* max drift between the two clicks */
+    int32_t dx = evt->value.mouse.x - lastClickX;
+    int32_t dy = evt->value.mouse.y - lastClickY;
+    uint64_t now = kernel_tic_ms(0);
+    if(evt->state == MOUSE_STATE_DOUBLE_CLICK ||
+            (lastClickTime != 0 && (now - lastClickTime) <= ADDR_DOUBLE_CLICK_MS &&
+             dx*dx + dy*dy <= slop*slop)) {
+        ((EditLine*)wd)->setContent("");
+        lastClickTime = 0;
+        return;
+    }
+    lastClickTime = now;
+    lastClickX = evt->value.mouse.x;
+    lastClickY = evt->value.mouse.y;
+}
+
 /* Toolbar buttons share Widget's generic event func; only the CLICK edge
  * (fires on mouse-up inside the button) triggers the action. */
 static void onBackClick(Widget* wd, xevent_t* evt, void* arg) {
@@ -261,6 +292,7 @@ int main(int argc, char* argv[])
     c->add(webview);
 
     editline->setOnInputFunc(onInputFunc, webview);
+    editline->setEventFunc(onAddressEvent, NULL);
     webview->setAddressBar(editline);
     backBtn->setEventFunc(onBackClick, webview);
     stopBtn->setEventFunc(onStopClick, webview);
