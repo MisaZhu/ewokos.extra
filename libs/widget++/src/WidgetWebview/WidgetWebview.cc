@@ -512,10 +512,15 @@ bool WidgetWebview::onMouse(xevent_t* ev)
      *      dispatches the DOM mouse events and follows <a href> clicks there.
      *      Asynchronous: the UI never blocks on the page's verdict, so a heavy
      *      handler cannot freeze the window.
-     *   2. do the visual side here (drag-scroll via Scrollable, wheel-scroll)
-     *      so the page tracks the gesture immediately.
-     * Wheel gestures and drags are not DOM events and are not forwarded (the
-     * wheel is turned into a scroll right here). */
+     *   2. do the visual side here (drag-scroll via Scrollable) so the page
+     *      tracks the gesture immediately.
+     * Drags ARE forwarded as mousemove with the held button: xmouse upgrades
+     * held moves to MOUSE_STATE_DRAG, and pages that pan on drag (map.baidu.com)
+     * need the mousedown -> mousemove -> mouseup sequence. Vertical wheel goes
+     * to the engine as EWEB_MOUSE_WHEEL so the page's wheel/mousewheel handlers
+     * run first (map zoom preventDefault's them); only when no handler cancels
+     * does the engine run its default scroll and republish the offset via
+     * cbScroll. Horizontal wheel stays a UI-local scroll. */
     if (ev == nullptr)
         return false;
 
@@ -523,17 +528,33 @@ bool WidgetWebview::onMouse(xevent_t* ev)
         int state = -1;
         switch (ev->state) {
         case MOUSE_STATE_MOVE:         state = EWEB_MOUSE_MOVE; break;
+        case MOUSE_STATE_DRAG:         state = EWEB_MOUSE_MOVE; break;
         case MOUSE_STATE_DOWN:         state = EWEB_MOUSE_DOWN; break;
         case MOUSE_STATE_UP:           state = EWEB_MOUSE_UP; break;
         case MOUSE_STATE_CLICK:        state = EWEB_MOUSE_CLICK; break;
         case MOUSE_STATE_DOUBLE_CLICK: state = EWEB_MOUSE_DOUBLE_CLICK; break;
-        default: break;   /* DRAG and anything else: no DOM event */
+        default: break;
         }
         int32_t btn = ev->value.mouse.button;
-        if (state == EWEB_MOUSE_MOVE &&
+        bool isWheel = (ev->state == MOUSE_STATE_MOVE &&
             (btn == MOUSE_BUTTON_SCROLL_UP || btn == MOUSE_BUTTON_SCROLL_DOWN ||
-             btn == MOUSE_BUTTON_SCROLL_LEFT || btn == MOUSE_BUTTON_SCROLL_RIGHT))
-            state = -1;   /* the wheel is a scroll request, handled below */
+             btn == MOUSE_BUTTON_SCROLL_LEFT || btn == MOUSE_BUTTON_SCROLL_RIGHT));
+        if (isWheel &&
+            (btn == MOUSE_BUTTON_SCROLL_UP || btn == MOUSE_BUTTON_SCROLL_DOWN)) {
+            /* Vertical wheel: a DOM gesture, not a blind scroll. Engine sign
+             * is down-positive; xwin SCROLL_UP means the wheel rolled up. */
+            gpos_t ip = getInsidePos(ev->value.mouse.x, ev->value.mouse.y);
+            eweb_event_t fev;
+            fev.mouse_state = EWEB_MOUSE_WHEEL;
+            fev.button = EWEB_BUTTON_NONE;
+            fev.cx = (int)lroundf((float)ip.x / m_dpr);
+            fev.cy = (int)lroundf((float)ip.y / m_dpr);
+            fev.wheel = (btn == MOUSE_BUTTON_SCROLL_DOWN) ? 1 : -1;
+            ewebview_post_event(m_view, &fev);
+            return true;
+        }
+        if (state == EWEB_MOUSE_MOVE && isWheel)
+            state = -1;   /* horizontal wheel: UI-local scroll below */
         if (state >= 0) {
             gpos_t ip = getInsidePos(ev->value.mouse.x, ev->value.mouse.y);
             eweb_event_t fev;
@@ -542,6 +563,11 @@ bool WidgetWebview::onMouse(xevent_t* ev)
                          (btn == MOUSE_BUTTON_MID)   ? EWEB_BUTTON_MIDDLE :
                          (btn == MOUSE_BUTTON_RIGHT) ? EWEB_BUTTON_RIGHT :
                                                        EWEB_BUTTON_NONE;
+            /* A DRAG carries no button in the xwin event, but xmouse only
+             * promotes left-button holds, so report the left button held
+             * (the page reads event.buttons to tell a pan from a hover). */
+            if (ev->state == MOUSE_STATE_DRAG)
+                fev.button = EWEB_BUTTON_LEFT;
             /* getInsidePos returns DEVICE px; the engine hit-tests in LOGICAL
              * (CSS) px, so scale the client coordinates down by dpr. */
             fev.cx = (int)lroundf((float)ip.x / m_dpr);
@@ -556,7 +582,8 @@ bool WidgetWebview::onMouse(xevent_t* ev)
     if (handled)
         return true;
 
-    // Mouse wheel scrolling.
+    // Wheel fallback: horizontal notches (the engine only scrolls vertically)
+    // and vertical notches when no engine view exists yet.
     if (ev->state == MOUSE_STATE_MOVE) {
         if (ev->value.mouse.button == MOUSE_BUTTON_SCROLL_UP) {
             scroll(-1, false);
@@ -564,6 +591,14 @@ bool WidgetWebview::onMouse(xevent_t* ev)
         }
         else if (ev->value.mouse.button == MOUSE_BUTTON_SCROLL_DOWN) {
             scroll(1, false);
+            return true;
+        }
+        else if (ev->value.mouse.button == MOUSE_BUTTON_SCROLL_LEFT) {
+            scroll(-1, true);
+            return true;
+        }
+        else if (ev->value.mouse.button == MOUSE_BUTTON_SCROLL_RIGHT) {
+            scroll(1, true);
             return true;
         }
     }
